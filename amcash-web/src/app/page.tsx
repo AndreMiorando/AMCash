@@ -1,7 +1,54 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import Script from "next/script";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+type GoogleCredentialResponse = {
+  credential?: string;
+};
+
+type AuthenticatedUser = {
+  id: string;
+  name: string;
+  email: string;
+  pictureUrl: string | null;
+};
+
+type GoogleLoginResponse = {
+  accessToken: string;
+  tokenType: string;
+  expiresIn: number;
+  user: AuthenticatedUser;
+};
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (options: {
+            client_id: string;
+            callback: (response: GoogleCredentialResponse) => void;
+          }) => void;
+          renderButton: (
+            parent: HTMLElement,
+            options: {
+              type: "standard";
+              theme: "outline";
+              size: "large";
+              text: "signin_with" | "signup_with";
+              shape: "pill";
+              width: number;
+              logo_alignment: "left";
+              locale: string;
+            },
+          ) => void;
+        };
+      };
+    };
+  }
+}
 
 type Transaction = {
   id: number;
@@ -84,6 +131,124 @@ function LoadingScreen() {
         <p className="tagline">Suas finanças no seu ritmo</p>
         <div className="loader" role="status" aria-label="Carregando"><span className="sr-only">Carregando</span></div>
       </section>
+    </main>
+  );
+}
+
+function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: AuthenticatedUser) => void }) {
+  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [scriptReady, setScriptReady] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const googleButton = useRef<HTMLDivElement>(null);
+  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+  const apiUrl = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080").replace(/\/$/, "");
+
+  const authenticate = useCallback(async (response: GoogleCredentialResponse) => {
+    if (!response.credential) {
+      setError("Não foi possível receber seus dados do Google. Tente novamente.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError("");
+
+    try {
+      const result = await fetch(`${apiUrl}/api/v1/auth/google`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken: response.credential }),
+      });
+
+      if (!result.ok) {
+        throw new Error("A autenticação não pôde ser concluída.");
+      }
+
+      const session = await result.json() as GoogleLoginResponse;
+      window.localStorage.setItem("amcash.accessToken", session.accessToken);
+      window.localStorage.setItem("amcash.user", JSON.stringify(session.user));
+      onAuthenticated(session.user);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Não foi possível entrar agora.");
+      setIsSubmitting(false);
+    }
+  }, [apiUrl, onAuthenticated]);
+
+  useEffect(() => {
+    if (!scriptReady || !clientId || !window.google || !googleButton.current) return;
+
+    googleButton.current.replaceChildren();
+    window.google.accounts.id.initialize({ client_id: clientId, callback: authenticate });
+    window.google.accounts.id.renderButton(googleButton.current, {
+      type: "standard",
+      theme: "outline",
+      size: "large",
+      text: mode === "signup" ? "signup_with" : "signin_with",
+      shape: "pill",
+      width: 304,
+      logo_alignment: "left",
+      locale: "pt-BR",
+    });
+  }, [authenticate, clientId, mode, scriptReady]);
+
+  return (
+    <main className="auth-screen">
+      <Script
+        src="https://accounts.google.com/gsi/client"
+        strategy="afterInteractive"
+        onReady={() => setScriptReady(true)}
+        onError={() => setError("Não foi possível carregar o acesso com Google.")}
+      />
+
+      <div className="auth-orb auth-orb--top" aria-hidden="true" />
+      <div className="auth-orb auth-orb--bottom" aria-hidden="true" />
+
+      <header className="auth-header" aria-label="AMCash">
+        <Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority />
+        <span><b>AM</b>Cash</span>
+      </header>
+
+      <section className="auth-card" aria-labelledby="auth-title">
+        <div className="auth-symbol" aria-hidden="true">
+          <Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority />
+        </div>
+
+        <p className="auth-eyebrow">SUAS FINANÇAS NO SEU RITMO</p>
+        <h1 id="auth-title">{mode === "login" ? "Que bom ter você de volta" : "Comece sua jornada financeira"}</h1>
+        <p className="auth-description">
+          {mode === "login"
+            ? "Entre para acompanhar seus gastos, receitas e planos em um só lugar."
+            : "Crie sua conta em poucos segundos e assuma o controle da sua vida financeira."}
+        </p>
+
+        <div className="auth-tabs" role="tablist" aria-label="Acesso à conta">
+          <button type="button" role="tab" aria-selected={mode === "login"} className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setError(""); }}>Entrar</button>
+          <button type="button" role="tab" aria-selected={mode === "signup"} className={mode === "signup" ? "active" : ""} onClick={() => { setMode("signup"); setError(""); }}>Criar conta</button>
+        </div>
+
+        <div className={`google-login-area${isSubmitting ? " is-loading" : ""}`} aria-busy={isSubmitting}>
+          {clientId ? (
+            <div ref={googleButton} className="google-rendered-button" />
+          ) : (
+            <button type="button" className="google-placeholder" onClick={() => setError("Configure NEXT_PUBLIC_GOOGLE_CLIENT_ID para ativar o acesso.")}>
+              <span className="google-g" aria-hidden="true">G</span>
+              {mode === "login" ? "Continuar com o Google" : "Cadastrar com o Google"}
+            </button>
+          )}
+          {isSubmitting && <span className="auth-spinner" aria-label="Autenticando" />}
+        </div>
+
+        {error && <p className="auth-error" role="alert">{error}</p>}
+
+        <div className="auth-security">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M12 3 5 6v5c0 4.6 3 8.2 7 10 4-1.8 7-5.4 7-10V6l-7-3Z" /><path d="m9.5 12 1.7 1.7 3.5-4" /></svg>
+          <span>Seus dados são protegidos e sua senha do Google nunca é compartilhada.</span>
+        </div>
+      </section>
+
+      <footer className="auth-footer">
+        Ao continuar, você concorda com os <a href="#termos">Termos de Uso</a> e a <a href="#privacidade">Política de Privacidade</a>.
+      </footer>
     </main>
   );
 }
@@ -333,16 +498,26 @@ function DetailScreen({
 }
 
 export default function Home() {
-  const [isLoading, setIsLoading] = useState(true);
+  const [screen, setScreen] = useState<"auth" | "loading" | "app">("auth");
   const [items, setItems] = useState(transactions);
   const [selected, setSelected] = useState<Transaction | null>(null);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setIsLoading(false), 1800);
-    return () => window.clearTimeout(timer);
+    const sessionCheck = window.setTimeout(() => {
+      const savedToken = window.localStorage.getItem("amcash.accessToken");
+      if (savedToken) setScreen("loading");
+    }, 0);
+    return () => window.clearTimeout(sessionCheck);
   }, []);
 
-  if (isLoading) return <LoadingScreen />;
+  useEffect(() => {
+    if (screen !== "loading") return;
+    const timer = window.setTimeout(() => setScreen("app"), 1400);
+    return () => window.clearTimeout(timer);
+  }, [screen]);
+
+  if (screen === "auth") return <AuthScreen onAuthenticated={() => setScreen("loading")} />;
+  if (screen === "loading") return <LoadingScreen />;
   if (selected) {
     return (
       <DetailScreen
