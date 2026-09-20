@@ -1,0 +1,8 @@
+# Local Git metadata backups created while consolidating the monorepo
+.git-backups/
+
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+

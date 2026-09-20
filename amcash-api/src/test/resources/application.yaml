@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:amcash;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: create-drop
+  flyway:
+    enabled: false
+
+jwt:
+  secret: amcash-test-secret-key-with-at-least-32-characters
+  expiration: 86400000
+
+google:
+  auth:
+    client-id: amcash-test-client.apps.googleusercontent.com
