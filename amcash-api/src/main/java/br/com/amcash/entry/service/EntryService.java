@@ -9,6 +9,7 @@ import br.com.amcash.entry.dto.response.MonthlyEntriesResponse;
 import br.com.amcash.entry.dto.response.MonthlySummaryResponse;
 import br.com.amcash.entry.dto.response.SubexpenseResponse;
 import br.com.amcash.entry.entity.EntryType;
+import br.com.amcash.entry.entity.EntryCategory;
 import br.com.amcash.entry.entity.FinancialEntry;
 import br.com.amcash.entry.entity.RecurrenceFrequency;
 import br.com.amcash.entry.entity.Subexpense;
@@ -50,6 +51,7 @@ public class EntryService {
     public CreatedEntriesResponse create(UUID userId, CreateEntryRequest request) {
         validateRecurrence(request.recurrenceFrequency(), request.recurrenceCount());
         validateSubexpenses(request.type(), request.hasSubexpenses());
+        validateCategory(request.type(), request.category());
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado"));
@@ -65,6 +67,7 @@ public class EntryService {
                     totalOccurrences > 1
                             ? request.name().trim() + " - " + (index + 1) + "/" + totalOccurrences
                             : request.name().trim(),
+                    request.category(),
                     request.type(),
                     request.amount(),
                     recurrenceDate(request.dueDate(), request.recurrenceFrequency(), index),
@@ -122,6 +125,7 @@ public class EntryService {
     public EntryResponse update(UUID userId, UUID entryId, UpdateEntryRequest request) {
         validateRecurrence(request.recurrenceFrequency(), request.recurrenceCount());
         validateSubexpenses(request.type(), request.hasSubexpenses());
+        validateCategory(request.type(), request.category());
         FinancialEntry entry = findOwnedEntry(userId, entryId);
         boolean hasStoredSubexpenses = !subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(entryId).isEmpty();
 
@@ -131,6 +135,7 @@ public class EntryService {
 
         entry.update(
                 request.name().trim(),
+                request.category(),
                 request.type(),
                 request.amount(),
                 request.dueDate(),
@@ -203,6 +208,7 @@ public class EntryService {
         return new EntryResponse(
                 entry.getId(),
                 entry.getName(),
+                entry.getCategory(),
                 entry.getType(),
                 entry.getAmount(),
                 entry.getDueDate(),
@@ -243,6 +249,12 @@ public class EntryService {
     private void validateSubexpenses(EntryType type, boolean hasSubexpenses) {
         if (type == EntryType.INCOME && hasSubexpenses) {
             throw new BadRequestException("Receitas não podem possuir subdespesas");
+        }
+    }
+
+    private void validateCategory(EntryType type, EntryCategory category) {
+        if (!category.supports(type)) {
+            throw new BadRequestException("A categoria selecionada não pertence ao tipo do lançamento");
         }
     }
 

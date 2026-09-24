@@ -35,6 +35,10 @@ public class FinancialEntry {
     private String name;
 
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 32)
+    private EntryCategory category;
+
+    @Enumerated(EnumType.STRING)
     @Column(name = "entry_type", nullable = false, length = 16)
     private EntryType type;
 
@@ -72,6 +76,7 @@ public class FinancialEntry {
     public FinancialEntry(
             User user,
             String name,
+            EntryCategory category,
             EntryType type,
             BigDecimal amount,
             LocalDate dueDate,
@@ -84,6 +89,7 @@ public class FinancialEntry {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         this.user = user;
         this.name = name;
+        this.category = category;
         this.type = type;
         this.amount = amount;
         this.dueDate = dueDate;
@@ -98,6 +104,7 @@ public class FinancialEntry {
 
     public void update(
             String name,
+            EntryCategory category,
             EntryType type,
             BigDecimal amount,
             LocalDate dueDate,
@@ -106,6 +113,7 @@ public class FinancialEntry {
             boolean hasSubexpenses) {
 
         this.name = name;
+        this.category = category;
         this.type = type;
         this.amount = amount;
         this.dueDate = dueDate;
@@ -119,6 +127,7 @@ public class FinancialEntry {
     public void setId(UUID id) { this.id = id; }
     public User getUser() { return user; }
     public String getName() { return name; }
+    public EntryCategory getCategory() { return category; }
     public EntryType getType() { return type; }
     public BigDecimal getAmount() { return amount; }
     public LocalDate getDueDate() { return dueDate; }

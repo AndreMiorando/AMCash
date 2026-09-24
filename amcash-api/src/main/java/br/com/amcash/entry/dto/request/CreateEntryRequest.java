@@ -1,6 +1,7 @@
 package br.com.amcash.entry.dto.request;
 
 import br.com.amcash.entry.entity.EntryType;
+import br.com.amcash.entry.entity.EntryCategory;
 import br.com.amcash.entry.entity.RecurrenceFrequency;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
@@ -17,6 +18,9 @@ public record CreateEntryRequest(
         @NotBlank(message = "A descrição é obrigatória")
         @Size(max = 160, message = "A descrição deve ter no máximo 160 caracteres")
         String name,
+
+        @NotNull(message = "A categoria é obrigatória")
+        EntryCategory category,
 
         @NotNull(message = "O tipo é obrigatório")
         EntryType type,

@@ -1,6 +1,7 @@
 package br.com.amcash.entry.dto.response;
 
 import br.com.amcash.entry.entity.EntryType;
+import br.com.amcash.entry.entity.EntryCategory;
 import br.com.amcash.entry.entity.RecurrenceFrequency;
 
 import java.math.BigDecimal;
@@ -12,6 +13,7 @@ import java.util.UUID;
 public record EntryResponse(
         UUID id,
         String name,
+        EntryCategory category,
         EntryType type,
         BigDecimal amount,
         LocalDate dueDate,

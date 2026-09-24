@@ -5,6 +5,7 @@ import br.com.amcash.entry.dto.request.SubexpenseRequest;
 import br.com.amcash.entry.dto.response.CreatedEntriesResponse;
 import br.com.amcash.entry.dto.response.MonthlyEntriesResponse;
 import br.com.amcash.entry.entity.EntryType;
+import br.com.amcash.entry.entity.EntryCategory;
 import br.com.amcash.entry.entity.FinancialEntry;
 import br.com.amcash.entry.entity.RecurrenceFrequency;
 import br.com.amcash.entry.entity.Subexpense;
@@ -53,7 +54,7 @@ class EntryServiceTests {
         UUID userId = UUID.randomUUID();
         User user = user(userId);
         CreateEntryRequest request = new CreateEntryRequest(
-                "Nubank", EntryType.EXPENSE, new BigDecimal("332.00"),
+                "Nubank", EntryCategory.FINANCIAL, EntryType.EXPENSE, new BigDecimal("332.00"),
                 LocalDate.of(2026, 1, 31), RecurrenceFrequency.MONTHLY, 2, true);
 
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
@@ -103,7 +104,7 @@ class EntryServiceTests {
     void shouldRejectInvalidRecurrenceAndProtectOtherUsersData() {
         UUID userId = UUID.randomUUID();
         CreateEntryRequest request = new CreateEntryRequest(
-                "Salário", EntryType.INCOME, new BigDecimal("8500.00"),
+                "Salário", EntryCategory.SALARY, EntryType.INCOME, new BigDecimal("8500.00"),
                 LocalDate.of(2026, 10, 31), RecurrenceFrequency.NONE, 1, false);
 
         assertThrows(BadRequestException.class, () -> entryService.create(userId, request));
@@ -112,6 +113,24 @@ class EntryServiceTests {
         UUID entryId = UUID.randomUUID();
         when(entryRepository.findByIdAndUserId(entryId, userId)).thenReturn(Optional.empty());
         assertThrows(NotFoundException.class, () -> entryService.get(userId, entryId));
+    }
+
+    @Test
+    void shouldRejectCategoryFromAnotherEntryType() {
+        CreateEntryRequest request = new CreateEntryRequest(
+                "Salário",
+                EntryCategory.FOOD,
+                EntryType.INCOME,
+                new BigDecimal("8500.00"),
+                LocalDate.of(2026, 10, 31),
+                RecurrenceFrequency.NONE,
+                0,
+                false);
+
+        assertThrows(
+                BadRequestException.class,
+                () -> entryService.create(UUID.randomUUID(), request));
+        verify(userRepository, never()).findById(any());
     }
 
     @Test
@@ -166,6 +185,7 @@ class EntryServiceTests {
         FinancialEntry entry = new FinancialEntry(
                 user,
                 type == EntryType.INCOME ? "Receita" : "Despesa",
+                type == EntryType.INCOME ? EntryCategory.OTHER_INCOME : EntryCategory.OTHER_EXPENSE,
                 type,
                 new BigDecimal(amount),
                 dueDate,

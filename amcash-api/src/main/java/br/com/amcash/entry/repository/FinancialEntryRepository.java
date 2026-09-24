@@ -1,7 +1,6 @@
 package br.com.amcash.entry.repository;
 
 import br.com.amcash.entry.entity.FinancialEntry;
-import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDate;
