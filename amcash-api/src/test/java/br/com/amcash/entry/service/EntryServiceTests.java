@@ -95,6 +95,57 @@ class EntryServiceTests {
     }
 
     @Test
+    void shouldPreserveFutureParentsWhenUpdatingDetailedExpense() {
+        UUID userId = UUID.randomUUID();
+        UUID seriesId = UUID.randomUUID();
+        User user = user(userId);
+        FinancialEntry october = new FinancialEntry(
+                user, "Nubank", EntryCategory.FINANCIAL, EntryType.EXPENSE,
+                new BigDecimal("432.00"), LocalDate.of(2026, 10, 1),
+                RecurrenceFrequency.NONE, 0, 0, seriesId, true);
+        FinancialEntry november = new FinancialEntry(
+                user, "Nubank", EntryCategory.FINANCIAL, EntryType.EXPENSE,
+                new BigDecimal("332.00"), LocalDate.of(2026, 11, 1),
+                RecurrenceFrequency.NONE, 0, 1, seriesId, true);
+        october.setId(UUID.randomUUID());
+        november.setId(UUID.randomUUID());
+        Subexpense item = new Subexpense(
+                october, "Fatura", new BigDecimal("432.00"), "1/2", false,
+                RecurrenceFrequency.MONTHLY, 2, 0, UUID.randomUUID());
+        item.setId(UUID.randomUUID());
+        List<FinancialEntry> series = List.of(october, november);
+
+        when(entryRepository.findByIdAndUserId(october.getId(), userId)).thenReturn(Optional.of(october));
+        when(entryRepository.findAllBySeriesIdAndUserIdOrderByRecurrenceIndexAsc(seriesId, userId))
+                .thenReturn(series);
+        when(entryRepository.saveAll(any())).thenReturn(series);
+        when(subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(october.getId()))
+                .thenReturn(List.of(item));
+        when(subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(november.getId()))
+                .thenReturn(List.of());
+
+        var response = entryService.update(
+                userId,
+                october.getId(),
+                new UpdateEntryRequest(
+                        "Fatura Nubank",
+                        EntryCategory.FINANCIAL,
+                        EntryType.EXPENSE,
+                        new BigDecimal("432.00"),
+                        LocalDate.of(2026, 10, 1),
+                        RecurrenceFrequency.NONE,
+                        0,
+                        true));
+
+        assertEquals("Fatura Nubank", response.name());
+        assertEquals("Fatura Nubank", november.getName());
+        assertEquals(new BigDecimal("332.00"), november.getAmount());
+        assertEquals(seriesId, november.getSeriesId());
+        verify(entryRepository).saveAll(series);
+        verify(entryRepository, never()).deleteAll(any());
+    }
+
+    @Test
     void shouldResizeSeriesAndRefreshInstallmentDescriptions() {
         UUID userId = UUID.randomUUID();
         UUID seriesId = UUID.randomUUID();
