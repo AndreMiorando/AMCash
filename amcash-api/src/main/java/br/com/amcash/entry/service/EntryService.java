@@ -57,7 +57,7 @@ public class EntryService {
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado"));
         int totalOccurrences = request.recurrenceFrequency() == RecurrenceFrequency.NONE
                 ? 1
-                : request.recurrenceCount() + 1;
+                : request.recurrenceCount();
         UUID seriesId = totalOccurrences > 1 ? UUID.randomUUID() : null;
         List<FinancialEntry> entries = new ArrayList<>(totalOccurrences);
 
@@ -126,25 +126,95 @@ public class EntryService {
         validateRecurrence(request.recurrenceFrequency(), request.recurrenceCount());
         validateSubexpenses(request.type(), request.hasSubexpenses());
         validateCategory(request.type(), request.category());
-        FinancialEntry entry = findOwnedEntry(userId, entryId);
+        FinancialEntry selectedEntry = findOwnedEntry(userId, entryId);
         boolean hasStoredSubexpenses = !subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(entryId).isEmpty();
 
         if (hasStoredSubexpenses && (request.type() == EntryType.INCOME || !request.hasSubexpenses())) {
             throw new BadRequestException("Remova as subdespesas antes de desativar essa opção ou transformar em receita");
         }
 
-        entry.update(
-                request.name().trim(),
-                request.category(),
-                request.type(),
-                request.amount(),
+        String baseName = baseName(request.name());
+        int totalOccurrences = request.recurrenceFrequency() == RecurrenceFrequency.NONE
+                ? 1
+                : request.recurrenceCount();
+
+        if (totalOccurrences == 1) {
+            if (selectedEntry.getSeriesId() != null) {
+                List<FinancialEntry> series = entryRepository
+                        .findAllBySeriesIdAndUserIdOrderByRecurrenceIndexAsc(selectedEntry.getSeriesId(), userId);
+                entryRepository.deleteAll(series.stream()
+                        .filter(item -> !item.getId().equals(selectedEntry.getId()))
+                        .toList());
+            }
+
+            selectedEntry.update(
+                    baseName,
+                    request.category(),
+                    request.type(),
+                    request.amount(),
+                    request.dueDate(),
+                    RecurrenceFrequency.NONE,
+                    0,
+                    0,
+                    null,
+                    request.type() == EntryType.EXPENSE && request.hasSubexpenses());
+            return toResponse(entryRepository.save(selectedEntry));
+        }
+
+        if (selectedEntry.getRecurrenceIndex() >= totalOccurrences) {
+            throw new BadRequestException("O total de parcelas não pode ser menor que a parcela atual");
+        }
+
+        List<FinancialEntry> series = selectedEntry.getSeriesId() == null
+                ? new ArrayList<>(List.of(selectedEntry))
+                : new ArrayList<>(entryRepository.findAllBySeriesIdAndUserIdOrderByRecurrenceIndexAsc(
+                        selectedEntry.getSeriesId(), userId));
+        UUID seriesId = selectedEntry.getSeriesId() == null ? UUID.randomUUID() : selectedEntry.getSeriesId();
+        LocalDate initialDate = recurrenceDate(
                 request.dueDate(),
                 request.recurrenceFrequency(),
-                request.recurrenceCount(),
-                request.type() == EntryType.EXPENSE && request.hasSubexpenses());
-        return toResponse(entryRepository.save(entry));
-    }
+                -selectedEntry.getRecurrenceIndex());
 
+        if (series.size() > totalOccurrences) {
+            entryRepository.deleteAll(new ArrayList<>(series.subList(totalOccurrences, series.size())));
+            series = new ArrayList<>(series.subList(0, totalOccurrences));
+        }
+
+        for (int index = 0; index < totalOccurrences; index++) {
+            String installmentName = baseName + " - " + (index + 1) + "/" + totalOccurrences;
+            LocalDate installmentDate = recurrenceDate(initialDate, request.recurrenceFrequency(), index);
+
+            if (index < series.size()) {
+                series.get(index).update(
+                        installmentName,
+                        request.category(),
+                        request.type(),
+                        request.amount(),
+                        installmentDate,
+                        request.recurrenceFrequency(),
+                        totalOccurrences,
+                        index,
+                        seriesId,
+                        request.type() == EntryType.EXPENSE && request.hasSubexpenses());
+            } else {
+                series.add(new FinancialEntry(
+                        selectedEntry.getUser(),
+                        installmentName,
+                        request.category(),
+                        request.type(),
+                        request.amount(),
+                        installmentDate,
+                        request.recurrenceFrequency(),
+                        totalOccurrences,
+                        index,
+                        seriesId,
+                        request.type() == EntryType.EXPENSE && request.hasSubexpenses()));
+            }
+        }
+
+        entryRepository.saveAll(series);
+        return toResponse(series.get(selectedEntry.getRecurrenceIndex()));
+    }
     @Transactional
     public void delete(UUID userId, UUID entryId) {
         entryRepository.delete(findOwnedEntry(userId, entryId));
@@ -241,8 +311,8 @@ public class EntryService {
         if (frequency == RecurrenceFrequency.NONE && count != 0) {
             throw new BadRequestException("Uma transação sem repetição deve usar recurrenceCount igual a zero");
         }
-        if (frequency != RecurrenceFrequency.NONE && count < 1) {
-            throw new BadRequestException("Informe ao menos uma repetição");
+        if (frequency != RecurrenceFrequency.NONE && count < 2) {
+            throw new BadRequestException("Informe ao menos duas parcelas");
         }
     }
 
@@ -258,6 +328,9 @@ public class EntryService {
         }
     }
 
+    private String baseName(String name) {
+        return name.trim().replaceFirst("\\s+-\\s+\\d+/\\d+$", "").trim();
+    }
     private LocalDate recurrenceDate(LocalDate initialDate, RecurrenceFrequency frequency, int index) {
         return switch (frequency) {
             case DAILY -> initialDate.plusDays(index);

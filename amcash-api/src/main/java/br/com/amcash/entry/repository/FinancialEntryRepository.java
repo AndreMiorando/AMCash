@@ -16,4 +16,6 @@ public interface FinancialEntryRepository extends JpaRepository<FinancialEntry, 
             LocalDate end);
 
     Optional<FinancialEntry> findByIdAndUserId(UUID id, UUID userId);
+
+    List<FinancialEntry> findAllBySeriesIdAndUserIdOrderByRecurrenceIndexAsc(UUID seriesId, UUID userId);
 }

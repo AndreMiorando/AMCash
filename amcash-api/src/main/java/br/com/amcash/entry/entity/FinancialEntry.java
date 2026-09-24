@@ -110,6 +110,8 @@ public class FinancialEntry {
             LocalDate dueDate,
             RecurrenceFrequency recurrenceFrequency,
             int recurrenceCount,
+            int recurrenceIndex,
+            UUID seriesId,
             boolean hasSubexpenses) {
 
         this.name = name;
@@ -119,6 +121,8 @@ public class FinancialEntry {
         this.dueDate = dueDate;
         this.recurrenceFrequency = recurrenceFrequency;
         this.recurrenceCount = recurrenceCount;
+        this.recurrenceIndex = recurrenceIndex;
+        this.seriesId = seriesId;
         this.hasSubexpenses = hasSubexpenses;
         this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }

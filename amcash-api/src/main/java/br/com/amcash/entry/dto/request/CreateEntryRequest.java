@@ -36,8 +36,8 @@ public record CreateEntryRequest(
         @NotNull(message = "A frequência de repetição é obrigatória")
         RecurrenceFrequency recurrenceFrequency,
 
-        @Min(value = 0, message = "A quantidade de repetições não pode ser negativa")
-        @Max(value = 120, message = "A quantidade máxima é 120 repetições")
+        @Min(value = 0, message = "O total de parcelas não pode ser negativo")
+        @Max(value = 120, message = "O máximo é 120 parcelas")
         int recurrenceCount,
 
         boolean hasSubexpenses
