@@ -2,6 +2,7 @@ package br.com.amcash.entry.service;
 
 import br.com.amcash.entry.dto.request.CreateEntryRequest;
 import br.com.amcash.entry.dto.request.SubexpenseRequest;
+import br.com.amcash.entry.dto.request.UpdateEntryRequest;
 import br.com.amcash.entry.dto.response.CreatedEntriesResponse;
 import br.com.amcash.entry.dto.response.MonthlyEntriesResponse;
 import br.com.amcash.entry.entity.EntryType;
@@ -68,13 +69,59 @@ class EntryServiceTests {
 
         CreatedEntriesResponse response = entryService.create(userId, request);
 
-        assertEquals(3, response.entries().size());
-        assertEquals("Nubank - 1/3", response.entries().get(0).name());
+        assertEquals(2, response.entries().size());
+        assertEquals("Nubank - 1/2", response.entries().get(0).name());
         assertEquals(LocalDate.of(2026, 1, 31), response.entries().get(0).dueDate());
         assertEquals(LocalDate.of(2026, 2, 28), response.entries().get(1).dueDate());
-        assertEquals(LocalDate.of(2026, 3, 31), response.entries().get(2).dueDate());
         assertNotNull(response.entries().get(0).seriesId());
-        assertEquals(response.entries().get(0).seriesId(), response.entries().get(2).seriesId());
+        assertEquals(response.entries().get(0).seriesId(), response.entries().get(1).seriesId());
+    }
+
+    @Test
+    void shouldResizeSeriesAndRefreshInstallmentDescriptions() {
+        UUID userId = UUID.randomUUID();
+        UUID seriesId = UUID.randomUUID();
+        User user = user(userId);
+        FinancialEntry first = new FinancialEntry(
+                user, "Internet - 1/3", EntryCategory.BILLS_AND_SERVICES, EntryType.EXPENSE,
+                new BigDecimal("100.00"), LocalDate.of(2026, 9, 24),
+                RecurrenceFrequency.MONTHLY, 3, 0, seriesId, false);
+        FinancialEntry second = new FinancialEntry(
+                user, "Internet - 2/3", EntryCategory.BILLS_AND_SERVICES, EntryType.EXPENSE,
+                new BigDecimal("100.00"), LocalDate.of(2026, 10, 24),
+                RecurrenceFrequency.MONTHLY, 3, 1, seriesId, false);
+        FinancialEntry third = new FinancialEntry(
+                user, "Internet - 3/3", EntryCategory.BILLS_AND_SERVICES, EntryType.EXPENSE,
+                new BigDecimal("100.00"), LocalDate.of(2026, 11, 24),
+                RecurrenceFrequency.MONTHLY, 3, 2, seriesId, false);
+        first.setId(UUID.randomUUID());
+        second.setId(UUID.randomUUID());
+        third.setId(UUID.randomUUID());
+        List<FinancialEntry> series = List.of(first, second, third);
+
+        when(entryRepository.findByIdAndUserId(first.getId(), userId)).thenReturn(Optional.of(first));
+        when(entryRepository.findAllBySeriesIdAndUserIdOrderByRecurrenceIndexAsc(seriesId, userId))
+                .thenReturn(series);
+        when(subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(any())).thenReturn(List.of());
+
+        var response = entryService.update(
+                userId,
+                first.getId(),
+                new UpdateEntryRequest(
+                        "Internet - 1/3",
+                        EntryCategory.BILLS_AND_SERVICES,
+                        EntryType.EXPENSE,
+                        new BigDecimal("100.00"),
+                        LocalDate.of(2026, 9, 24),
+                        RecurrenceFrequency.MONTHLY,
+                        2,
+                        false));
+
+        assertEquals("Internet - 1/2", response.name());
+        assertEquals(2, response.recurrenceCount());
+        assertEquals("Internet - 2/2", second.getName());
+        verify(entryRepository).deleteAll(List.of(third));
+        verify(entryRepository).saveAll(List.of(first, second));
     }
 
     @Test

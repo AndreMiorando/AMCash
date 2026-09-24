@@ -544,12 +544,13 @@ function CreateTransactionSheet({
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(defaultDate);
   const [recurrenceFrequency, setRecurrenceFrequency] = useState<RecurrenceFrequency>("none");
-  const [recurrenceCount, setRecurrenceCount] = useState(1);
+  const [recurrenceCount, setRecurrenceCount] = useState("2");
   const [hasSubexpenses, setHasSubexpenses] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const numericAmount = parseCurrencyInput(amount);
-  const recurrenceIsValid = recurrenceFrequency === "none" || (Number.isInteger(recurrenceCount) && recurrenceCount >= 1 && recurrenceCount <= 120);
+  const numericRecurrenceCount = Number(recurrenceCount);
+  const recurrenceIsValid = recurrenceFrequency === "none" || (recurrenceCount !== "" && Number.isInteger(numericRecurrenceCount) && numericRecurrenceCount >= 2 && numericRecurrenceCount <= 120);
   const canSave = name.trim().length > 0 && category.length > 0 && Number.isFinite(numericAmount) && numericAmount > 0 && date.length > 0 && recurrenceIsValid;
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -565,7 +566,7 @@ function CreateTransactionSheet({
         value: numericAmount,
         income: type === "income",
         recurrenceFrequency,
-        recurrenceCount: recurrenceFrequency === "none" ? 0 : recurrenceCount,
+        recurrenceCount: recurrenceFrequency === "none" ? 0 : numericRecurrenceCount,
         hasSubexpenses: type === "expense" && hasSubexpenses,
       });
     } catch (requestError) {
@@ -608,7 +609,7 @@ function CreateTransactionSheet({
             </fieldset>
           </div>
           {recurrenceFrequency !== "none" && (
-            <label className="field recurrence-count"><span>Quantidade de repetições</span><input type="number" min="1" max="120" value={recurrenceCount} onChange={(event) => setRecurrenceCount(Number(event.target.value))} /></label>
+            <label className="field recurrence-count"><span>Total de parcelas (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={recurrenceCount} onChange={(event) => setRecurrenceCount(event.target.value)} /></label>
           )}
 
           {type === "expense" && (
@@ -930,19 +931,21 @@ function DetailScreen({
   const [amount, setAmount] = useState(transaction.value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
   const [dueDate, setDueDate] = useState(transaction.date);
   const [recurrenceFrequency, setRecurrenceFrequency] = useState<RecurrenceFrequency>(transaction.recurrenceFrequency);
-  const [recurrenceCount, setRecurrenceCount] = useState(transaction.recurrenceCount || 1);
+  const [recurrenceCount, setRecurrenceCount] = useState(String(transaction.recurrenceCount || 1));
   const [subexpenses, setSubexpenses] = useState<Subexpense[]>(transaction.subexpenses);
   const [editing, setEditing] = useState<Subexpense | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
+  const numericRecurrenceCount = Number(recurrenceCount);
+  const recurrenceIsValid = recurrenceFrequency === "none" || (recurrenceCount !== "" && Number.isInteger(numericRecurrenceCount) && numericRecurrenceCount >= 2 && numericRecurrenceCount <= 120);
   const completed = subexpenses.filter((item) => item.paid).length;
   const progress = subexpenses.length ? Math.round((completed / subexpenses.length) * 100) : 0;
 
   async function saveDetails() {
     const numericAmount = parseCurrencyInput(amount);
-    if (!name.trim() || !category || !dueDate || !Number.isFinite(numericAmount) || numericAmount <= 0 || isSaving) return;
+    if (!name.trim() || !category || !dueDate || !Number.isFinite(numericAmount) || numericAmount <= 0 || !recurrenceIsValid || isSaving) return;
     setIsSaving(true);
     setError("");
     try {
@@ -953,7 +956,7 @@ function DetailScreen({
         amount: numericAmount,
         dueDate,
         recurrenceFrequency: recurrenceToApi[recurrenceFrequency],
-        recurrenceCount: recurrenceFrequency === "none" ? 0 : recurrenceCount,
+        recurrenceCount: recurrenceFrequency === "none" ? 0 : numericRecurrenceCount,
         hasSubexpenses: type === "expense" && transaction.hasSubexpenses,
       });
       await onChanged();
@@ -1061,7 +1064,7 @@ function DetailScreen({
               </div>
             </fieldset>
           </div>
-          {recurrenceFrequency !== "none" && <label className="field recurrence-count"><span>Quantidade de repetições</span><input type="number" min="1" max="120" value={recurrenceCount} onChange={(event) => setRecurrenceCount(Number(event.target.value))} /></label>}
+          {recurrenceFrequency !== "none" && <label className="field recurrence-count"><span>Total de parcelas (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={recurrenceCount} onChange={(event) => setRecurrenceCount(event.target.value)} /></label>}
         </section>
 
         <section className="detail-card subexpenses-card">
