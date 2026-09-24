@@ -2168,6 +2168,29 @@ a {
   padding: 0 0.65rem;
 }
 
+.expense-item-amount {
+  min-width: 0;
+  padding-left: 0.6rem;
+  overflow: hidden;
+}
+
+.expense-item-amount b {
+  flex: 0 0 auto;
+  line-height: 1;
+}
+
+.expense-item-amount input,
+.expense-item-amount input:focus {
+  min-width: 0;
+  padding: 0 0.55rem 0 0.3rem;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  appearance: none;
+}
+
 .expense-item-name:focus,
 .expense-item-amount:focus-within {
   border-color: #78aafa;
