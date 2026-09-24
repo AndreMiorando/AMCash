@@ -103,6 +103,9 @@ type Transaction = {
   recurrenceCount: number;
   recurrenceIndex: number;
   seriesId?: string;
+  paid: boolean;
+  paidOccurrences: number;
+  totalOccurrences: number;
   subexpenses: Subexpense[];
 };
 
@@ -232,6 +235,9 @@ function mapEntries(entries: ApiEntry[]) {
       recurrenceCount: entry.recurrenceCount,
       recurrenceIndex: entry.recurrenceIndex,
       seriesId: entry.seriesId ?? undefined,
+      paid: entry.paid,
+      paidOccurrences: entry.paidOccurrences,
+      totalOccurrences: entry.totalOccurrences,
       subexpenses: entry.subexpenses.map(mapSubexpense),
     };
   });
@@ -627,10 +633,94 @@ function CreateTransactionSheet({
   );
 }
 
+function TransactionRow({
+  transaction,
+  onOpen,
+  onDelete,
+  onPaid,
+}: {
+  transaction: Transaction;
+  onOpen: (transaction: Transaction) => void;
+  onDelete: (transaction: Transaction) => void;
+  onPaid: (transaction: Transaction) => Promise<void>;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
+  const didSwipe = useRef(false);
+  const hasActions = !transaction.income;
+
+  function startSwipe(event: React.PointerEvent<HTMLButtonElement>) {
+    if (!hasActions) return;
+    pointerStart.current = { x: event.clientX, y: event.clientY };
+  }
+
+  function finishSwipe(event: React.PointerEvent<HTMLButtonElement>) {
+    const start = pointerStart.current;
+    pointerStart.current = null;
+    if (!start || !hasActions) return;
+    const horizontal = event.clientX - start.x;
+    const vertical = event.clientY - start.y;
+    if (Math.abs(horizontal) <= Math.abs(vertical) || Math.abs(horizontal) < 28) return;
+    didSwipe.current = true;
+    setIsOpen(horizontal < 0);
+  }
+
+  async function togglePaid() {
+    if (isUpdating) return;
+    setIsUpdating(true);
+    try {
+      await onPaid(transaction);
+      setIsOpen(false);
+    } finally {
+      setIsUpdating(false);
+    }
+  }
+
+  return (
+    <div className={`transaction-swipe${isOpen ? " is-open" : ""}`}>
+      {hasActions && (
+        <div className="transaction-actions" aria-hidden={!isOpen}>
+          <button type="button" className={`transaction-paid${transaction.paid ? " is-paid" : ""}`} disabled={isUpdating} tabIndex={isOpen ? 0 : -1} onClick={togglePaid}>
+            <Icon name="check" />
+            <span>{transaction.paid ? "Pendente" : "Pago"}</span>
+          </button>
+          <button type="button" className="transaction-delete" tabIndex={isOpen ? 0 : -1} onClick={() => onDelete(transaction)}>
+            <Icon name="trash" />
+            <span>Excluir</span>
+          </button>
+        </div>
+      )}
+      <button
+        type="button"
+        className={`transaction${transaction.paid ? " transaction--paid" : ""}`}
+        onPointerDown={startSwipe}
+        onPointerUp={finishSwipe}
+        onPointerCancel={() => { pointerStart.current = null; }}
+        onClick={() => { if (didSwipe.current) { didSwipe.current = false; return; } if (isOpen) setIsOpen(false); else onOpen(transaction); }}
+        aria-label={`Abrir detalhes de ${transaction.name}`}
+      >
+        <div className={`transaction-icon${transaction.income ? " transaction-icon--income" : ""}`}>
+          <Icon name={transaction.kind} />
+        </div>
+        <div className="transaction-main">
+          <strong>{transaction.name}</strong>
+          <time dateTime={transaction.date}>{formatDate(transaction.date)}{transaction.paid && <span> · Pago</span>}</time>
+        </div>
+        <div className="transaction-values">
+          <strong className={transaction.income ? "value-income" : "value-expense"}>{transaction.income ? "+ " : "- "}{formatCurrency(transaction.value)}</strong>
+          <small>Saldo: {transaction.balance >= 0 ? "+ " : "- "}{formatCurrency(transaction.balance)}</small>
+        </div>
+      </button>
+    </div>
+  );
+}
 function Dashboard({
   items,
   onOpen,
   onCreate,
+  onDelete,
+  onPaid,
   onMonthChange,
   initialPeriod,
   error = "",
@@ -639,6 +729,8 @@ function Dashboard({
   items: Transaction[];
   onOpen: (transaction: Transaction) => void;
   onCreate: (transaction: NewTransaction) => Promise<void>;
+  onDelete: (transaction: Transaction) => Promise<void>;
+  onPaid: (transaction: Transaction) => Promise<void>;
   onMonthChange: (year: number, month: number) => void;
   initialPeriod: { year: number; month: number };
   error?: string;
@@ -650,6 +742,9 @@ function Dashboard({
   const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [pickerYear, setPickerYear] = useState(selectedMonth.getFullYear());
+  const [pendingDelete, setPendingDelete] = useState<Transaction | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [actionError, setActionError] = useState("");
   const monthFormatter = new Intl.DateTimeFormat("pt-BR", {
     month: "long",
     year: "numeric",
@@ -700,6 +795,29 @@ function Dashboard({
     setIsMonthPickerOpen(false);
   }
 
+  async function markPaid(transaction: Transaction) {
+    setActionError("");
+    try {
+      await onPaid(transaction);
+    } catch (requestError) {
+      setActionError(messageFromError(requestError));
+    }
+  }
+
+  async function confirmDeleteTransaction() {
+    if (!pendingDelete || isDeleting) return;
+    setIsDeleting(true);
+    setActionError("");
+    try {
+      await onDelete(pendingDelete);
+      setPendingDelete(null);
+    } catch (requestError) {
+      setActionError(messageFromError(requestError));
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   return (
     <main className="dashboard-screen">
       <header className="dashboard-header">
@@ -719,7 +837,7 @@ function Dashboard({
         <button type="button" className="month-arrow" onClick={() => changeMonth(1)} aria-label={`Ir para ${monthFormatter.format(nextMonth)}`}><Icon name="forward" /></button>
       </section>
 
-      {error && <p className="auth-error" role="alert">{error}</p>}
+      {(error || actionError) && <p className="auth-error" role="alert">{error || actionError}</p>}
 
       <section className={`transactions${isLoading || visibleItems.length === 0 ? " transactions--empty" : ""}`} aria-label={`Movimentações de ${monthLabel}`} aria-busy={isLoading}>
         {isLoading ? (
@@ -734,27 +852,14 @@ function Dashboard({
             <p>Suas receitas e despesas aparecerão aqui quando forem adicionadas.</p>
           </div>
         ) : visibleItems.map((transaction) => (
-          <button
-            type="button"
-            className="transaction"
+          <TransactionRow
             key={transaction.id}
-            onClick={() => onOpen(transaction)}
-            aria-label={`Abrir detalhes de ${transaction.name}`}
-          >
-            <div className={`transaction-icon${transaction.income ? " transaction-icon--income" : ""}`}>
-              <Icon name={transaction.kind} />
-            </div>
-            <div className="transaction-main">
-              <strong>{transaction.name}</strong>
-              <time dateTime={transaction.date}>{formatDate(transaction.date)}</time>
-            </div>
-            <div className="transaction-values">
-              <strong className={transaction.income ? "value-income" : "value-expense"}>{transaction.income ? "+ " : "- "}{formatCurrency(transaction.value)}</strong>
-              <small>Saldo: {transaction.balance >= 0 ? "+ " : "- "}{formatCurrency(transaction.balance)}</small>
-            </div>
-          </button>
-        ))}
-      </section>
+            transaction={transaction}
+            onOpen={onOpen}
+            onDelete={setPendingDelete}
+            onPaid={markPaid}
+          />
+        ))}      </section>
 
       <section className="monthly-summary" aria-label="Resumo do mês">
         <div><span>Receitas</span><strong>{formatCurrency(totalIncome)}</strong></div>
@@ -818,6 +923,19 @@ function Dashboard({
           onClose={() => setIsCreateOpen(false)}
           onCreate={async (transaction) => { await onCreate(transaction); setIsCreateOpen(false); }}
         />
+      )}
+
+      {pendingDelete && (
+        <div className="sheet-backdrop confirm-backdrop" role="presentation" onMouseDown={() => !isDeleting && setPendingDelete(null)}>
+          <section className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="swipe-delete-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="confirm-icon"><Icon name="trash" /></div>
+            <h2 id="swipe-delete-title">Excluir despesa?</h2>
+            <p>{pendingDelete.subexpenses.length > 0
+              ? `Esta despesa possui ${pendingDelete.subexpenses.length} subdespesa${pendingDelete.subexpenses.length === 1 ? "" : "s"}. Todas serão excluídas junto com ela.`
+              : "Esta despesa será excluída permanentemente."}</p>
+            <div><button type="button" disabled={isDeleting} onClick={() => setPendingDelete(null)}>Cancelar</button><button type="button" disabled={isDeleting} onClick={confirmDeleteTransaction}>{isDeleting ? "Excluindo..." : "Excluir"}</button></div>
+          </section>
+        </div>
       )}
     </main>
   );
@@ -935,13 +1053,13 @@ function DetailScreen({
   const [subexpenses, setSubexpenses] = useState<Subexpense[]>(transaction.subexpenses);
   const [editing, setEditing] = useState<Subexpense | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const numericRecurrenceCount = Number(recurrenceCount);
   const recurrenceIsValid = recurrenceFrequency === "none" || (recurrenceCount !== "" && Number.isInteger(numericRecurrenceCount) && numericRecurrenceCount >= 2 && numericRecurrenceCount <= 120);
-  const completed = subexpenses.filter((item) => item.paid).length;
-  const progress = subexpenses.length ? Math.round((completed / subexpenses.length) * 100) : 0;
+  const progress = transaction.totalOccurrences
+    ? Math.round((transaction.paidOccurrences / transaction.totalOccurrences) * 100)
+    : 0;
 
   async function saveDetails() {
     const numericAmount = parseCurrencyInput(amount);
@@ -960,8 +1078,7 @@ function DetailScreen({
         hasSubexpenses: type === "expense" && transaction.hasSubexpenses,
       });
       await onChanged();
-      setSaved(true);
-      window.setTimeout(() => setSaved(false), 1800);
+      onBack();
     } catch (requestError) {
       setError(messageFromError(requestError));
     } finally {
@@ -1034,11 +1151,13 @@ function DetailScreen({
           <span className={`status-pill ${type === "income" ? "status-pill--income" : ""}`}>{type === "expense" ? "Despesa" : "Receita"}</span>
         </section>
 
-        <section className="detail-card progress-card">
-          <div className="progress-heading"><div><span>PROGRESSO</span><strong>{completed} de {subexpenses.length} concluídas</strong></div><b>{progress}%</b></div>
-          <div className="progress-track"><span style={{ width: `${progress}%` }} /></div>
-          <p>As subdespesas pagas completam a despesa principal.</p>
-        </section>
+        {transaction.recurrenceFrequency !== "none" && (
+          <section className="detail-card progress-card">
+            <div className="progress-heading"><div><span>PROGRESSO</span><strong>{transaction.paidOccurrences} de {transaction.totalOccurrences} parcelas pagas</strong></div><b>{progress}%</b></div>
+            <div className="progress-track"><span style={{ width: `${progress}%` }} /></div>
+            <p>O progresso considera as parcelas desta série marcadas como pagas.</p>
+          </section>
+        )}
 
         <section className="detail-card edit-card">
           <div className="section-title"><div><span>DADOS PRINCIPAIS</span><h2>Editar lançamento</h2></div><Icon name="edit" /></div>
@@ -1085,7 +1204,7 @@ function DetailScreen({
         </section>
 
         {error && <p className="auth-error" role="alert">{error}</p>}
-        <button type="button" className="primary-button save-details" disabled={isSaving} onClick={saveDetails}>{saved ? <><Icon name="check" /> Alterações salvas</> : isSaving ? "Salvando..." : "Salvar alterações"}</button>
+        <button type="button" className="primary-button save-details" disabled={isSaving} onClick={saveDetails}>{isSaving ? "Salvando..." : "Salvar alterações"}</button>
         <button type="button" className="danger-button" onClick={() => setConfirmDelete(true)}><Icon name="trash" /> Excluir lançamento</button>
       </div>
 
@@ -1103,7 +1222,7 @@ function DetailScreen({
           <section className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="confirm-icon"><Icon name="trash" /></div>
             <h2 id="delete-title">Excluir lançamento?</h2>
-            <p>A despesa e todas as suas subdespesas serão removidas.</p>
+            <p>{subexpenses.length > 0 ? `Esta despesa possui ${subexpenses.length} subdespesa${subexpenses.length === 1 ? "" : "s"}. Todas serão excluídas junto com ela.` : "Esta despesa será excluída permanentemente."}</p>
             <div><button type="button" disabled={isSaving} onClick={() => setConfirmDelete(false)}>Cancelar</button><button type="button" disabled={isSaving} onClick={deleteEntry}>{isSaving ? "Excluindo..." : "Excluir"}</button></div>
           </section>
         </div>
@@ -1222,14 +1341,24 @@ export default function Home() {
     await loadMonth(period.year, period.month);
   }
 
+  async function deleteDashboardTransaction(transaction: Transaction) {
+    await deleteTransaction(transaction.id);
+  }
+
+  async function markTransactionPaid(transaction: Transaction) {
+    await financeApi.setPaid(transaction.id, !transaction.paid);
+    await loadMonth(period.year, period.month);
+  }
+
   async function refreshCurrentMonth() {
     await loadMonth(period.year, period.month);
   }
 
   const idleCreate = async () => {};
+  const idleTransactionAction = async (_transaction: Transaction) => {};
   const idleMonthChange = () => {};
 
-  if (screen === "checking" || screen === "refreshing") return <Dashboard items={items} onOpen={setSelected} onCreate={idleCreate} onMonthChange={idleMonthChange} initialPeriod={period} isLoading />;
+  if (screen === "checking" || screen === "refreshing") return <Dashboard items={items} onOpen={setSelected} onCreate={idleCreate} onDelete={idleTransactionAction} onPaid={idleTransactionAction} onMonthChange={idleMonthChange} initialPeriod={period} isLoading />;
   if (screen === "auth") return <AuthScreen onAuthenticated={() => setScreen("loading")} />;
   if (screen === "loading") return <LoadingScreen />;
   if (selected) {
@@ -1243,5 +1372,5 @@ export default function Home() {
     );
   }
 
-  return <Dashboard items={items} onOpen={setSelected} onCreate={addTransaction} onMonthChange={changeMonth} initialPeriod={period} error={error} isLoading={isLoading} />;
+  return <Dashboard items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onMonthChange={changeMonth} initialPeriod={period} error={error} isLoading={isLoading} />;
 }

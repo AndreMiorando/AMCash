@@ -844,6 +844,86 @@ a {
   margin-top: 0;
 }
 
+.transaction-swipe {
+  position: relative;
+  width: calc(100% - 2.1rem);
+  min-height: 3.6rem;
+  margin: 0 1.05rem;
+  overflow: hidden;
+  border-bottom: 1px solid #edf1f6;
+  background: #f5f7fa;
+}
+
+.transaction-actions {
+  position: absolute;
+  inset: 0 0 0 auto;
+  display: grid;
+  width: 8.4rem;
+  grid-template-columns: 1fr 1fr;
+}
+
+.transaction-actions button {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 0.18rem;
+  border: 0;
+  color: #fff;
+  font: inherit;
+  font-size: 0.58rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.transaction-actions svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.transaction-paid {
+  background: #19ad6b;
+}
+
+.transaction-paid.is-paid {
+  background: #7f90a4;
+}
+
+.transaction-delete {
+  background: #ef5366;
+}
+
+.transaction-swipe .transaction {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  margin: 0;
+  border-bottom: 0;
+  transform: translateX(0);
+  transition: transform 0.22s ease;
+  touch-action: pan-y;
+}
+
+.transaction-swipe.is-open .transaction {
+  transform: translateX(-8.4rem);
+}
+
+.transaction--paid .transaction-main strong {
+  color: #708399;
+  text-decoration: line-through;
+}
+
+.transaction--paid .transaction-icon {
+  background: #eafbf2;
+  color: #19ad6b;
+}
+
+.transaction-main time span {
+  color: #19ad6b;
+  font-weight: 700;
+}
+
 .transaction {
   display: grid;
   min-height: 3.6rem;
@@ -2276,6 +2356,11 @@ a {
     --app-shell-width: 46rem;
   }
 
+  .transaction-swipe {
+    width: min(calc(100% - 2.1rem), 42rem);
+    margin-inline: auto;
+  }
+
   .auth-screen,
   .loading-screen,
   .dashboard-screen,
@@ -2315,6 +2400,10 @@ a {
 @media (min-width: 64rem) and (orientation: landscape) {
   :root {
     --app-shell-width: 58rem;
+  }
+
+  .transaction-swipe {
+    width: min(calc(100% - 3rem), 48rem);
   }
 
   .auth-screen,

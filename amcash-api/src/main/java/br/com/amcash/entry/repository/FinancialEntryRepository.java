@@ -18,4 +18,8 @@ public interface FinancialEntryRepository extends JpaRepository<FinancialEntry, 
     Optional<FinancialEntry> findByIdAndUserId(UUID id, UUID userId);
 
     List<FinancialEntry> findAllBySeriesIdAndUserIdOrderByRecurrenceIndexAsc(UUID seriesId, UUID userId);
+
+    long countBySeriesIdAndUserId(UUID seriesId, UUID userId);
+
+    long countBySeriesIdAndUserIdAndPaidTrue(UUID seriesId, UUID userId);
 }

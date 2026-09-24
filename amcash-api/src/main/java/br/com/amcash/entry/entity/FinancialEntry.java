@@ -64,6 +64,9 @@ public class FinancialEntry {
     @Column(name = "has_subexpenses", nullable = false)
     private boolean hasSubexpenses;
 
+    @Column(nullable = false)
+    private boolean paid;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
@@ -140,6 +143,11 @@ public class FinancialEntry {
     public int getRecurrenceIndex() { return recurrenceIndex; }
     public UUID getSeriesId() { return seriesId; }
     public boolean isHasSubexpenses() { return hasSubexpenses; }
+    public boolean isPaid() { return paid; }
+    public void setPaid(boolean paid) {
+        this.paid = paid;
+        this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
+    }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
 }
