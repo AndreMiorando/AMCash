@@ -66,6 +66,7 @@ export type EntryPayload = {
   recurrenceFrequency: ApiRecurrenceFrequency;
   recurrenceCount: number;
   hasSubexpenses: boolean;
+  subexpenses?: SubexpensePayload[];
 };
 
 export type SubexpensePayload = {

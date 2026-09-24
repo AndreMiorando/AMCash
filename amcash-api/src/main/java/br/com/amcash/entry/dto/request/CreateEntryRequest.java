@@ -3,6 +3,7 @@ package br.com.amcash.entry.dto.request;
 import br.com.amcash.entry.entity.EntryType;
 import br.com.amcash.entry.entity.EntryCategory;
 import br.com.amcash.entry.entity.RecurrenceFrequency;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Max;
@@ -13,6 +14,7 @@ import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 public record CreateEntryRequest(
         @NotBlank(message = "A descrição é obrigatória")
@@ -40,6 +42,8 @@ public record CreateEntryRequest(
         @Max(value = 120, message = "O máximo é 120 parcelas")
         int recurrenceCount,
 
-        boolean hasSubexpenses
+        boolean hasSubexpenses,
+
+        List<@Valid SubexpenseRequest> subexpenses
 ) {
 }
