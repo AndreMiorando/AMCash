@@ -1162,14 +1162,10 @@ function SubexpenseEditor({
           <span>Descrição</span>
           <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
         </label>
-        <div className="field-grid">
+        <div className="field-grid field-grid--single">
           <label className="field">
             <span>Valor</span>
             <div className="currency-input"><b>R$</b><input value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: maskCurrencyInput(event.target.value) })} onBlur={() => setDraft({ ...draft, amount: completeCurrencyInput(draft.amount) })} inputMode="numeric" /></div>
-          </label>
-          <label className="field">
-            <span>Parcela</span>
-            <input value={draft.installment} onChange={(event) => setDraft({ ...draft, installment: event.target.value })} />
           </label>
         </div>
         <div className="recurrence-fields item-editor-recurrence">
@@ -1358,22 +1354,24 @@ function DetailScreen({
           {recurrenceFrequency !== "none" && <label className="field recurrence-count"><span>Total de parcelas (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={recurrenceCount} placeholder="0" onChange={(event) => setRecurrenceCount(event.target.value)} /></label>}
         </section>
 
-        <section className="detail-card subexpenses-card">
-          <div className="section-title subexpense-title">
-            <div><span>COMPOSIÇÃO</span><h2>Itens da despesa <b>{subexpenses.length}</b></h2></div>
-            <button type="button" disabled={!transaction.hasSubexpenses || type === "income"} onClick={addSubexpense}><Icon name="plus" /> Adicionar</button>
-          </div>
-          <div className="subexpense-list">
-            {subexpenses.map((item) => (
-              <button type="button" className="subexpense-row" key={item.id} onClick={() => setEditing(item)}>
-                <span className={`sub-check${item.paid ? " checked" : ""}`}>{item.paid && <Icon name="check" />}</span>
-                <span className="sub-copy"><strong>{item.name}</strong><small>{item.installment}</small></span>
-                <span className="sub-value">R$ {item.amount}</span>
-                <span className="sub-edit"><Icon name="edit" /></span>
-              </button>
-            ))}
-          </div>
-        </section>
+        {transaction.hasSubexpenses && type === "expense" && (
+          <section className="detail-card subexpenses-card">
+            <div className="section-title subexpense-title">
+              <div><span>COMPOSIÇÃO</span><h2>Itens da despesa <b>{subexpenses.length}</b></h2></div>
+              <button type="button" onClick={addSubexpense}><Icon name="plus" /> Adicionar</button>
+            </div>
+            <div className="subexpense-list">
+              {subexpenses.map((item) => (
+                <button type="button" className="subexpense-row" key={item.id} onClick={() => setEditing(item)}>
+                  <span className={`sub-check${item.paid ? " checked" : ""}`}>{item.paid && <Icon name="check" />}</span>
+                  <span className="sub-copy"><strong>{item.name}</strong><small>{item.installment}</small></span>
+                  <span className="sub-value">R$ {item.amount}</span>
+                  <span className="sub-edit"><Icon name="edit" /></span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
 
         {error && <p className="auth-error" role="alert">{error}</p>}
         <button type="button" className="primary-button save-details" disabled={isSaving} onClick={saveDetails}>{isSaving ? "Salvando..." : "Salvar alterações"}</button>
