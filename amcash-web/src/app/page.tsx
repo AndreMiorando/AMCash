@@ -592,6 +592,8 @@ function CreateTransactionSheet({
 
   function toggleDetailedExpense(checked: boolean) {
     if (checked) {
+      setRecurrenceFrequency("none");
+      setRecurrenceCount("");
       setHasSubexpenses(true);
       setExpenseItems((current) => current.length > 0 ? current : [createEmptyItem()]);
       return;
@@ -753,18 +755,22 @@ function CreateTransactionSheet({
             </div>
           )}
 
-          <div className="recurrence-fields">
-            <fieldset className="recurrence-choice">
-              <legend>Repetição</legend>
-              <div>
-                {([["none", "Não repetir"], ["daily", "Diária"], ["weekly", "Semanal"], ["monthly", "Mensal"]] as [RecurrenceFrequency, string][]).map(([frequency, label]) => (
-                  <button type="button" key={frequency} className={recurrenceFrequency === frequency ? "active" : ""} onClick={() => setRecurrenceFrequency(frequency)}>{label}</button>
-                ))}
+          {!hasSubexpenses && (
+            <>
+              <div className="recurrence-fields">
+                <fieldset className="recurrence-choice">
+                  <legend>Repetição</legend>
+                  <div>
+                    {([["none", "Não repetir"], ["daily", "Diária"], ["weekly", "Semanal"], ["monthly", "Mensal"]] as [RecurrenceFrequency, string][]).map(([frequency, label]) => (
+                      <button type="button" key={frequency} className={recurrenceFrequency === frequency ? "active" : ""} onClick={() => setRecurrenceFrequency(frequency)}>{label}</button>
+                    ))}
+                  </div>
+                </fieldset>
               </div>
-            </fieldset>
-          </div>
-          {recurrenceFrequency !== "none" && (
-            <label className="field recurrence-count"><span>Total de parcelas (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={recurrenceCount} placeholder="0" onChange={(event) => setRecurrenceCount(event.target.value)} /></label>
+              {recurrenceFrequency !== "none" && (
+                <label className="field recurrence-count"><span>Total de parcelas (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={recurrenceCount} placeholder="0" onChange={(event) => setRecurrenceCount(event.target.value)} /></label>
+              )}
+            </>
           )}
 
           {error && <p className="auth-error" role="alert">{error}</p>}
