@@ -1,0 +1,15 @@
+target/
+.git/
+.gitignore
+.gitattributes
+.idea/
+.vscode/
+.settings/
+*.iml
+*.log
+
+.env
+.env.*
+
+HELP.md
+run-local.ps1
