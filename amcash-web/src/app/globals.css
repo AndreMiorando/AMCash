@@ -2212,16 +2212,16 @@ a {
   padding: 0;
   border: 0;
   background: transparent;
-  color: #71859b;
+  color: var(--brand-blue);
   font: inherit;
   font-size: 0.6rem;
-  font-weight: 650;
+  font-weight: 700;
   cursor: pointer;
 }
 
 .expense-item-recurrence:hover,
 .expense-item-recurrence:focus-visible {
-  color: var(--brand-blue);
+  text-decoration: underline;
   outline: none;
 }
 
