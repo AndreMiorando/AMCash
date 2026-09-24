@@ -28,9 +28,12 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -134,9 +137,7 @@ public class EntryService {
             subexpenseRepository.saveAll(savedSubexpenses);
         }
 
-        return new CreatedEntriesResponse(savedEntries.stream()
-                .map(this::toResponse)
-                .toList());
+        return new CreatedEntriesResponse(toResponses(savedEntries));
     }
 
     @Transactional(readOnly = true)
@@ -167,7 +168,7 @@ public class EntryService {
                 year,
                 month,
                 new MonthlySummaryResponse(income, expenses, income.subtract(expenses)),
-                entries.stream().map(this::toResponse).toList()
+                toResponses(entries)
         );
     }
 
@@ -182,7 +183,7 @@ public class EntryService {
         validateSubexpenses(request.type(), request.hasSubexpenses());
         validateCategory(request.type(), request.category());
         FinancialEntry selectedEntry = findOwnedEntry(userId, entryId);
-        boolean hasStoredSubexpenses = !subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(entryId).isEmpty();
+        boolean hasStoredSubexpenses = subexpenseRepository.existsByEntryId(entryId);
 
         if (hasStoredSubexpenses && (request.type() == EntryType.INCOME || !request.hasSubexpenses())) {
             throw new BadRequestException("Remova os itens antes de desativar essa opção ou transformar em receita");
@@ -347,7 +348,8 @@ public class EntryService {
             occurrenceDates.add(recurrenceDate(entry.getDueDate(), request.recurrenceFrequency(), index));
         }
         List<FinancialEntry> parents = ensureDetailedParentEntries(entry, userId, occurrenceDates, request.amount());
-        List<BigDecimal> previousTotals = parents.stream().map(parent -> sumSubexpenses(parent.getId())).toList();
+        Map<UUID, BigDecimal> previousTotals = sumSubexpensesByEntryIds(
+                parents.stream().map(FinancialEntry::getId).toList());
         UUID itemSeriesId = UUID.randomUUID();
         List<Subexpense> occurrences = new ArrayList<>(request.recurrenceCount());
 
@@ -365,9 +367,10 @@ public class EntryService {
         }
 
         subexpenseRepository.saveAll(occurrences);
-        for (int index = 0; index < parents.size(); index++) {
-            updateEntryAmount(parents.get(index), previousTotals.get(index).add(request.amount()));
+        for (FinancialEntry parent : parents) {
+            parent.updateAmount(previousTotals.getOrDefault(parent.getId(), BigDecimal.ZERO).add(request.amount()));
         }
+        entryRepository.saveAll(parents);
         return toResponse(occurrences.get(0));
     }
 
@@ -415,13 +418,17 @@ public class EntryService {
             itemSeriesId = selected.getSeriesId() == null ? UUID.randomUUID() : selected.getSeriesId();
         }
 
+        Map<UUID, FinancialEntry> affectedParents = new LinkedHashMap<>();
+        originalSeries.forEach(item -> affectedParents.put(item.getEntry().getId(), item.getEntry()));
+        parents.forEach(parent -> affectedParents.put(parent.getId(), parent));
+        Map<UUID, BigDecimal> storedTotals = sumSubexpensesByEntryIds(affectedParents.keySet());
         Map<FinancialEntry, BigDecimal> totals = new LinkedHashMap<>();
+        affectedParents.forEach((affectedEntryId, parent) ->
+                totals.put(parent, storedTotals.getOrDefault(affectedEntryId, BigDecimal.ZERO)));
         for (Subexpense item : originalSeries) {
-            totals.computeIfAbsent(item.getEntry(), parent -> sumSubexpenses(parent.getId()));
             totals.computeIfPresent(item.getEntry(), (parent, total) -> total.subtract(item.getAmount()));
         }
         for (FinancialEntry parent : parents) {
-            totals.computeIfAbsent(parent, item -> sumSubexpenses(item.getId()));
             totals.computeIfPresent(parent, (item, total) -> total.add(request.amount()));
         }
 
@@ -458,7 +465,8 @@ public class EntryService {
                 .toList();
         if (!removed.isEmpty()) subexpenseRepository.deleteAll(removed);
         subexpenseRepository.saveAll(synchronizedSeries);
-        totals.forEach(this::updateEntryAmount);
+        totals.forEach(FinancialEntry::updateAmount);
+        entryRepository.saveAll(new ArrayList<>(totals.keySet()));
         return toResponse(synchronizedSeries.get(selectedIndex));
     }
 
@@ -529,9 +537,18 @@ public class EntryService {
                 .toList();
     }
     private BigDecimal sumSubexpenses(UUID entryId) {
-        return subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(entryId).stream()
-                .map(Subexpense::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return sumSubexpensesByEntryIds(List.of(entryId)).getOrDefault(entryId, BigDecimal.ZERO);
+    }
+
+    private Map<UUID, BigDecimal> sumSubexpensesByEntryIds(Iterable<UUID> entryIds) {
+        List<UUID> ids = new ArrayList<>();
+        entryIds.forEach(ids::add);
+        if (ids.isEmpty()) return Map.of();
+
+        Map<UUID, BigDecimal> totals = new HashMap<>();
+        subexpenseRepository.sumAmountsByEntryIds(ids)
+                .forEach(total -> totals.put(total.getEntryId(), total.getTotal()));
+        return totals;
     }
 
     private void updateEntryAmount(FinancialEntry entry, BigDecimal amount) {
@@ -549,22 +566,76 @@ public class EntryService {
                 .orElseThrow(() -> new NotFoundException("Subdespesa não encontrada"));
     }
 
+    private List<EntryResponse> toResponses(List<FinancialEntry> entries) {
+        if (entries.isEmpty()) return List.of();
+
+        List<UUID> entryIds = entries.stream().map(FinancialEntry::getId).toList();
+        Map<UUID, List<SubexpenseResponse>> subexpensesByEntryId = new HashMap<>();
+        for (Subexpense subexpense : subexpenseRepository
+                .findAllByEntryIdInOrderByEntryIdAscCreatedAtAsc(entryIds)) {
+            subexpensesByEntryId
+                    .computeIfAbsent(subexpense.getEntry().getId(), ignored -> new ArrayList<>())
+                    .add(toResponse(subexpense));
+        }
+
+        Set<UUID> seriesIds = new LinkedHashSet<>();
+        entries.stream()
+                .map(FinancialEntry::getSeriesId)
+                .filter(java.util.Objects::nonNull)
+                .forEach(seriesIds::add);
+        Map<UUID, SeriesSummary> summariesBySeriesId = new HashMap<>();
+        if (!seriesIds.isEmpty()) {
+            UUID userId = entries.get(0).getUser().getId();
+            entryRepository.summarizeSeries(userId, seriesIds).forEach(summary ->
+                    summariesBySeriesId.put(
+                            summary.getSeriesId(),
+                            new SeriesSummary(
+                                    Math.toIntExact(summary.getTotalOccurrences()),
+                                    Math.toIntExact(summary.getPaidOccurrences()))));
+        }
+
+        return entries.stream()
+                .map(entry -> {
+                    List<SubexpenseResponse> subexpenses = subexpensesByEntryId
+                            .getOrDefault(entry.getId(), List.of());
+                    SeriesSummary summary = entry.getSeriesId() == null
+                            ? new SeriesSummary(1, entry.isPaid() ? 1 : 0)
+                            : summariesBySeriesId.getOrDefault(
+                                    entry.getSeriesId(),
+                                    new SeriesSummary(1, entry.isPaid() ? 1 : 0));
+                    return toResponse(entry, subexpenses, summary);
+                })
+                .toList();
+    }
+
     private EntryResponse toResponse(FinancialEntry entry) {
         List<SubexpenseResponse> subexpenses = subexpenseRepository
                 .findAllByEntryIdOrderByCreatedAtAsc(entry.getId())
                 .stream()
                 .map(this::toResponse)
                 .toList();
-        int completed = (int) subexpenses.stream().filter(SubexpenseResponse::paid).count();
-        int totalOccurrences = entry.getSeriesId() == null
-                ? 1
-                : Math.toIntExact(entryRepository.countBySeriesIdAndUserId(
-                        entry.getSeriesId(), entry.getUser().getId()));
-        int paidOccurrences = entry.getSeriesId() == null
-                ? (entry.isPaid() ? 1 : 0)
-                : Math.toIntExact(entryRepository.countBySeriesIdAndUserIdAndPaidTrue(
-                        entry.getSeriesId(), entry.getUser().getId()));
+        SeriesSummary summary;
+        if (entry.getSeriesId() == null) {
+            summary = new SeriesSummary(1, entry.isPaid() ? 1 : 0);
+        } else {
+            summary = entryRepository
+                    .summarizeSeries(entry.getUser().getId(), List.of(entry.getSeriesId()))
+                    .stream()
+                    .findFirst()
+                    .map(statistics -> new SeriesSummary(
+                            Math.toIntExact(statistics.getTotalOccurrences()),
+                            Math.toIntExact(statistics.getPaidOccurrences())))
+                    .orElse(new SeriesSummary(1, entry.isPaid() ? 1 : 0));
+        }
+        return toResponse(entry, subexpenses, summary);
+    }
 
+    private EntryResponse toResponse(
+            FinancialEntry entry,
+            List<SubexpenseResponse> subexpenses,
+            SeriesSummary summary) {
+
+        int completed = (int) subexpenses.stream().filter(SubexpenseResponse::paid).count();
         return new EntryResponse(
                 entry.getId(),
                 entry.getName(),
@@ -578,8 +649,8 @@ public class EntryService {
                 entry.getSeriesId(),
                 entry.isHasSubexpenses(),
                 entry.isPaid(),
-                paidOccurrences,
-                totalOccurrences,
+                summary.paidOccurrences(),
+                summary.totalOccurrences(),
                 completed,
                 subexpenses.size(),
                 subexpenses,
@@ -588,6 +659,8 @@ public class EntryService {
         );
     }
 
+    private record SeriesSummary(int totalOccurrences, int paidOccurrences) {
+    }
     private SubexpenseResponse toResponse(Subexpense subexpense) {
         return new SubexpenseResponse(
                 subexpense.getId(),

@@ -74,8 +74,13 @@ class EntryServiceTests {
             savedItems.addAll(items);
             return items;
         });
-        when(subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(any()))
-                .thenReturn(List.of());
+        when(subexpenseRepository.findAllByEntryIdInOrderByEntryIdAscCreatedAtAsc(any()))
+                .thenAnswer(invocation -> new ArrayList<>(savedItems));
+        when(entryRepository.summarizeSeries(org.mockito.ArgumentMatchers.eq(userId), any()))
+                .thenAnswer(invocation -> {
+                    java.util.Collection<UUID> seriesIds = invocation.getArgument(1);
+                    return List.of(seriesStatistics(seriesIds.iterator().next(), 2, 0));
+                });
 
         CreatedEntriesResponse response = entryService.create(userId, request);
 
@@ -91,7 +96,12 @@ class EntryServiceTests {
         assertEquals("1/2", savedItems.get(0).getInstallmentDescription());
         assertEquals("2/2", savedItems.get(1).getInstallmentDescription());
         assertEquals(null, savedItems.get(2).getInstallmentDescription());
+        assertEquals(2, response.entries().get(0).totalSubexpenses());
+        assertEquals(2, response.entries().get(0).totalOccurrences());
         verify(subexpenseRepository).saveAll(any());
+        verify(subexpenseRepository).findAllByEntryIdInOrderByEntryIdAscCreatedAtAsc(any());
+        verify(entryRepository).summarizeSeries(org.mockito.ArgumentMatchers.eq(userId), any());
+        verify(subexpenseRepository, never()).findAllByEntryIdOrderByCreatedAtAsc(any());
     }
 
     @Test
@@ -119,6 +129,8 @@ class EntryServiceTests {
         when(entryRepository.findAllBySeriesIdAndUserIdOrderByRecurrenceIndexAsc(seriesId, userId))
                 .thenReturn(series);
         when(entryRepository.saveAll(any())).thenReturn(series);
+        when(subexpenseRepository.sumAmountsByEntryIds(any()))
+                .thenReturn(List.of(entryTotal(october.getId(), "432.00")));
         when(subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(october.getId()))
                 .thenReturn(List.of(item));
         when(subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(november.getId()))
@@ -204,8 +216,7 @@ class EntryServiceTests {
         when(entryRepository.findAllByUserIdAndDueDateBetweenOrderByDueDateAscCreatedAtAsc(
                 userId, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31)))
                 .thenReturn(entries);
-        when(subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(any()))
-                .thenReturn(List.of());
+
 
         MonthlyEntriesResponse response = entryService.listMonth(userId, 2026, 10);
 
@@ -213,6 +224,49 @@ class EntryServiceTests {
         assertEquals(new BigDecimal("1374.90"), response.summary().expenses());
         assertEquals(new BigDecimal("7125.10"), response.summary().balance());
         assertEquals(3, response.entries().size());
+    }
+
+    @Test
+    void shouldLoadMonthlyRelationsAndSeriesStatisticsInBatch() {
+        UUID userId = UUID.randomUUID();
+        UUID seriesId = UUID.randomUUID();
+        User user = user(userId);
+        FinancialEntry first = new FinancialEntry(
+                user, "Internet - 1/2", EntryCategory.BILLS_AND_SERVICES, EntryType.EXPENSE,
+                new BigDecimal("100.00"), LocalDate.of(2026, 10, 1),
+                RecurrenceFrequency.DAILY, 2, 0, seriesId, true);
+        FinancialEntry second = new FinancialEntry(
+                user, "Internet - 2/2", EntryCategory.BILLS_AND_SERVICES, EntryType.EXPENSE,
+                new BigDecimal("100.00"), LocalDate.of(2026, 10, 2),
+                RecurrenceFrequency.DAILY, 2, 1, seriesId, true);
+        first.setId(UUID.randomUUID());
+        second.setId(UUID.randomUUID());
+        second.setPaid(true);
+        Subexpense item = new Subexpense(first, "Plano", new BigDecimal("100.00"), null, false);
+        item.setId(UUID.randomUUID());
+        FinancialEntryRepository.SeriesStatistics statistics =
+                mock(FinancialEntryRepository.SeriesStatistics.class);
+        when(statistics.getSeriesId()).thenReturn(seriesId);
+        when(statistics.getTotalOccurrences()).thenReturn(2L);
+        when(statistics.getPaidOccurrences()).thenReturn(1L);
+
+        when(entryRepository.findAllByUserIdAndDueDateBetweenOrderByDueDateAscCreatedAtAsc(
+                userId, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31)))
+                .thenReturn(List.of(first, second));
+        when(subexpenseRepository.findAllByEntryIdInOrderByEntryIdAscCreatedAtAsc(any()))
+                .thenReturn(List.of(item));
+        when(entryRepository.summarizeSeries(org.mockito.ArgumentMatchers.eq(userId), any()))
+                .thenReturn(List.of(statistics));
+
+        MonthlyEntriesResponse response = entryService.listMonth(userId, 2026, 10);
+
+        assertEquals(2, response.entries().size());
+        assertEquals(1, response.entries().get(0).totalSubexpenses());
+        assertEquals(2, response.entries().get(0).totalOccurrences());
+        assertEquals(1, response.entries().get(0).paidOccurrences());
+        verify(subexpenseRepository).findAllByEntryIdInOrderByEntryIdAscCreatedAtAsc(any());
+        verify(entryRepository).summarizeSeries(org.mockito.ArgumentMatchers.eq(userId), any());
+        verify(subexpenseRepository, never()).findAllByEntryIdOrderByCreatedAtAsc(any());
     }
 
     @Test
@@ -293,7 +347,8 @@ class EntryServiceTests {
         Subexpense existing = new Subexpense(parent, "Existente", new BigDecimal("34.00"), null, false);
         existing.setId(UUID.randomUUID());
         when(entryRepository.findByIdAndUserId(entryId, userId)).thenReturn(Optional.of(parent));
-        when(subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(entryId)).thenReturn(List.of(existing));
+        when(subexpenseRepository.sumAmountsByEntryIds(any()))
+                .thenReturn(List.of(entryTotal(entryId, "34.00")));
         when(subexpenseRepository.save(any(Subexpense.class))).thenAnswer(invocation -> {
             Subexpense subexpense = invocation.getArgument(0);
             subexpense.setId(UUID.randomUUID());
@@ -346,10 +401,9 @@ class EntryServiceTests {
             savedParents.addAll(entries);
             return entries;
         });
-        when(subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(any())).thenAnswer(invocation -> {
-            UUID requestedEntryId = invocation.getArgument(0);
-            return requestedEntryId.equals(entryId) ? List.of(existing) : List.of();
-        });
+
+        when(subexpenseRepository.sumAmountsByEntryIds(any()))
+                .thenReturn(List.of(entryTotal(entryId, "142.00")));
         when(subexpenseRepository.saveAll(any())).thenAnswer(invocation -> {
             List<Subexpense> items = invocation.getArgument(0);
             items.forEach(item -> item.setId(UUID.randomUUID()));
@@ -417,10 +471,9 @@ class EntryServiceTests {
             savedParents.addAll(entries);
             return entries;
         });
-        when(subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(any())).thenAnswer(invocation -> {
-            UUID requestedEntryId = invocation.getArgument(0);
-            return requestedEntryId.equals(entryId) ? List.of(legacyItem) : List.of();
-        });
+
+        when(subexpenseRepository.sumAmountsByEntryIds(any()))
+                .thenReturn(List.of(entryTotal(entryId, "37.00")));
         when(subexpenseRepository.saveAll(any())).thenAnswer(invocation -> {
             List<Subexpense> items = invocation.getArgument(0);
             items.forEach(item -> {
@@ -470,6 +523,10 @@ class EntryServiceTests {
                 .thenReturn(Optional.of(edited));
         when(subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(entryId))
                 .thenReturn(List.of(edited, other));
+        when(subexpenseRepository.sumAmountsByEntryIds(any())).thenAnswer(invocation ->
+                List.of(entryTotal(
+                        entryId,
+                        edited.getAmount().add(other.getAmount()).toPlainString())));
         when(subexpenseRepository.save(edited)).thenReturn(edited);
 
         entryService.updateSubexpense(
@@ -485,6 +542,42 @@ class EntryServiceTests {
         assertEquals(new BigDecimal("34.00"), parent.getAmount());
         verify(subexpenseRepository).delete(edited);
     }
+    private FinancialEntryRepository.SeriesStatistics seriesStatistics(
+            UUID seriesId,
+            long totalOccurrences,
+            long paidOccurrences) {
+        return new FinancialEntryRepository.SeriesStatistics() {
+            @Override
+            public UUID getSeriesId() {
+                return seriesId;
+            }
+
+            @Override
+            public long getTotalOccurrences() {
+                return totalOccurrences;
+            }
+
+            @Override
+            public long getPaidOccurrences() {
+                return paidOccurrences;
+            }
+        };
+    }
+
+    private SubexpenseRepository.EntryTotal entryTotal(UUID entryId, String total) {
+        return new SubexpenseRepository.EntryTotal() {
+            @Override
+            public UUID getEntryId() {
+                return entryId;
+            }
+
+            @Override
+            public BigDecimal getTotal() {
+                return new BigDecimal(total);
+            }
+        };
+    }
+
     private User user(UUID id) {
         User user = new User("google-subject", "usuario@gmail.com", "Usuário", null);
         user.setId(id);
