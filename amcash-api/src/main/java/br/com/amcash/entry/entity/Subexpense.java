@@ -2,6 +2,8 @@ package br.com.amcash.entry.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -39,6 +41,19 @@ public class Subexpense {
     @Column(nullable = false)
     private boolean paid;
 
+    @Column(name = "recurrence_frequency", nullable = false, length = 16)
+    @Enumerated(EnumType.STRING)
+    private RecurrenceFrequency recurrenceFrequency;
+
+    @Column(name = "recurrence_count", nullable = false)
+    private int recurrenceCount;
+
+    @Column(name = "recurrence_index", nullable = false)
+    private int recurrenceIndex;
+
+    @Column(name = "series_id")
+    private UUID seriesId;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
@@ -49,21 +64,50 @@ public class Subexpense {
     }
 
     public Subexpense(FinancialEntry entry, String name, BigDecimal amount, String installmentDescription, boolean paid) {
+        this(entry, name, amount, installmentDescription, paid, RecurrenceFrequency.NONE, 0, 0, null);
+    }
+
+    public Subexpense(
+            FinancialEntry entry,
+            String name,
+            BigDecimal amount,
+            String installmentDescription,
+            boolean paid,
+            RecurrenceFrequency recurrenceFrequency,
+            int recurrenceCount,
+            int recurrenceIndex,
+            UUID seriesId) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         this.entry = entry;
         this.name = name;
         this.amount = amount;
         this.installmentDescription = installmentDescription;
         this.paid = paid;
+        this.recurrenceFrequency = recurrenceFrequency;
+        this.recurrenceCount = recurrenceCount;
+        this.recurrenceIndex = recurrenceIndex;
+        this.seriesId = seriesId;
         this.createdAt = now;
         this.updatedAt = now;
     }
 
     public void update(String name, BigDecimal amount, String installmentDescription, boolean paid) {
+        update(name, amount, installmentDescription, paid, recurrenceFrequency, recurrenceCount);
+    }
+
+    public void update(
+            String name,
+            BigDecimal amount,
+            String installmentDescription,
+            boolean paid,
+            RecurrenceFrequency recurrenceFrequency,
+            int recurrenceCount) {
         this.name = name;
         this.amount = amount;
         this.installmentDescription = installmentDescription;
         this.paid = paid;
+        this.recurrenceFrequency = recurrenceFrequency;
+        this.recurrenceCount = recurrenceCount;
         this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 
@@ -74,6 +118,10 @@ public class Subexpense {
     public BigDecimal getAmount() { return amount; }
     public String getInstallmentDescription() { return installmentDescription; }
     public boolean isPaid() { return paid; }
+    public RecurrenceFrequency getRecurrenceFrequency() { return recurrenceFrequency; }
+    public int getRecurrenceCount() { return recurrenceCount; }
+    public int getRecurrenceIndex() { return recurrenceIndex; }
+    public UUID getSeriesId() { return seriesId; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
 }

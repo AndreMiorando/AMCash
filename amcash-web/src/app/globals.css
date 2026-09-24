@@ -1786,7 +1786,9 @@ a {
 
 .currency-input input {
   height: 100%;
+  width: 100%;
   min-width: 0;
+  flex: 1 1 auto;
   padding-left: 0.35rem;
   border: 0;
   background: transparent;
@@ -2196,6 +2198,47 @@ a {
   height: 0.9rem;
 }
 
+.expense-item-card {
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #edf1f6;
+}
+
+.expense-item-card:last-child {
+  border-bottom: 0;
+}
+
+.expense-item-recurrence {
+  margin: 0.3rem 2.45rem 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #71859b;
+  font: inherit;
+  font-size: 0.6rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.expense-item-recurrence:hover,
+.expense-item-recurrence:focus-visible {
+  color: var(--brand-blue);
+  outline: none;
+}
+
+.item-recurrence-editor {
+  margin: 0.55rem 0 0;
+  padding: 0.65rem;
+  border-radius: 0.7rem;
+  background: #f2f6fc;
+}
+
+.item-recurrence-editor .recurrence-count {
+  margin-top: 0.55rem;
+}
+
+.item-editor-recurrence {
+  margin-top: 0.8rem;
+}
 .add-expense-item {
   display: flex;
   width: calc(100% - 1.3rem);
