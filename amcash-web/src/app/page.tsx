@@ -1165,6 +1165,13 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    const backgroundColor = screen === "auth" ? "#f8faff" : "#ffffff";
+    document.documentElement.style.backgroundColor = backgroundColor;
+    document.body.style.backgroundColor = backgroundColor;
+    document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute("content", backgroundColor);
+  }, [screen]);
+
+  useEffect(() => {
     window.addEventListener("amcash:unauthorized", logout);
     return () => window.removeEventListener("amcash:unauthorized", logout);
   }, [logout]);
