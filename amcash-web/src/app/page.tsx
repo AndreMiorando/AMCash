@@ -559,7 +559,7 @@ function CreateTransactionSheet({
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(defaultDate);
   const [recurrenceFrequency, setRecurrenceFrequency] = useState<RecurrenceFrequency>("none");
-  const [recurrenceCount, setRecurrenceCount] = useState("2");
+  const [recurrenceCount, setRecurrenceCount] = useState("");
   const [hasSubexpenses, setHasSubexpenses] = useState(false);
   const [expenseItems, setExpenseItems] = useState<DraftExpenseItem[]>([]);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -567,7 +567,7 @@ function CreateTransactionSheet({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const createEmptyItem = (): DraftExpenseItem => ({ id: crypto.randomUUID(), name: "", amount: "", recurrenceFrequency: "none", recurrenceCount: "2" });
+  const createEmptyItem = (): DraftExpenseItem => ({ id: crypto.randomUUID(), name: "", amount: "", recurrenceFrequency: "none", recurrenceCount: "" });
   const numericAmount = parseCurrencyInput(amount);
   const parsedItems = expenseItems.map((item) => ({
     name: item.name.trim(),
@@ -629,9 +629,9 @@ function CreateTransactionSheet({
   }
 
   function itemRecurrenceSummary(item: DraftExpenseItem) {
-    if (item.recurrenceFrequency === "none") return "Única";
+    if (item.recurrenceFrequency === "none") return "Repetir";
     const labels: Record<Exclude<RecurrenceFrequency, "none">, string> = { daily: "Diária", weekly: "Semanal", monthly: "Mensal" };
-    return `${labels[item.recurrenceFrequency]} • ${item.recurrenceCount || 0}x`;
+    return `${labels[item.recurrenceFrequency]}${item.recurrenceCount ? ` • ${item.recurrenceCount}x` : ""}`;
   }
 
   function removeExpenseItem(id: string) {
@@ -732,7 +732,7 @@ function CreateTransactionSheet({
                             </div>
                           </fieldset>
                           {item.recurrenceFrequency !== "none" && (
-                            <label className="field recurrence-count"><span>Total de repetições (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={item.recurrenceCount} onChange={(event) => updateExpenseItem(item.id, "recurrenceCount", event.target.value)} /></label>
+                            <label className="field recurrence-count"><span>Total de repetições (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={item.recurrenceCount} placeholder="0" onChange={(event) => updateExpenseItem(item.id, "recurrenceCount", event.target.value)} /></label>
                           )}
                         </div>
                       )}
@@ -764,7 +764,7 @@ function CreateTransactionSheet({
             </fieldset>
           </div>
           {recurrenceFrequency !== "none" && (
-            <label className="field recurrence-count"><span>Total de parcelas (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={recurrenceCount} onChange={(event) => setRecurrenceCount(event.target.value)} /></label>
+            <label className="field recurrence-count"><span>Total de parcelas (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={recurrenceCount} placeholder="0" onChange={(event) => setRecurrenceCount(event.target.value)} /></label>
           )}
 
           {error && <p className="auth-error" role="alert">{error}</p>}
@@ -1183,7 +1183,7 @@ function SubexpenseEditor({
           </fieldset>
         </div>
         {draft.recurrenceFrequency !== "none" && (
-          <label className="field recurrence-count"><span>Total de repetições (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={draft.recurrenceCount || ""} onChange={(event) => setDraft({ ...draft, recurrenceCount: Number(event.target.value) })} /></label>
+          <label className="field recurrence-count"><span>Total de repetições (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={draft.recurrenceCount || ""} placeholder="0" onChange={(event) => setDraft({ ...draft, recurrenceCount: Number(event.target.value) })} /></label>
         )}
         <label className="paid-toggle">
           <input type="checkbox" checked={draft.paid} onChange={(event) => setDraft({ ...draft, paid: event.target.checked })} />
@@ -1355,7 +1355,7 @@ function DetailScreen({
               </div>
             </fieldset>
           </div>
-          {recurrenceFrequency !== "none" && <label className="field recurrence-count"><span>Total de parcelas (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={recurrenceCount} onChange={(event) => setRecurrenceCount(event.target.value)} /></label>}
+          {recurrenceFrequency !== "none" && <label className="field recurrence-count"><span>Total de parcelas (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={recurrenceCount} placeholder="0" onChange={(event) => setRecurrenceCount(event.target.value)} /></label>}
         </section>
 
         <section className="detail-card subexpenses-card">
