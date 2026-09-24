@@ -21,9 +21,13 @@
 
 html,
 body {
+  width: 100%;
   min-height: 100%;
   margin: 0;
+  overflow-x: hidden;
   overscroll-behavior-y: none;
+  touch-action: pan-y;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -446,6 +450,14 @@ body {
 button,
 a {
   -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 47.999rem) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
 
 .dashboard-screen {
@@ -984,6 +996,7 @@ a {
   font-size: 0.65rem;
   font-weight: 700;
   text-decoration: none;
+  transform: translateY(clamp(0.25rem, calc(env(safe-area-inset-bottom) / 2), 1rem));
 }
 
 .nav-home svg {
