@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -54,6 +55,7 @@ class EntryServiceTests {
     void shouldCreateOriginalAndMonthlyRecurrences() {
         UUID userId = UUID.randomUUID();
         User user = user(userId);
+        List<Subexpense> savedItems = new ArrayList<>();
         CreateEntryRequest request = new CreateEntryRequest(
                 "Nubank", EntryCategory.FINANCIAL, EntryType.EXPENSE, new BigDecimal("432.00"),
                 LocalDate.of(2026, 1, 31), RecurrenceFrequency.MONTHLY, 2, true,
@@ -67,19 +69,28 @@ class EntryServiceTests {
             entries.forEach(entry -> entry.setId(UUID.randomUUID()));
             return entries;
         });
+        when(subexpenseRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<Subexpense> items = invocation.getArgument(0);
+            savedItems.addAll(items);
+            return items;
+        });
         when(subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(any()))
                 .thenReturn(List.of());
 
         CreatedEntriesResponse response = entryService.create(userId, request);
 
         assertEquals(2, response.entries().size());
-        assertEquals("Nubank - 1/2", response.entries().get(0).name());
+        assertEquals("Nubank", response.entries().get(0).name());
         assertEquals(LocalDate.of(2026, 1, 31), response.entries().get(0).dueDate());
         assertEquals(LocalDate.of(2026, 2, 28), response.entries().get(1).dueDate());
         assertEquals(new BigDecimal("432.00"), response.entries().get(0).amount());
         assertEquals(new BigDecimal("332.00"), response.entries().get(1).amount());
         assertNotNull(response.entries().get(0).seriesId());
         assertEquals(response.entries().get(0).seriesId(), response.entries().get(1).seriesId());
+        assertEquals(3, savedItems.size());
+        assertEquals("1/2", savedItems.get(0).getInstallmentDescription());
+        assertEquals("2/2", savedItems.get(1).getInstallmentDescription());
+        assertEquals(null, savedItems.get(2).getInstallmentDescription());
         verify(subexpenseRepository).saveAll(any());
     }
 

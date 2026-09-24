@@ -176,25 +176,21 @@ function formatDate(date: string) {
 }
 
 function maskCurrencyInput(value: string) {
-  const sanitized = value.replace(/[^\d,]/g, "");
-  if (!sanitized) return "";
+  const digits = value.replace(/\D/g, "");
+  if (!digits) return "";
 
-  const hasDecimalSeparator = sanitized.includes(",");
-  const [rawInteger, ...decimalParts] = sanitized.split(",");
-  const integer = rawInteger.replace(/^0+(?=\d)/, "") || "0";
-  const groupedInteger = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  const decimal = decimalParts.join("").slice(0, 2);
+  const normalized = digits.replace(/^0+(?=\d)/, "");
+  const padded = normalized.padStart(3, "0");
+  const rawInteger = padded.slice(0, -2);
+  const integer = (rawInteger.replace(/^0+(?=\d)/, "") || "0")
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  const decimal = padded.slice(-2);
 
-  return `${groupedInteger}${hasDecimalSeparator ? `,${decimal}` : ""}`;
+  return `${integer},${decimal}`;
 }
 
 function completeCurrencyInput(value: string) {
-  const masked = maskCurrencyInput(value);
-  if (!masked) return "";
-  if (!masked.includes(",")) return `${masked},00`;
-
-  const [integer, decimal = ""] = masked.split(",");
-  return `${integer},${decimal.padEnd(2, "0")}`;
+  return maskCurrencyInput(value);
 }
 
 function parseCurrencyInput(value: string) {
@@ -220,7 +216,7 @@ function mapSubexpense(item: ApiSubexpense): Subexpense {
     id: item.id,
     name: item.name,
     amount: Number(item.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-    installment: item.installmentDescription ?? "",
+    installment: item.installmentDescription ?? (item.recurrenceFrequency === "NONE" ? "Única" : ""),
     paid: item.paid,
     recurrenceFrequency: recurrenceFromApi[item.recurrenceFrequency],
     recurrenceCount: item.recurrenceCount,
@@ -716,7 +712,7 @@ function CreateTransactionSheet({
                             onChange={(event) => updateExpenseItem(item.id, "amount", maskCurrencyInput(event.target.value))}
                             onBlur={() => updateExpenseItem(item.id, "amount", completeCurrencyInput(item.amount))}
                             placeholder="0,00"
-                            inputMode="decimal"
+                            inputMode="numeric"
                             aria-label={`Valor do item ${index + 1}`}
                           />
                         </div>
@@ -752,7 +748,7 @@ function CreateTransactionSheet({
             </>
           ) : (
             <div className="field-grid">
-              <label className="field"><span>Valor</span><div className="currency-input"><b>R$</b><input value={amount} onChange={(event) => setAmount(maskCurrencyInput(event.target.value))} onBlur={() => setAmount(completeCurrencyInput(amount))} placeholder="0,00" inputMode="decimal" /></div></label>
+              <label className="field"><span>Valor</span><div className="currency-input"><b>R$</b><input value={amount} onChange={(event) => setAmount(maskCurrencyInput(event.target.value))} onBlur={() => setAmount(completeCurrencyInput(amount))} placeholder="0,00" inputMode="numeric" /></div></label>
               <DatePickerInput label="Data" value={date} onChange={setDate} />
             </div>
           )}
@@ -910,7 +906,7 @@ function Dashboard({
   const monthNames = Array.from({ length: 12 }, (_, month) => (
     new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(new Date(2024, month, 1))
   ));
-  const monthLabel = monthFormatter.format(selectedMonth);
+  const monthLabel = `${monthFormatter.format(selectedMonth)} / ${selectedMonth.getFullYear()}`;
   const previousMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() - 1, 1);
   const nextMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 1);
   const today = new Date();
@@ -1169,7 +1165,7 @@ function SubexpenseEditor({
         <div className="field-grid">
           <label className="field">
             <span>Valor</span>
-            <div className="currency-input"><b>R$</b><input value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: maskCurrencyInput(event.target.value) })} onBlur={() => setDraft({ ...draft, amount: completeCurrencyInput(draft.amount) })} inputMode="decimal" /></div>
+            <div className="currency-input"><b>R$</b><input value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: maskCurrencyInput(event.target.value) })} onBlur={() => setDraft({ ...draft, amount: completeCurrencyInput(draft.amount) })} inputMode="numeric" /></div>
           </label>
           <label className="field">
             <span>Parcela</span>
@@ -1346,7 +1342,7 @@ function DetailScreen({
           <label className="field full-field"><span>Descrição</span><input value={name} onChange={(event) => setName(event.target.value)} /></label>
           <CategoryPickerInput value={category} options={type === "expense" ? expenseCategories : incomeCategories} onChange={setCategory} />
           <div className="field-grid">
-            <label className="field"><span>Valor</span><div className="currency-input"><b>R$</b><input value={amount} onChange={(event) => setAmount(maskCurrencyInput(event.target.value))} onBlur={() => setAmount(completeCurrencyInput(amount))} inputMode="decimal" /></div></label>
+            <label className="field"><span>Valor</span><div className="currency-input"><b>R$</b><input value={amount} onChange={(event) => setAmount(maskCurrencyInput(event.target.value))} onBlur={() => setAmount(completeCurrencyInput(amount))} inputMode="numeric" /></div></label>
             <DatePickerInput label="Vencimento" value={dueDate} onChange={setDueDate} />
           </div>
           <div className="recurrence-fields">
@@ -1418,6 +1414,7 @@ export default function Home() {
     return { year: today.getFullYear(), month: today.getMonth() + 1 };
   });
   const lastLoadedPeriod = useRef("");
+  const requestedPeriod = useRef("");
   const requestId = useRef(0);
 
   const logout = useCallback(() => {
@@ -1427,10 +1424,13 @@ export default function Home() {
     setSelected(null);
     setError("");
     lastLoadedPeriod.current = "";
+    requestedPeriod.current = "";
     setScreen("auth");
   }, []);
 
   const loadMonth = useCallback(async (year: number, month: number) => {
+    const periodKey = `${year}-${month}`;
+    requestedPeriod.current = periodKey;
     const currentRequest = ++requestId.current;
     setIsLoading(true);
     setError("");
@@ -1438,7 +1438,7 @@ export default function Home() {
       const response = await financeApi.listMonth(year, month);
       if (currentRequest !== requestId.current) return false;
       setItems(mapEntries(response.entries));
-      lastLoadedPeriod.current = `${year}-${month}`;
+      lastLoadedPeriod.current = periodKey;
       return true;
     } catch (requestError) {
       if (currentRequest !== requestId.current) return false;
@@ -1493,8 +1493,11 @@ export default function Home() {
   }, [loadMonth, period.month, period.year, screen]);
 
   const changeMonth = useCallback((year: number, month: number) => {
+    const periodKey = `${year}-${month}`;
     setPeriod({ year, month });
-    if (lastLoadedPeriod.current !== `${year}-${month}`) void loadMonth(year, month);
+    if (requestedPeriod.current !== periodKey || lastLoadedPeriod.current !== periodKey) {
+      void loadMonth(year, month);
+    }
   }, [loadMonth]);
 
   async function addTransaction(transaction: NewTransaction) {

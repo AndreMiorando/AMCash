@@ -87,9 +87,11 @@ public class EntryService {
                     : request.amount();
             entries.add(new FinancialEntry(
                     user,
-                    occurrenceDates.size() > 1
-                            ? request.name().trim() + " - " + (index + 1) + "/" + occurrenceDates.size()
-                            : request.name().trim(),
+                    detailedExpense
+                            ? request.name().trim()
+                            : occurrenceDates.size() > 1
+                                    ? request.name().trim() + " - " + (index + 1) + "/" + occurrenceDates.size()
+                                    : request.name().trim(),
                     request.category(),
                     request.type(),
                     occurrenceAmount,
@@ -118,7 +120,7 @@ public class EntryService {
                             parent,
                             item.name().trim(),
                             item.amount(),
-                            null,
+                            itemOccurrences > 1 ? (itemIndex + 1) + "/" + itemOccurrences : null,
                             false,
                             item.recurrenceFrequency(),
                             item.recurrenceCount(),
