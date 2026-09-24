@@ -69,10 +69,16 @@ const expenseCategories: { value: ApiEntryCategory; label: string }[] = [
   { value: "CLOTHING", label: "Vestuário" },
   { value: "LEISURE", label: "Lazer" },
   { value: "BILLS_AND_SERVICES", label: "Contas e serviços" },
-  { value: "FINANCIAL", label: "Dívidas e financeiro" },
+  { value: "SUBSCRIPTIONS", label: "Assinaturas" },
+  { value: "CREDIT_CARD", label: "Cartão de crédito" },
+  { value: "LOANS_AND_FINANCING", label: "Empréstimos e financiamentos" },
+  { value: "FINANCIAL", label: "Serviços financeiros" },
+  { value: "INSURANCE", label: "Seguros" },
   { value: "TAXES", label: "Impostos" },
   { value: "FAMILY", label: "Família" },
   { value: "PETS", label: "Pets" },
+  { value: "PERSONAL_CARE", label: "Cuidados pessoais" },
+  { value: "TRAVEL", label: "Viagens" },
   { value: "SHOPPING", label: "Compras" },
   { value: "OTHER_EXPENSE", label: "Outras despesas" },
 ];
@@ -118,7 +124,7 @@ type NewTransaction = {
   recurrenceFrequency: RecurrenceFrequency;
   recurrenceCount: number;
   hasSubexpenses: boolean;
-  items: { name: string; value: number }[];
+  items: { name: string; value: number; recurrenceFrequency: RecurrenceFrequency; recurrenceCount: number }[];
 };
 
 type Subexpense = {
@@ -127,6 +133,8 @@ type Subexpense = {
   amount: string;
   installment: string;
   paid: boolean;
+  recurrenceFrequency: RecurrenceFrequency;
+  recurrenceCount: number;
 };
 
 type IconName = Transaction["kind"] | "search" | "more" | "back" | "forward" | "home" | "edit" | "trash" | "plus" | "check";
@@ -214,6 +222,8 @@ function mapSubexpense(item: ApiSubexpense): Subexpense {
     amount: Number(item.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
     installment: item.installmentDescription ?? "",
     paid: item.paid,
+    recurrenceFrequency: recurrenceFromApi[item.recurrenceFrequency],
+    recurrenceCount: item.recurrenceCount,
   };
 }
 
@@ -545,7 +555,7 @@ function CreateTransactionSheet({
   onClose: () => void;
   onCreate: (transaction: NewTransaction) => Promise<void>;
 }) {
-  type DraftExpenseItem = { id: string; name: string; amount: string };
+  type DraftExpenseItem = { id: string; name: string; amount: string; recurrenceFrequency: RecurrenceFrequency; recurrenceCount: string };
 
   const [type, setType] = useState<"expense" | "income">("expense");
   const [name, setName] = useState("");
@@ -556,18 +566,21 @@ function CreateTransactionSheet({
   const [recurrenceCount, setRecurrenceCount] = useState("2");
   const [hasSubexpenses, setHasSubexpenses] = useState(false);
   const [expenseItems, setExpenseItems] = useState<DraftExpenseItem[]>([]);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [discardAction, setDiscardAction] = useState<"disable" | "income" | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const createEmptyItem = (): DraftExpenseItem => ({ id: crypto.randomUUID(), name: "", amount: "" });
+  const createEmptyItem = (): DraftExpenseItem => ({ id: crypto.randomUUID(), name: "", amount: "", recurrenceFrequency: "none", recurrenceCount: "2" });
   const numericAmount = parseCurrencyInput(amount);
   const parsedItems = expenseItems.map((item) => ({
     name: item.name.trim(),
     value: parseCurrencyInput(item.amount),
+    recurrenceFrequency: item.recurrenceFrequency,
+    recurrenceCount: item.recurrenceFrequency === "none" ? 0 : Number(item.recurrenceCount),
   }));
   const calculatedTotal = parsedItems.reduce((total, item) => total + (Number.isFinite(item.value) ? item.value : 0), 0);
-  const itemsAreValid = expenseItems.length > 0 && parsedItems.every((item) => item.name.length > 0 && Number.isFinite(item.value) && item.value > 0);
+  const itemsAreValid = expenseItems.length > 0 && parsedItems.every((item) => item.name.length > 0 && Number.isFinite(item.value) && item.value > 0 && (item.recurrenceFrequency === "none" || (Number.isInteger(item.recurrenceCount) && item.recurrenceCount >= 2 && item.recurrenceCount <= 120)));
   const hasFilledItems = expenseItems.some((item) => item.name.trim().length > 0 || item.amount.trim().length > 0);
   const numericRecurrenceCount = Number(recurrenceCount);
   const recurrenceIsValid = recurrenceFrequency === "none" || (recurrenceCount !== "" && Number.isInteger(numericRecurrenceCount) && numericRecurrenceCount >= 2 && numericRecurrenceCount <= 120);
@@ -615,8 +628,14 @@ function CreateTransactionSheet({
     }
   }
 
-  function updateExpenseItem(id: string, field: "name" | "amount", value: string) {
+  function updateExpenseItem(id: string, field: "name" | "amount" | "recurrenceFrequency" | "recurrenceCount", value: string) {
     setExpenseItems((current) => current.map((item) => item.id === id ? { ...item, [field]: value } : item));
+  }
+
+  function itemRecurrenceSummary(item: DraftExpenseItem) {
+    if (item.recurrenceFrequency === "none") return "Única";
+    const labels: Record<Exclude<RecurrenceFrequency, "none">, string> = { daily: "Diária", weekly: "Semanal", monthly: "Mensal" };
+    return `${labels[item.recurrenceFrequency]} • ${item.recurrenceCount || 0}x`;
   }
 
   function removeExpenseItem(id: string) {
@@ -680,27 +699,47 @@ function CreateTransactionSheet({
                 <h3 id="expense-items-title">Itens da despesa</h3>
                 <div className="expense-items-list">
                   {expenseItems.map((item, index) => (
-                    <div className="expense-item-row" key={item.id}>
-                      <input
-                        className="expense-item-name"
-                        value={item.name}
-                        onChange={(event) => updateExpenseItem(item.id, "name", event.target.value)}
-                        placeholder="Descrição do item"
-                        aria-label={`Descrição do item ${index + 1}`}
-                        maxLength={160}
-                      />
-                      <div className="currency-input expense-item-amount">
-                        <b>R$</b>
+                    <div className="expense-item-card" key={item.id}>
+                      <div className="expense-item-row">
                         <input
-                          value={item.amount}
-                          onChange={(event) => updateExpenseItem(item.id, "amount", maskCurrencyInput(event.target.value))}
-                          onBlur={() => updateExpenseItem(item.id, "amount", completeCurrencyInput(item.amount))}
-                          placeholder="0,00"
-                          inputMode="decimal"
-                          aria-label={`Valor do item ${index + 1}`}
+                          className="expense-item-name"
+                          value={item.name}
+                          onChange={(event) => updateExpenseItem(item.id, "name", event.target.value)}
+                          placeholder="Descrição do item"
+                          aria-label={`Descrição do item ${index + 1}`}
+                          maxLength={160}
                         />
+                        <div className="currency-input expense-item-amount">
+                          <b>R$</b>
+                          <input
+                            value={item.amount}
+                            onChange={(event) => updateExpenseItem(item.id, "amount", maskCurrencyInput(event.target.value))}
+                            onBlur={() => updateExpenseItem(item.id, "amount", completeCurrencyInput(item.amount))}
+                            placeholder="0,00"
+                            inputMode="decimal"
+                            aria-label={`Valor do item ${index + 1}`}
+                          />
+                        </div>
+                        <button type="button" className="expense-item-remove" onClick={() => removeExpenseItem(item.id)} aria-label={`Remover item ${index + 1}`}><Icon name="trash" /></button>
                       </div>
-                      <button type="button" className="expense-item-remove" onClick={() => removeExpenseItem(item.id)} aria-label={`Remover item ${index + 1}`}><Icon name="trash" /></button>
+                      <button type="button" className="expense-item-recurrence" onClick={() => setEditingItemId((current) => current === item.id ? null : item.id)} aria-expanded={editingItemId === item.id}>
+                        {itemRecurrenceSummary(item)}
+                      </button>
+                      {editingItemId === item.id && (
+                        <div className="item-recurrence-editor">
+                          <fieldset className="recurrence-choice">
+                            <legend>Repetição do item</legend>
+                            <div>
+                              {([["none", "Não repetir"], ["daily", "Diária"], ["weekly", "Semanal"], ["monthly", "Mensal"]] as [RecurrenceFrequency, string][]).map(([frequency, label]) => (
+                                <button type="button" key={frequency} className={item.recurrenceFrequency === frequency ? "active" : ""} onClick={() => updateExpenseItem(item.id, "recurrenceFrequency", frequency)}>{label}</button>
+                              ))}
+                            </div>
+                          </fieldset>
+                          {item.recurrenceFrequency !== "none" && (
+                            <label className="field recurrence-count"><span>Total de repetições (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={item.recurrenceCount} onChange={(event) => updateExpenseItem(item.id, "recurrenceCount", event.target.value)} /></label>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1075,7 +1114,8 @@ function SubexpenseEditor({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const amountValue = parseCurrencyInput(draft.amount);
-  const canSave = draft.name.trim().length > 0 && Number.isFinite(amountValue) && amountValue > 0;
+  const itemRecurrenceIsValid = draft.recurrenceFrequency === "none" || (Number.isInteger(draft.recurrenceCount) && draft.recurrenceCount >= 2 && draft.recurrenceCount <= 120);
+  const canSave = draft.name.trim().length > 0 && Number.isFinite(amountValue) && amountValue > 0 && itemRecurrenceIsValid;
 
   async function save() {
     if (!canSave || isSubmitting) return;
@@ -1117,7 +1157,7 @@ function SubexpenseEditor({
         <div className="sheet-heading">
           <div>
             <span>Item da despesa</span>
-            <h2 id="subexpense-title">Editar lançamento</h2>
+            <h2 id="subexpense-title">Editar item</h2>
           </div>
           <button type="button" className="sheet-close" onClick={onClose} aria-label="Fechar">×</button>
         </div>
@@ -1136,6 +1176,19 @@ function SubexpenseEditor({
             <input value={draft.installment} onChange={(event) => setDraft({ ...draft, installment: event.target.value })} />
           </label>
         </div>
+        <div className="recurrence-fields item-editor-recurrence">
+          <fieldset className="recurrence-choice">
+            <legend>Repetição do item</legend>
+            <div>
+              {([["none", "Não repetir"], ["daily", "Diária"], ["weekly", "Semanal"], ["monthly", "Mensal"]] as [RecurrenceFrequency, string][]).map(([frequency, label]) => (
+                <button type="button" key={frequency} className={draft.recurrenceFrequency === frequency ? "active" : ""} onClick={() => setDraft({ ...draft, recurrenceFrequency: frequency })}>{label}</button>
+              ))}
+            </div>
+          </fieldset>
+        </div>
+        {draft.recurrenceFrequency !== "none" && (
+          <label className="field recurrence-count"><span>Total de repetições (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={draft.recurrenceCount || ""} onChange={(event) => setDraft({ ...draft, recurrenceCount: Number(event.target.value) })} /></label>
+        )}
         <label className="paid-toggle">
           <input type="checkbox" checked={draft.paid} onChange={(event) => setDraft({ ...draft, paid: event.target.checked })} />
           <span>Marcar como paga</span>
@@ -1211,8 +1264,10 @@ function DetailScreen({
       id: "",
       name: "Novo item",
       amount: "0,00",
-      installment: "1 de 1",
+      installment: "",
       paid: false,
+      recurrenceFrequency: "none",
+      recurrenceCount: 0,
     };
     setEditing(newItem);
   }
@@ -1223,6 +1278,8 @@ function DetailScreen({
       amount: parseCurrencyInput(item.amount),
       installmentDescription: item.installment.trim() || null,
       paid: item.paid,
+      recurrenceFrequency: recurrenceToApi[item.recurrenceFrequency],
+      recurrenceCount: item.recurrenceFrequency === "none" ? 0 : item.recurrenceCount,
     };
     if (item.id) {
       const updated = mapSubexpense(await financeApi.updateSubexpense(transaction.id, item.id, payload));
@@ -1455,6 +1512,8 @@ export default function Home() {
         amount: item.value,
         installmentDescription: null,
         paid: false,
+        recurrenceFrequency: recurrenceToApi[item.recurrenceFrequency],
+        recurrenceCount: item.recurrenceCount,
       })),
     });
     await loadMonth(period.year, period.month);

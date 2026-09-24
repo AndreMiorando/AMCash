@@ -55,9 +55,11 @@ class EntryServiceTests {
         UUID userId = UUID.randomUUID();
         User user = user(userId);
         CreateEntryRequest request = new CreateEntryRequest(
-                "Nubank", EntryCategory.FINANCIAL, EntryType.EXPENSE, new BigDecimal("332.00"),
+                "Nubank", EntryCategory.FINANCIAL, EntryType.EXPENSE, new BigDecimal("432.00"),
                 LocalDate.of(2026, 1, 31), RecurrenceFrequency.MONTHLY, 2, true,
-                List.of(new SubexpenseRequest("Fatura", new BigDecimal("332.00"), null, false)));
+                List.of(
+                        new SubexpenseRequest("Fatura", new BigDecimal("332.00"), null, false, RecurrenceFrequency.MONTHLY, 2),
+                        new SubexpenseRequest("Mercado", new BigDecimal("100.00"), null, false, RecurrenceFrequency.NONE, 0)));
 
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
         when(entryRepository.saveAll(any())).thenAnswer(invocation -> {
@@ -74,6 +76,8 @@ class EntryServiceTests {
         assertEquals("Nubank - 1/2", response.entries().get(0).name());
         assertEquals(LocalDate.of(2026, 1, 31), response.entries().get(0).dueDate());
         assertEquals(LocalDate.of(2026, 2, 28), response.entries().get(1).dueDate());
+        assertEquals(new BigDecimal("432.00"), response.entries().get(0).amount());
+        assertEquals(new BigDecimal("332.00"), response.entries().get(1).amount());
         assertNotNull(response.entries().get(0).seriesId());
         assertEquals(response.entries().get(0).seriesId(), response.entries().get(1).seriesId());
         verify(subexpenseRepository).saveAll(any());
@@ -211,7 +215,7 @@ class EntryServiceTests {
         CreateEntryRequest mismatchedTotal = new CreateEntryRequest(
                 "Fatura", EntryCategory.FINANCIAL, EntryType.EXPENSE, new BigDecimal("100.00"),
                 LocalDate.of(2026, 10, 10), RecurrenceFrequency.NONE, 0, true,
-                List.of(new SubexpenseRequest("Streaming", new BigDecimal("59.90"), null, false)));
+                List.of(new SubexpenseRequest("Streaming", new BigDecimal("59.90"), null, false, RecurrenceFrequency.NONE, 0)));
 
         assertThrows(BadRequestException.class, () -> entryService.create(userId, withoutItems));
         assertThrows(BadRequestException.class, () -> entryService.create(userId, mismatchedTotal));
@@ -234,7 +238,7 @@ class EntryServiceTests {
         var response = entryService.addSubexpense(
                 userId,
                 entryId,
-                new SubexpenseRequest("Mercado", new BigDecimal("120.00"), "1/2", true));
+                new SubexpenseRequest("Mercado", new BigDecimal("120.00"), "1/2", true, RecurrenceFrequency.NONE, 0));
 
         assertEquals("Mercado", response.name());
         assertEquals(new BigDecimal("120.00"), response.amount());
@@ -250,7 +254,7 @@ class EntryServiceTests {
                 () -> entryService.addSubexpense(
                         userId,
                         entryId,
-                        new SubexpenseRequest("Item", BigDecimal.TEN, null, false)));
+                        new SubexpenseRequest("Item", BigDecimal.TEN, null, false, RecurrenceFrequency.NONE, 0)));
     }
 
     private User user(UUID id) {

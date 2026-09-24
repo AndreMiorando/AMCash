@@ -9,7 +9,13 @@ export type ApiEntryCategory =
   | "CLOTHING"
   | "LEISURE"
   | "BILLS_AND_SERVICES"
+  | "SUBSCRIPTIONS"
+  | "CREDIT_CARD"
+  | "LOANS_AND_FINANCING"
   | "FINANCIAL"
+  | "INSURANCE"
+  | "PERSONAL_CARE"
+  | "TRAVEL"
   | "TAXES"
   | "FAMILY"
   | "PETS"
@@ -31,6 +37,10 @@ export type ApiSubexpense = {
   amount: number;
   installmentDescription: string | null;
   paid: boolean;
+  recurrenceFrequency: ApiRecurrenceFrequency;
+  recurrenceCount: number;
+  recurrenceIndex: number;
+  seriesId: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -74,6 +84,8 @@ export type SubexpensePayload = {
   amount: number;
   installmentDescription: string | null;
   paid: boolean;
+  recurrenceFrequency: ApiRecurrenceFrequency;
+  recurrenceCount: number;
 };
 
 export type MonthlyEntries = {

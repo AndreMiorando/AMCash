@@ -56,36 +56,76 @@ public class EntryService {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado"));
-        int totalOccurrences = request.recurrenceFrequency() == RecurrenceFrequency.NONE
-                ? 1
-                : request.recurrenceCount();
-        UUID seriesId = totalOccurrences > 1 ? UUID.randomUUID() : null;
-        List<FinancialEntry> entries = new ArrayList<>(totalOccurrences);
+        boolean detailedExpense = request.type() == EntryType.EXPENSE && request.hasSubexpenses();
+        List<LocalDate> occurrenceDates;
+        if (detailedExpense) {
+            occurrenceDates = subexpenses.stream()
+                    .flatMap(item -> java.util.stream.IntStream.range(0, itemOccurrenceCount(item))
+                            .mapToObj(index -> recurrenceDate(request.dueDate(), item.recurrenceFrequency(), index)))
+                    .distinct()
+                    .sorted()
+                    .toList();
+        } else {
+            int totalOccurrences = request.recurrenceFrequency() == RecurrenceFrequency.NONE
+                    ? 1
+                    : request.recurrenceCount();
+            occurrenceDates = java.util.stream.IntStream.range(0, totalOccurrences)
+                    .mapToObj(index -> recurrenceDate(request.dueDate(), request.recurrenceFrequency(), index))
+                    .toList();
+        }
 
-        for (int index = 0; index < totalOccurrences; index++) {
+        UUID seriesId = occurrenceDates.size() > 1 ? UUID.randomUUID() : null;
+        List<FinancialEntry> entries = new ArrayList<>(occurrenceDates.size());
+
+        for (int index = 0; index < occurrenceDates.size(); index++) {
+            LocalDate occurrenceDate = occurrenceDates.get(index);
+            BigDecimal occurrenceAmount = detailedExpense
+                    ? subexpenses.stream()
+                            .filter(item -> itemOccursOn(item, request.dueDate(), occurrenceDate))
+                            .map(SubexpenseRequest::amount)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add)
+                    : request.amount();
             entries.add(new FinancialEntry(
                     user,
-                    totalOccurrences > 1
-                            ? request.name().trim() + " - " + (index + 1) + "/" + totalOccurrences
+                    occurrenceDates.size() > 1
+                            ? request.name().trim() + " - " + (index + 1) + "/" + occurrenceDates.size()
                             : request.name().trim(),
                     request.category(),
                     request.type(),
-                    request.amount(),
-                    recurrenceDate(request.dueDate(), request.recurrenceFrequency(), index),
+                    occurrenceAmount,
+                    occurrenceDate,
                     request.recurrenceFrequency(),
                     request.recurrenceCount(),
                     index,
                     seriesId,
-                    request.type() == EntryType.EXPENSE && request.hasSubexpenses()
+                    detailedExpense
             ));
         }
 
         List<FinancialEntry> savedEntries = entryRepository.saveAll(entries);
-        if (!subexpenses.isEmpty()) {
-            List<Subexpense> savedSubexpenses = savedEntries.stream()
-                    .flatMap(entry -> subexpenses.stream().map(item -> new Subexpense(
-                            entry, item.name().trim(), item.amount(), null, false)))
-                    .toList();
+        if (detailedExpense) {
+            List<Subexpense> savedSubexpenses = new ArrayList<>();
+            for (SubexpenseRequest item : subexpenses) {
+                int itemOccurrences = itemOccurrenceCount(item);
+                UUID itemSeriesId = itemOccurrences > 1 ? UUID.randomUUID() : null;
+                for (int itemIndex = 0; itemIndex < itemOccurrences; itemIndex++) {
+                    LocalDate itemDate = recurrenceDate(request.dueDate(), item.recurrenceFrequency(), itemIndex);
+                    FinancialEntry parent = savedEntries.stream()
+                            .filter(entry -> entry.getDueDate().equals(itemDate))
+                            .findFirst()
+                            .orElseThrow();
+                    savedSubexpenses.add(new Subexpense(
+                            parent,
+                            item.name().trim(),
+                            item.amount(),
+                            null,
+                            false,
+                            item.recurrenceFrequency(),
+                            item.recurrenceCount(),
+                            itemIndex,
+                            itemSeriesId));
+                }
+            }
             subexpenseRepository.saveAll(savedSubexpenses);
         }
 
@@ -239,6 +279,7 @@ public class EntryService {
 
     @Transactional
     public SubexpenseResponse addSubexpense(UUID userId, UUID entryId, SubexpenseRequest request) {
+        validateRecurrence(request.recurrenceFrequency(), request.recurrenceCount());
         FinancialEntry entry = findOwnedEntry(userId, entryId);
         if (entry.getType() != EntryType.EXPENSE || !entry.isHasSubexpenses()) {
             throw new BadRequestException("Este lançamento não aceita itens");
@@ -249,7 +290,11 @@ public class EntryService {
                 request.name().trim(),
                 request.amount(),
                 normalizeNullable(request.installmentDescription()),
-                request.paid());
+                request.paid(),
+                request.recurrenceFrequency(),
+                request.recurrenceCount(),
+                0,
+                request.recurrenceFrequency() == RecurrenceFrequency.NONE ? null : UUID.randomUUID());
         return toResponse(subexpenseRepository.save(subexpense));
     }
 
@@ -260,12 +305,15 @@ public class EntryService {
             UUID subexpenseId,
             SubexpenseRequest request) {
 
+        validateRecurrence(request.recurrenceFrequency(), request.recurrenceCount());
         Subexpense subexpense = findOwnedSubexpense(userId, entryId, subexpenseId);
         subexpense.update(
                 request.name().trim(),
                 request.amount(),
                 normalizeNullable(request.installmentDescription()),
-                request.paid());
+                request.paid(),
+                request.recurrenceFrequency(),
+                request.recurrenceCount());
         return toResponse(subexpenseRepository.save(subexpense));
     }
 
@@ -330,6 +378,10 @@ public class EntryService {
                 subexpense.getAmount(),
                 subexpense.getInstallmentDescription(),
                 subexpense.isPaid(),
+                subexpense.getRecurrenceFrequency(),
+                subexpense.getRecurrenceCount(),
+                subexpense.getRecurrenceIndex(),
+                subexpense.getSeriesId(),
                 subexpense.getCreatedAt(),
                 subexpense.getUpdatedAt()
         );
@@ -343,6 +395,7 @@ public class EntryService {
         if (!request.hasSubexpenses() && !subexpenses.isEmpty()) {
             throw new BadRequestException("Itens só podem ser informados em uma despesa detalhada");
         }
+        subexpenses.forEach(item -> validateRecurrence(item.recurrenceFrequency(), item.recurrenceCount()));
         if (!subexpenses.isEmpty()) {
             BigDecimal itemsTotal = subexpenses.stream()
                     .map(SubexpenseRequest::amount)
@@ -352,6 +405,19 @@ public class EntryService {
             }
         }
         return subexpenses;
+    }
+
+    private int itemOccurrenceCount(SubexpenseRequest item) {
+        return item.recurrenceFrequency() == RecurrenceFrequency.NONE ? 1 : item.recurrenceCount();
+    }
+
+    private boolean itemOccursOn(SubexpenseRequest item, LocalDate initialDate, LocalDate occurrenceDate) {
+        for (int index = 0; index < itemOccurrenceCount(item); index++) {
+            if (recurrenceDate(initialDate, item.recurrenceFrequency(), index).equals(occurrenceDate)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void validateRecurrence(RecurrenceFrequency frequency, int count) {
