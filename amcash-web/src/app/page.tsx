@@ -118,6 +118,7 @@ type NewTransaction = {
   recurrenceFrequency: RecurrenceFrequency;
   recurrenceCount: number;
   hasSubexpenses: boolean;
+  items: { name: string; value: number }[];
 };
 
 type Subexpense = {
@@ -544,6 +545,8 @@ function CreateTransactionSheet({
   onClose: () => void;
   onCreate: (transaction: NewTransaction) => Promise<void>;
 }) {
+  type DraftExpenseItem = { id: string; name: string; amount: string };
+
   const [type, setType] = useState<"expense" | "income">("expense");
   const [name, setName] = useState("");
   const [category, setCategory] = useState<ApiEntryCategory | "">("");
@@ -552,12 +555,76 @@ function CreateTransactionSheet({
   const [recurrenceFrequency, setRecurrenceFrequency] = useState<RecurrenceFrequency>("none");
   const [recurrenceCount, setRecurrenceCount] = useState("2");
   const [hasSubexpenses, setHasSubexpenses] = useState(false);
+  const [expenseItems, setExpenseItems] = useState<DraftExpenseItem[]>([]);
+  const [discardAction, setDiscardAction] = useState<"disable" | "income" | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  const createEmptyItem = (): DraftExpenseItem => ({ id: crypto.randomUUID(), name: "", amount: "" });
   const numericAmount = parseCurrencyInput(amount);
+  const parsedItems = expenseItems.map((item) => ({
+    name: item.name.trim(),
+    value: parseCurrencyInput(item.amount),
+  }));
+  const calculatedTotal = parsedItems.reduce((total, item) => total + (Number.isFinite(item.value) ? item.value : 0), 0);
+  const itemsAreValid = expenseItems.length > 0 && parsedItems.every((item) => item.name.length > 0 && Number.isFinite(item.value) && item.value > 0);
+  const hasFilledItems = expenseItems.some((item) => item.name.trim().length > 0 || item.amount.trim().length > 0);
   const numericRecurrenceCount = Number(recurrenceCount);
   const recurrenceIsValid = recurrenceFrequency === "none" || (recurrenceCount !== "" && Number.isInteger(numericRecurrenceCount) && numericRecurrenceCount >= 2 && numericRecurrenceCount <= 120);
-  const canSave = name.trim().length > 0 && category.length > 0 && Number.isFinite(numericAmount) && numericAmount > 0 && date.length > 0 && recurrenceIsValid;
+  const amountIsValid = hasSubexpenses
+    ? itemsAreValid && calculatedTotal > 0
+    : Number.isFinite(numericAmount) && numericAmount > 0;
+  const canSave = name.trim().length > 0 && category.length > 0 && amountIsValid && date.length > 0 && recurrenceIsValid;
+
+  function clearDetailedExpense() {
+    setHasSubexpenses(false);
+    setExpenseItems([]);
+  }
+
+  function toggleDetailedExpense(checked: boolean) {
+    if (checked) {
+      setHasSubexpenses(true);
+      setExpenseItems((current) => current.length > 0 ? current : [createEmptyItem()]);
+      return;
+    }
+    if (hasFilledItems) {
+      setDiscardAction("disable");
+      return;
+    }
+    clearDetailedExpense();
+  }
+
+  function selectType(nextType: "expense" | "income") {
+    if (nextType === type) return;
+    if (nextType === "income" && hasSubexpenses && hasFilledItems) {
+      setDiscardAction("income");
+      return;
+    }
+    if (nextType === "income") clearDetailedExpense();
+    setType(nextType);
+    setCategory("");
+  }
+
+  function confirmDiscardItems() {
+    const action = discardAction;
+    clearDetailedExpense();
+    setDiscardAction(null);
+    if (action === "income") {
+      setType("income");
+      setCategory("");
+    }
+  }
+
+  function updateExpenseItem(id: string, field: "name" | "amount", value: string) {
+    setExpenseItems((current) => current.map((item) => item.id === id ? { ...item, [field]: value } : item));
+  }
+
+  function removeExpenseItem(id: string) {
+    setExpenseItems((current) => {
+      const remaining = current.filter((item) => item.id !== id);
+      return remaining.length > 0 ? remaining : [createEmptyItem()];
+    });
+  }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -569,11 +636,12 @@ function CreateTransactionSheet({
         name: name.trim(),
         category: category as ApiEntryCategory,
         date,
-        value: numericAmount,
+        value: hasSubexpenses ? calculatedTotal : numericAmount,
         income: type === "income",
         recurrenceFrequency,
         recurrenceCount: recurrenceFrequency === "none" ? 0 : numericRecurrenceCount,
         hasSubexpenses: type === "expense" && hasSubexpenses,
+        items: type === "expense" && hasSubexpenses ? parsedItems : [],
       });
     } catch (requestError) {
       setError(messageFromError(requestError));
@@ -592,23 +660,69 @@ function CreateTransactionSheet({
 
         <form onSubmit={submit}>
           <div className="type-switch" aria-label="Tipo do lançamento">
-            <button type="button" className={type === "expense" ? "active expense" : ""} onClick={() => { setType("expense"); setCategory(""); }}><Icon name="card" /> Despesa</button>
-            <button type="button" className={type === "income" ? "active income" : ""} onClick={() => { setType("income"); setCategory(""); setHasSubexpenses(false); }}><Icon name="wallet" /> Receita</button>
+            <button type="button" className={type === "expense" ? "active expense" : ""} onClick={() => selectType("expense")}><Icon name="card" /> Despesa</button>
+            <button type="button" className={type === "income" ? "active income" : ""} onClick={() => selectType("income")}><Icon name="wallet" /> Receita</button>
           </div>
 
           <label className="field full-field"><span>Descrição</span><input value={name} onChange={(event) => setName(event.target.value)} placeholder={type === "expense" ? "Ex.: Supermercado" : "Ex.: Salário"} /></label>
           <CategoryPickerInput value={category} options={type === "expense" ? expenseCategories : incomeCategories} onChange={setCategory} />
-          <div className="field-grid">
-            <label className="field"><span>Valor</span><div className="currency-input"><b>R$</b><input value={amount} onChange={(event) => setAmount(maskCurrencyInput(event.target.value))} onBlur={() => setAmount(completeCurrencyInput(amount))} placeholder="0,00" inputMode="decimal" /></div></label>
-            <DatePickerInput label="Data" value={date} onChange={setDate} />
-          </div>
+
+          {type === "expense" && (
+            <label className="paid-toggle subexpense-toggle detail-expense-toggle">
+              <input type="checkbox" checked={hasSubexpenses} onChange={(event) => toggleDetailedExpense(event.target.checked)} />
+              <span><b>Quero detalhar esta despesa</b><small>Adicione os itens que compõem o valor total.</small></span>
+            </label>
+          )}
+
+          {hasSubexpenses ? (
+            <>
+              <section className="expense-items-editor" aria-labelledby="expense-items-title">
+                <h3 id="expense-items-title">Itens da despesa</h3>
+                <div className="expense-items-list">
+                  {expenseItems.map((item, index) => (
+                    <div className="expense-item-row" key={item.id}>
+                      <input
+                        className="expense-item-name"
+                        value={item.name}
+                        onChange={(event) => updateExpenseItem(item.id, "name", event.target.value)}
+                        placeholder="Descrição do item"
+                        aria-label={`Descrição do item ${index + 1}`}
+                        maxLength={160}
+                      />
+                      <div className="currency-input expense-item-amount">
+                        <b>R$</b>
+                        <input
+                          value={item.amount}
+                          onChange={(event) => updateExpenseItem(item.id, "amount", maskCurrencyInput(event.target.value))}
+                          onBlur={() => updateExpenseItem(item.id, "amount", completeCurrencyInput(item.amount))}
+                          placeholder="0,00"
+                          inputMode="decimal"
+                          aria-label={`Valor do item ${index + 1}`}
+                        />
+                      </div>
+                      <button type="button" className="expense-item-remove" onClick={() => removeExpenseItem(item.id)} aria-label={`Remover item ${index + 1}`}><Icon name="trash" /></button>
+                    </div>
+                  ))}
+                </div>
+                <button type="button" className="add-expense-item" onClick={() => setExpenseItems((current) => [...current, createEmptyItem()])}><Icon name="plus" /> Adicionar item</button>
+                <div className="expense-items-total"><span>Total da despesa</span><strong>{formatCurrency(calculatedTotal)}</strong></div>
+              </section>
+              <div className="field-grid field-grid--single">
+                <DatePickerInput label="Data" value={date} onChange={setDate} />
+              </div>
+            </>
+          ) : (
+            <div className="field-grid">
+              <label className="field"><span>Valor</span><div className="currency-input"><b>R$</b><input value={amount} onChange={(event) => setAmount(maskCurrencyInput(event.target.value))} onBlur={() => setAmount(completeCurrencyInput(amount))} placeholder="0,00" inputMode="decimal" /></div></label>
+              <DatePickerInput label="Data" value={date} onChange={setDate} />
+            </div>
+          )}
+
           <div className="recurrence-fields">
             <fieldset className="recurrence-choice">
               <legend>Repetição</legend>
               <div>
-                {([[
-                  "none", "Não repetir",
-                ], ["daily", "Diária"], ["weekly", "Semanal"], ["monthly", "Mensal"]] as [RecurrenceFrequency, string][]).map(([frequency, label]) => (
+                {([["none", "Não repetir"], ["daily", "Diária"], ["weekly", "Semanal"], ["monthly", "Mensal"]] as [RecurrenceFrequency, string][]).map(([frequency, label]) => (
                   <button type="button" key={frequency} className={recurrenceFrequency === frequency ? "active" : ""} onClick={() => setRecurrenceFrequency(frequency)}>{label}</button>
                 ))}
               </div>
@@ -618,16 +732,20 @@ function CreateTransactionSheet({
             <label className="field recurrence-count"><span>Total de parcelas (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={recurrenceCount} onChange={(event) => setRecurrenceCount(event.target.value)} /></label>
           )}
 
-          {type === "expense" && (
-            <label className="paid-toggle subexpense-toggle">
-              <input type="checkbox" checked={hasSubexpenses} onChange={(event) => setHasSubexpenses(event.target.checked)} />
-              <span><b>Essa despesa terá subdespesas</b><small>Você poderá incluir os itens nos detalhes.</small></span>
-            </label>
-          )}
-
           {error && <p className="auth-error" role="alert">{error}</p>}
           <button type="submit" className={`primary-button create-transaction-submit${type === "income" ? " create-transaction-submit--income" : ""}`} disabled={!canSave || isSubmitting}><Icon name="plus" /> {isSubmitting ? "Adicionando..." : `Adicionar ${type === "expense" ? "despesa" : "receita"}`}</button>
         </form>
+
+        {discardAction && (
+          <div className="sheet-backdrop confirm-backdrop" role="presentation" onMouseDown={() => setDiscardAction(null)}>
+            <section className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="discard-items-title" onMouseDown={(event) => event.stopPropagation()}>
+              <div className="confirm-icon"><Icon name="trash" /></div>
+              <h2 id="discard-items-title">Descartar itens?</h2>
+              <p>Os itens preenchidos serão removidos e não poderão ser recuperados.</p>
+              <div><button type="button" onClick={() => setDiscardAction(null)}>Cancelar</button><button type="button" onClick={confirmDiscardItems}>Descartar</button></div>
+            </section>
+          </div>
+        )}
       </section>
     </div>
   );
@@ -745,10 +863,11 @@ function Dashboard({
   const [pendingDelete, setPendingDelete] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [actionError, setActionError] = useState("");
-  const monthFormatter = new Intl.DateTimeFormat("pt-BR", {
+  const periodFormatter = new Intl.DateTimeFormat("pt-BR", {
     month: "long",
     year: "numeric",
   });
+  const monthFormatter = new Intl.DateTimeFormat("pt-BR", { month: "long" });
   const monthNames = Array.from({ length: 12 }, (_, month) => (
     new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(new Date(2024, month, 1))
   ));
@@ -829,12 +948,12 @@ function Dashboard({
       </header>
 
       <section className="month-selector" aria-label="Período selecionado">
-        <button type="button" className="month-arrow" onClick={() => changeMonth(-1)} aria-label={`Ir para ${monthFormatter.format(previousMonth)}`}><Icon name="back" /></button>
+        <button type="button" className="month-arrow" onClick={() => changeMonth(-1)} aria-label={`Ir para ${periodFormatter.format(previousMonth)}`}><Icon name="back" /></button>
         <button type="button" className="month-current" onClick={openMonthPicker} aria-haspopup="dialog" aria-expanded={isMonthPickerOpen}>
           {monthLabel}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
         </button>
-        <button type="button" className="month-arrow" onClick={() => changeMonth(1)} aria-label={`Ir para ${monthFormatter.format(nextMonth)}`}><Icon name="forward" /></button>
+        <button type="button" className="month-arrow" onClick={() => changeMonth(1)} aria-label={`Ir para ${periodFormatter.format(nextMonth)}`}><Icon name="forward" /></button>
       </section>
 
       {(error || actionError) && <p className="auth-error" role="alert">{error || actionError}</p>}
@@ -931,7 +1050,7 @@ function Dashboard({
             <div className="confirm-icon"><Icon name="trash" /></div>
             <h2 id="swipe-delete-title">Excluir despesa?</h2>
             <p>{pendingDelete.subexpenses.length > 0
-              ? `Esta despesa possui ${pendingDelete.subexpenses.length} subdespesa${pendingDelete.subexpenses.length === 1 ? "" : "s"}. Todas serão excluídas junto com ela.`
+              ? `Esta despesa possui ${pendingDelete.subexpenses.length} ${pendingDelete.subexpenses.length === 1 ? "item" : "itens"}. Todos serão excluídos junto com ela.`
               : "Esta despesa será excluída permanentemente."}</p>
             <div><button type="button" disabled={isDeleting} onClick={() => setPendingDelete(null)}>Cancelar</button><button type="button" disabled={isDeleting} onClick={confirmDeleteTransaction}>{isDeleting ? "Excluindo..." : "Excluir"}</button></div>
           </section>
@@ -997,7 +1116,7 @@ function SubexpenseEditor({
         <div className="sheet-handle" aria-hidden="true" />
         <div className="sheet-heading">
           <div>
-            <span>Subdespesa</span>
+            <span>Item da despesa</span>
             <h2 id="subexpense-title">Editar lançamento</h2>
           </div>
           <button type="button" className="sheet-close" onClick={onClose} aria-label="Fechar">×</button>
@@ -1090,7 +1209,7 @@ function DetailScreen({
     if (!transaction.hasSubexpenses || type === "income") return;
     const newItem: Subexpense = {
       id: "",
-      name: "Nova subdespesa",
+      name: "Novo item",
       amount: "0,00",
       installment: "1 de 1",
       paid: false,
@@ -1188,7 +1307,7 @@ function DetailScreen({
 
         <section className="detail-card subexpenses-card">
           <div className="section-title subexpense-title">
-            <div><span>COMPOSIÇÃO</span><h2>Subdespesas <b>{subexpenses.length}</b></h2></div>
+            <div><span>COMPOSIÇÃO</span><h2>Itens da despesa <b>{subexpenses.length}</b></h2></div>
             <button type="button" disabled={!transaction.hasSubexpenses || type === "income"} onClick={addSubexpense}><Icon name="plus" /> Adicionar</button>
           </div>
           <div className="subexpense-list">
@@ -1222,7 +1341,7 @@ function DetailScreen({
           <section className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="confirm-icon"><Icon name="trash" /></div>
             <h2 id="delete-title">Excluir lançamento?</h2>
-            <p>{subexpenses.length > 0 ? `Esta despesa possui ${subexpenses.length} subdespesa${subexpenses.length === 1 ? "" : "s"}. Todas serão excluídas junto com ela.` : "Esta despesa será excluída permanentemente."}</p>
+            <p>{subexpenses.length > 0 ? `Esta despesa possui ${subexpenses.length} ${subexpenses.length === 1 ? "item" : "itens"}. Todos serão excluídos junto com ela.` : "Esta despesa será excluída permanentemente."}</p>
             <div><button type="button" disabled={isSaving} onClick={() => setConfirmDelete(false)}>Cancelar</button><button type="button" disabled={isSaving} onClick={deleteEntry}>{isSaving ? "Excluindo..." : "Excluir"}</button></div>
           </section>
         </div>
@@ -1331,6 +1450,12 @@ export default function Home() {
       recurrenceFrequency: recurrenceToApi[transaction.recurrenceFrequency],
       recurrenceCount: transaction.recurrenceCount,
       hasSubexpenses: transaction.hasSubexpenses,
+      subexpenses: transaction.items.map((item) => ({
+        name: item.name,
+        amount: item.value,
+        installmentDescription: null,
+        paid: false,
+      })),
     });
     await loadMonth(period.year, period.month);
   }

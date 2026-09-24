@@ -52,6 +52,7 @@ public class EntryService {
         validateRecurrence(request.recurrenceFrequency(), request.recurrenceCount());
         validateSubexpenses(request.type(), request.hasSubexpenses());
         validateCategory(request.type(), request.category());
+        List<SubexpenseRequest> subexpenses = validateCreationSubexpenses(request);
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado"));
@@ -79,7 +80,16 @@ public class EntryService {
             ));
         }
 
-        return new CreatedEntriesResponse(entryRepository.saveAll(entries).stream()
+        List<FinancialEntry> savedEntries = entryRepository.saveAll(entries);
+        if (!subexpenses.isEmpty()) {
+            List<Subexpense> savedSubexpenses = savedEntries.stream()
+                    .flatMap(entry -> subexpenses.stream().map(item -> new Subexpense(
+                            entry, item.name().trim(), item.amount(), null, false)))
+                    .toList();
+            subexpenseRepository.saveAll(savedSubexpenses);
+        }
+
+        return new CreatedEntriesResponse(savedEntries.stream()
                 .map(this::toResponse)
                 .toList());
     }
@@ -130,7 +140,7 @@ public class EntryService {
         boolean hasStoredSubexpenses = !subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(entryId).isEmpty();
 
         if (hasStoredSubexpenses && (request.type() == EntryType.INCOME || !request.hasSubexpenses())) {
-            throw new BadRequestException("Remova as subdespesas antes de desativar essa opção ou transformar em receita");
+            throw new BadRequestException("Remova os itens antes de desativar essa opção ou transformar em receita");
         }
 
         String baseName = baseName(request.name());
@@ -231,7 +241,7 @@ public class EntryService {
     public SubexpenseResponse addSubexpense(UUID userId, UUID entryId, SubexpenseRequest request) {
         FinancialEntry entry = findOwnedEntry(userId, entryId);
         if (entry.getType() != EntryType.EXPENSE || !entry.isHasSubexpenses()) {
-            throw new BadRequestException("Este lançamento não aceita subdespesas");
+            throw new BadRequestException("Este lançamento não aceita itens");
         }
 
         Subexpense subexpense = new Subexpense(
@@ -325,6 +335,25 @@ public class EntryService {
         );
     }
 
+    private List<SubexpenseRequest> validateCreationSubexpenses(CreateEntryRequest request) {
+        List<SubexpenseRequest> subexpenses = request.subexpenses() == null ? List.of() : request.subexpenses();
+        if (request.hasSubexpenses() && subexpenses.isEmpty()) {
+            throw new BadRequestException("Uma despesa detalhada precisa ter pelo menos um item");
+        }
+        if (!request.hasSubexpenses() && !subexpenses.isEmpty()) {
+            throw new BadRequestException("Itens só podem ser informados em uma despesa detalhada");
+        }
+        if (!subexpenses.isEmpty()) {
+            BigDecimal itemsTotal = subexpenses.stream()
+                    .map(SubexpenseRequest::amount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (itemsTotal.compareTo(request.amount()) != 0) {
+                throw new BadRequestException("O valor da despesa deve corresponder à soma dos itens");
+            }
+        }
+        return subexpenses;
+    }
+
     private void validateRecurrence(RecurrenceFrequency frequency, int count) {
         if (frequency == RecurrenceFrequency.NONE && count != 0) {
             throw new BadRequestException("Uma transação sem repetição deve usar recurrenceCount igual a zero");
@@ -336,7 +365,7 @@ public class EntryService {
 
     private void validateSubexpenses(EntryType type, boolean hasSubexpenses) {
         if (type == EntryType.INCOME && hasSubexpenses) {
-            throw new BadRequestException("Receitas não podem possuir subdespesas");
+            throw new BadRequestException("Receitas não podem possuir itens");
         }
     }
 

@@ -56,7 +56,8 @@ class EntryServiceTests {
         User user = user(userId);
         CreateEntryRequest request = new CreateEntryRequest(
                 "Nubank", EntryCategory.FINANCIAL, EntryType.EXPENSE, new BigDecimal("332.00"),
-                LocalDate.of(2026, 1, 31), RecurrenceFrequency.MONTHLY, 2, true);
+                LocalDate.of(2026, 1, 31), RecurrenceFrequency.MONTHLY, 2, true,
+                List.of(new SubexpenseRequest("Fatura", new BigDecimal("332.00"), null, false)));
 
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
         when(entryRepository.saveAll(any())).thenAnswer(invocation -> {
@@ -75,6 +76,7 @@ class EntryServiceTests {
         assertEquals(LocalDate.of(2026, 2, 28), response.entries().get(1).dueDate());
         assertNotNull(response.entries().get(0).seriesId());
         assertEquals(response.entries().get(0).seriesId(), response.entries().get(1).seriesId());
+        verify(subexpenseRepository).saveAll(any());
     }
 
     @Test
@@ -171,7 +173,7 @@ class EntryServiceTests {
         UUID userId = UUID.randomUUID();
         CreateEntryRequest request = new CreateEntryRequest(
                 "Salário", EntryCategory.SALARY, EntryType.INCOME, new BigDecimal("8500.00"),
-                LocalDate.of(2026, 10, 31), RecurrenceFrequency.NONE, 1, false);
+                LocalDate.of(2026, 10, 31), RecurrenceFrequency.NONE, 1, false, List.of());
 
         assertThrows(BadRequestException.class, () -> entryService.create(userId, request));
         verify(userRepository, never()).findById(any());
@@ -191,7 +193,8 @@ class EntryServiceTests {
                 LocalDate.of(2026, 10, 31),
                 RecurrenceFrequency.NONE,
                 0,
-                false);
+                false,
+                List.of());
 
         assertThrows(
                 BadRequestException.class,
@@ -199,6 +202,21 @@ class EntryServiceTests {
         verify(userRepository, never()).findById(any());
     }
 
+    @Test
+    void shouldRejectDetailedExpenseWithoutValidItemsOrMatchingTotal() {
+        UUID userId = UUID.randomUUID();
+        CreateEntryRequest withoutItems = new CreateEntryRequest(
+                "Fatura", EntryCategory.FINANCIAL, EntryType.EXPENSE, new BigDecimal("100.00"),
+                LocalDate.of(2026, 10, 10), RecurrenceFrequency.NONE, 0, true, List.of());
+        CreateEntryRequest mismatchedTotal = new CreateEntryRequest(
+                "Fatura", EntryCategory.FINANCIAL, EntryType.EXPENSE, new BigDecimal("100.00"),
+                LocalDate.of(2026, 10, 10), RecurrenceFrequency.NONE, 0, true,
+                List.of(new SubexpenseRequest("Streaming", new BigDecimal("59.90"), null, false)));
+
+        assertThrows(BadRequestException.class, () -> entryService.create(userId, withoutItems));
+        assertThrows(BadRequestException.class, () -> entryService.create(userId, mismatchedTotal));
+        verify(userRepository, never()).findById(any());
+    }
     @Test
     void shouldAddSubexpenseOnlyToEnabledExpense() {
         UUID userId = UUID.randomUUID();

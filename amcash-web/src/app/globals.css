@@ -569,9 +569,11 @@ a {
 
 .month-current {
   display: inline-flex;
+  width: max-content;
   min-width: 0;
   margin: 0;
   padding: 0.35rem 0.65rem;
+  justify-self: center;
   align-items: center;
   justify-content: center;
   gap: 0.3rem;
@@ -2107,8 +2109,142 @@ a {
   font-weight: 500;
 }
 
+.create-transaction-sheet .detail-expense-toggle {
+  margin: 0 0 0.8rem;
+}
+
+.field-grid--single {
+  grid-template-columns: 1fr;
+}
+
+.expense-items-editor {
+  margin-bottom: 0.75rem;
+  overflow: hidden;
+  border: 1px solid #e2eaf5;
+  border-radius: 0.9rem;
+  background: #fbfcff;
+}
+
+.expense-items-editor h3 {
+  margin: 0;
+  padding: 0.75rem 0.8rem 0.55rem;
+  color: #173557;
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.expense-items-list {
+  display: flex;
+  padding: 0 0.65rem;
+  flex-direction: column;
+  gap: 0.48rem;
+}
+
+.expense-item-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(6rem, 0.62fr) 2rem;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.expense-item-name,
+.expense-item-amount {
+  width: 100%;
+  height: 2.45rem;
+  border: 1px solid #dfe6ef;
+  border-radius: 0.65rem;
+  outline: none;
+  background: #fff;
+  color: #253c57;
+  font: inherit;
+  font-size: 0.7rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.expense-item-name {
+  min-width: 0;
+  padding: 0 0.65rem;
+}
+
+.expense-item-name:focus,
+.expense-item-amount:focus-within {
+  border-color: #78aafa;
+  box-shadow: 0 0 0 0.18rem rgb(7 92 244 / 10%);
+}
+
+.expense-item-remove {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 0.55rem;
+  background: transparent;
+  color: #e3586d;
+  cursor: pointer;
+}
+
+.expense-item-remove:hover,
+.expense-item-remove:focus-visible {
+  outline: none;
+  background: #fff0f2;
+}
+
+.expense-item-remove svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.add-expense-item {
+  display: flex;
+  width: calc(100% - 1.3rem);
+  min-height: 2.45rem;
+  margin: 0.65rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border: 0;
+  border-radius: 0.65rem;
+  background: #edf4ff;
+  color: var(--brand-blue);
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.add-expense-item svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.expense-items-total {
+  display: flex;
+  min-height: 3rem;
+  padding: 0.7rem 0.8rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-top: 1px solid #dbe7f8;
+  background: #edf4ff;
+  color: #173557;
+}
+
+.expense-items-total span {
+  font-size: 0.72rem;
+  font-weight: 720;
+}
+
+.expense-items-total strong {
+  color: var(--brand-blue);
+  font-size: 0.92rem;
+  white-space: nowrap;
+}
+
 .create-transaction-submit {
   width: 100%;
+  margin-top: 0.9rem;
   gap: 0.4rem;
   border-radius: 0.85rem;
 }
@@ -2446,6 +2582,7 @@ a {
   .create-transaction-sheet .type-switch,
   .create-transaction-sheet .field-grid,
   .create-transaction-sheet .subexpense-toggle,
+  .create-transaction-sheet .expense-items-editor,
   .create-transaction-sheet .create-transaction-submit,
   .create-transaction-sheet .auth-error {
     grid-column: 1 / -1;
