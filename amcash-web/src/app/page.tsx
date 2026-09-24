@@ -1226,7 +1226,7 @@ function DetailScreen({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const numericRecurrenceCount = Number(recurrenceCount);
-  const recurrenceIsValid = recurrenceFrequency === "none" || (recurrenceCount !== "" && Number.isInteger(numericRecurrenceCount) && numericRecurrenceCount >= 2 && numericRecurrenceCount <= 120);
+  const recurrenceIsValid = transaction.hasSubexpenses || recurrenceFrequency === "none" || (recurrenceCount !== "" && Number.isInteger(numericRecurrenceCount) && numericRecurrenceCount >= 2 && numericRecurrenceCount <= 120);
   const progress = transaction.totalOccurrences
     ? Math.round((transaction.paidOccurrences / transaction.totalOccurrences) * 100)
     : 0;
@@ -1248,8 +1248,8 @@ function DetailScreen({
         type: type === "income" ? "INCOME" : "EXPENSE",
         amount: numericAmount,
         dueDate,
-        recurrenceFrequency: recurrenceToApi[recurrenceFrequency],
-        recurrenceCount: recurrenceFrequency === "none" ? 0 : numericRecurrenceCount,
+        recurrenceFrequency: transaction.hasSubexpenses ? "NONE" : recurrenceToApi[recurrenceFrequency],
+        recurrenceCount: transaction.hasSubexpenses || recurrenceFrequency === "none" ? 0 : numericRecurrenceCount,
         hasSubexpenses: type === "expense" && transaction.hasSubexpenses,
       });
       await onChanged();
@@ -1352,17 +1352,21 @@ function DetailScreen({
             <label className="field"><span>Valor</span><div className="currency-input"><b>R$</b><input value={amount} onChange={(event) => setAmount(maskCurrencyInput(event.target.value))} onBlur={() => setAmount(completeCurrencyInput(amount))} inputMode="numeric" /></div></label>
             <DatePickerInput label="Vencimento" value={dueDate} onChange={setDueDate} />
           </div>
-          <div className="recurrence-fields">
-            <fieldset className="recurrence-choice">
-              <legend>Repetição</legend>
-              <div>
-                {([['none', 'Não repetir'], ['daily', 'Diária'], ['weekly', 'Semanal'], ['monthly', 'Mensal']] as [RecurrenceFrequency, string][]).map(([frequency, label]) => (
-                  <button type="button" key={frequency} className={recurrenceFrequency === frequency ? "active" : ""} onClick={() => setRecurrenceFrequency(frequency)}>{label}</button>
-                ))}
+          {!transaction.hasSubexpenses && (
+            <>
+              <div className="recurrence-fields">
+                <fieldset className="recurrence-choice">
+                  <legend>Repetição</legend>
+                  <div>
+                    {([['none', 'Não repetir'], ['daily', 'Diária'], ['weekly', 'Semanal'], ['monthly', 'Mensal']] as [RecurrenceFrequency, string][]).map(([frequency, label]) => (
+                      <button type="button" key={frequency} className={recurrenceFrequency === frequency ? "active" : ""} onClick={() => setRecurrenceFrequency(frequency)}>{label}</button>
+                    ))}
+                  </div>
+                </fieldset>
               </div>
-            </fieldset>
-          </div>
-          {recurrenceFrequency !== "none" && <label className="field recurrence-count"><span>Total de parcelas (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={recurrenceCount} placeholder="0" onChange={(event) => setRecurrenceCount(event.target.value)} /></label>}
+              {recurrenceFrequency !== "none" && <label className="field recurrence-count"><span>Total de parcelas (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={recurrenceCount} placeholder="0" onChange={(event) => setRecurrenceCount(event.target.value)} /></label>}
+            </>
+          )}
         </section>
 
         {transaction.hasSubexpenses && type === "expense" && (

@@ -188,6 +188,10 @@ public class EntryService {
             throw new BadRequestException("Remova os itens antes de desativar essa opção ou transformar em receita");
         }
 
+        if (request.type() == EntryType.EXPENSE && request.hasSubexpenses()) {
+            return updateDetailedEntry(userId, selectedEntry, request);
+        }
+
         String baseName = baseName(request.name());
         int totalOccurrences = request.recurrenceFrequency() == RecurrenceFrequency.NONE
                 ? 1
@@ -270,6 +274,37 @@ public class EntryService {
         entryRepository.saveAll(series);
         return toResponse(series.get(selectedEntry.getRecurrenceIndex()));
     }
+
+    private EntryResponse updateDetailedEntry(
+            UUID userId,
+            FinancialEntry selectedEntry,
+            UpdateEntryRequest request) {
+
+        List<FinancialEntry> series = selectedEntry.getSeriesId() == null
+                ? List.of(selectedEntry)
+                : entryRepository.findAllBySeriesIdAndUserIdOrderByRecurrenceIndexAsc(
+                        selectedEntry.getSeriesId(), userId);
+        String name = baseName(request.name());
+
+        for (FinancialEntry entry : series) {
+            boolean selected = entry.getId().equals(selectedEntry.getId());
+            entry.update(
+                    name,
+                    request.category(),
+                    EntryType.EXPENSE,
+                    selected ? sumSubexpenses(entry.getId()) : entry.getAmount(),
+                    selected ? request.dueDate() : entry.getDueDate(),
+                    RecurrenceFrequency.NONE,
+                    0,
+                    entry.getRecurrenceIndex(),
+                    entry.getSeriesId(),
+                    true);
+        }
+
+        entryRepository.saveAll(series);
+        return toResponse(selectedEntry);
+    }
+
     @Transactional
     public EntryResponse setPaid(UUID userId, UUID entryId, boolean paid) {
         FinancialEntry entry = findOwnedEntry(userId, entryId);
