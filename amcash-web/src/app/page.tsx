@@ -216,7 +216,7 @@ function mapSubexpense(item: ApiSubexpense): Subexpense {
     id: item.id,
     name: item.name,
     amount: Number(item.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-    installment: item.installmentDescription ?? (item.recurrenceFrequency === "NONE" ? "Única" : ""),
+    installment: item.installmentDescription ?? (item.recurrenceFrequency === "NONE" ? "Única" : `${item.recurrenceIndex + 1}/${item.recurrenceCount}`),
     paid: item.paid,
     recurrenceFrequency: recurrenceFromApi[item.recurrenceFrequency],
     recurrenceCount: item.recurrenceCount,
@@ -1160,7 +1160,7 @@ function SubexpenseEditor({
 
         <label className="field full-field">
           <span>Descrição</span>
-          <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+          <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Descrição do item" />
         </label>
         <div className="field-grid field-grid--single">
           <label className="field">
@@ -1259,7 +1259,7 @@ function DetailScreen({
     if (!transaction.hasSubexpenses || type === "income") return;
     const newItem: Subexpense = {
       id: "",
-      name: "Novo item",
+      name: "",
       amount: "0,00",
       installment: "",
       paid: false,

@@ -12,4 +12,6 @@ public interface SubexpenseRepository extends JpaRepository<Subexpense, UUID> {
     List<Subexpense> findAllByEntryIdOrderByCreatedAtAsc(UUID entryId);
 
     Optional<Subexpense> findByIdAndEntryIdAndEntryUserId(UUID id, UUID entryId, UUID userId);
+
+    List<Subexpense> findAllBySeriesIdAndEntryUserIdOrderByRecurrenceIndexAsc(UUID seriesId, UUID userId);
 }
