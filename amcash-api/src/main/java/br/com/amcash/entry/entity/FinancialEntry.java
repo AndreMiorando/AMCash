@@ -130,6 +130,11 @@ public class FinancialEntry {
         this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 
+    public void updateAmount(BigDecimal amount) {
+        this.amount = amount;
+        this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
+    }
+
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
     public User getUser() { return user; }

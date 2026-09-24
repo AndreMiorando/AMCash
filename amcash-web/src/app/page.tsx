@@ -1225,6 +1225,11 @@ function DetailScreen({
     ? Math.round((transaction.paidOccurrences / transaction.totalOccurrences) * 100)
     : 0;
 
+  useEffect(() => {
+    setAmount(transaction.value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    setSubexpenses(transaction.subexpenses);
+  }, [transaction.subexpenses, transaction.value]);
+
   async function saveDetails() {
     const numericAmount = parseCurrencyInput(amount);
     if (!name.trim() || !category || !dueDate || !Number.isFinite(numericAmount) || numericAmount <= 0 || !recurrenceIsValid || isSaving) return;
@@ -1435,7 +1440,11 @@ export default function Home() {
     try {
       const response = await financeApi.listMonth(year, month);
       if (currentRequest !== requestId.current) return false;
-      setItems(mapEntries(response.entries));
+      const mappedEntries = mapEntries(response.entries);
+      setItems(mappedEntries);
+      setSelected((current) => current
+        ? mappedEntries.find((entry) => entry.id === current.id) ?? current
+        : null);
       lastLoadedPeriod.current = periodKey;
       return true;
     } catch (requestError) {

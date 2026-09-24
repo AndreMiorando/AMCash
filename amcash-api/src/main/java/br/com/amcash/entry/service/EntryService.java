@@ -287,6 +287,7 @@ public class EntryService {
             throw new BadRequestException("Este lançamento não aceita itens");
         }
 
+        BigDecimal currentTotal = sumSubexpenses(entryId);
         Subexpense subexpense = new Subexpense(
                 entry,
                 request.name().trim(),
@@ -297,7 +298,9 @@ public class EntryService {
                 request.recurrenceCount(),
                 0,
                 request.recurrenceFrequency() == RecurrenceFrequency.NONE ? null : UUID.randomUUID());
-        return toResponse(subexpenseRepository.save(subexpense));
+        Subexpense saved = subexpenseRepository.save(subexpense);
+        updateEntryAmount(entry, currentTotal.add(saved.getAmount()));
+        return toResponse(saved);
     }
 
     @Transactional
@@ -309,6 +312,8 @@ public class EntryService {
 
         validateRecurrence(request.recurrenceFrequency(), request.recurrenceCount());
         Subexpense subexpense = findOwnedSubexpense(userId, entryId, subexpenseId);
+        BigDecimal currentTotal = sumSubexpenses(entryId);
+        BigDecimal originalAmount = subexpense.getAmount();
         subexpense.update(
                 request.name().trim(),
                 request.amount(),
@@ -316,12 +321,28 @@ public class EntryService {
                 request.paid(),
                 request.recurrenceFrequency(),
                 request.recurrenceCount());
-        return toResponse(subexpenseRepository.save(subexpense));
+        Subexpense saved = subexpenseRepository.save(subexpense);
+        updateEntryAmount(subexpense.getEntry(), currentTotal.subtract(originalAmount).add(saved.getAmount()));
+        return toResponse(saved);
     }
 
     @Transactional
     public void deleteSubexpense(UUID userId, UUID entryId, UUID subexpenseId) {
-        subexpenseRepository.delete(findOwnedSubexpense(userId, entryId, subexpenseId));
+        Subexpense subexpense = findOwnedSubexpense(userId, entryId, subexpenseId);
+        BigDecimal currentTotal = sumSubexpenses(entryId);
+        subexpenseRepository.delete(subexpense);
+        updateEntryAmount(subexpense.getEntry(), currentTotal.subtract(subexpense.getAmount()));
+    }
+
+    private BigDecimal sumSubexpenses(UUID entryId) {
+        return subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(entryId).stream()
+                .map(Subexpense::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private void updateEntryAmount(FinancialEntry entry, BigDecimal amount) {
+        entry.updateAmount(amount.max(BigDecimal.ZERO));
+        entryRepository.save(entry);
     }
 
     private FinancialEntry findOwnedEntry(UUID userId, UUID entryId) {
