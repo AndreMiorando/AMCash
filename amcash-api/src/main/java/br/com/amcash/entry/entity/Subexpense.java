@@ -102,12 +102,37 @@ public class Subexpense {
             boolean paid,
             RecurrenceFrequency recurrenceFrequency,
             int recurrenceCount) {
+        synchronize(
+                entry,
+                name,
+                amount,
+                installmentDescription,
+                paid,
+                recurrenceFrequency,
+                recurrenceCount,
+                recurrenceIndex,
+                seriesId);
+    }
+
+    public void synchronize(
+            FinancialEntry entry,
+            String name,
+            BigDecimal amount,
+            String installmentDescription,
+            boolean paid,
+            RecurrenceFrequency recurrenceFrequency,
+            int recurrenceCount,
+            int recurrenceIndex,
+            UUID seriesId) {
+        this.entry = entry;
         this.name = name;
         this.amount = amount;
         this.installmentDescription = installmentDescription;
         this.paid = paid;
         this.recurrenceFrequency = recurrenceFrequency;
         this.recurrenceCount = recurrenceCount;
+        this.recurrenceIndex = recurrenceIndex;
+        this.seriesId = seriesId;
         this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 

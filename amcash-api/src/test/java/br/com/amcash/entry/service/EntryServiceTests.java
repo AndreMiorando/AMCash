@@ -274,6 +274,135 @@ class EntryServiceTests {
     }
 
     @Test
+    void shouldCreateFutureParentEntriesWhenAddingRecurringItem() {
+        UUID userId = UUID.randomUUID();
+        UUID entryId = UUID.randomUUID();
+        FinancialEntry parent = entry(
+                user(userId), EntryType.EXPENSE, "142.00", LocalDate.of(2026, 10, 1), true);
+        parent.setId(entryId);
+        Subexpense existing = new Subexpense(parent, "Itens atuais", new BigDecimal("142.00"), null, false);
+        existing.setId(UUID.randomUUID());
+        List<FinancialEntry> savedParents = new ArrayList<>();
+        List<Subexpense> savedItems = new ArrayList<>();
+
+        when(entryRepository.findByIdAndUserId(entryId, userId)).thenReturn(Optional.of(parent));
+        when(entryRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<FinancialEntry> entries = invocation.getArgument(0);
+            entries.forEach(entry -> {
+                if (entry.getId() == null) entry.setId(UUID.randomUUID());
+            });
+            savedParents.clear();
+            savedParents.addAll(entries);
+            return entries;
+        });
+        when(subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(any())).thenAnswer(invocation -> {
+            UUID requestedEntryId = invocation.getArgument(0);
+            return requestedEntryId.equals(entryId) ? List.of(existing) : List.of();
+        });
+        when(subexpenseRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<Subexpense> items = invocation.getArgument(0);
+            items.forEach(item -> item.setId(UUID.randomUUID()));
+            savedItems.addAll(items);
+            return items;
+        });
+
+        var response = entryService.addSubexpense(
+                userId,
+                entryId,
+                new SubexpenseRequest(
+                        "Merc2",
+                        new BigDecimal("37.00"),
+                        null,
+                        false,
+                        RecurrenceFrequency.MONTHLY,
+                        2));
+
+        assertEquals("1/2", response.installmentDescription());
+        assertEquals(2, savedItems.size());
+        assertEquals("1/2", savedItems.get(0).getInstallmentDescription());
+        assertEquals("2/2", savedItems.get(1).getInstallmentDescription());
+        assertEquals(LocalDate.of(2026, 11, 1), savedItems.get(1).getEntry().getDueDate());
+        assertEquals(new BigDecimal("179.00"), parent.getAmount());
+        FinancialEntry november = savedParents.stream()
+                .filter(entry -> entry.getDueDate().equals(LocalDate.of(2026, 11, 1)))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(new BigDecimal("37.00"), november.getAmount());
+        assertEquals(parent.getSeriesId(), november.getSeriesId());
+    }
+    @Test
+    void shouldRepairLegacyRecurringItemWhenItIsEdited() {
+        UUID userId = UUID.randomUUID();
+        UUID entryId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        UUID itemSeriesId = UUID.randomUUID();
+        FinancialEntry parent = entry(
+                user(userId), EntryType.EXPENSE, "37.00", LocalDate.of(2026, 10, 1), true);
+        parent.setId(entryId);
+        Subexpense legacyItem = new Subexpense(
+                parent,
+                "Merc2",
+                new BigDecimal("37.00"),
+                null,
+                false,
+                RecurrenceFrequency.MONTHLY,
+                2,
+                0,
+                itemSeriesId);
+        legacyItem.setId(itemId);
+        List<FinancialEntry> savedParents = new ArrayList<>();
+        List<Subexpense> savedItems = new ArrayList<>();
+
+        when(subexpenseRepository.findByIdAndEntryIdAndEntryUserId(itemId, entryId, userId))
+                .thenReturn(Optional.of(legacyItem));
+        when(subexpenseRepository.findAllBySeriesIdAndEntryUserIdOrderByRecurrenceIndexAsc(itemSeriesId, userId))
+                .thenReturn(List.of(legacyItem));
+        when(entryRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<FinancialEntry> entries = invocation.getArgument(0);
+            entries.forEach(entry -> {
+                if (entry.getId() == null) entry.setId(UUID.randomUUID());
+            });
+            savedParents.clear();
+            savedParents.addAll(entries);
+            return entries;
+        });
+        when(subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(any())).thenAnswer(invocation -> {
+            UUID requestedEntryId = invocation.getArgument(0);
+            return requestedEntryId.equals(entryId) ? List.of(legacyItem) : List.of();
+        });
+        when(subexpenseRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<Subexpense> items = invocation.getArgument(0);
+            items.forEach(item -> {
+                if (item.getId() == null) item.setId(UUID.randomUUID());
+            });
+            savedItems.clear();
+            savedItems.addAll(items);
+            return items;
+        });
+
+        var response = entryService.updateSubexpense(
+                userId,
+                entryId,
+                itemId,
+                new SubexpenseRequest(
+                        "Merc2",
+                        new BigDecimal("37.00"),
+                        null,
+                        false,
+                        RecurrenceFrequency.MONTHLY,
+                        2));
+
+        assertEquals("1/2", response.installmentDescription());
+        assertEquals(2, savedItems.size());
+        assertEquals("2/2", savedItems.get(1).getInstallmentDescription());
+        assertEquals(LocalDate.of(2026, 11, 1), savedItems.get(1).getEntry().getDueDate());
+        FinancialEntry november = savedParents.stream()
+                .filter(entry -> entry.getDueDate().equals(LocalDate.of(2026, 11, 1)))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(new BigDecimal("37.00"), november.getAmount());
+    }
+    @Test
     void shouldRecalculateDetailedExpenseWhenUpdatingAndDeletingItem() {
         UUID userId = UUID.randomUUID();
         UUID entryId = UUID.randomUUID();
