@@ -237,9 +237,12 @@ class EntryServiceTests {
         UUID userId = UUID.randomUUID();
         UUID entryId = UUID.randomUUID();
         FinancialEntry parent = entry(
-                user(userId), EntryType.EXPENSE, "500.00", LocalDate.of(2026, 10, 10), true);
+                user(userId), EntryType.EXPENSE, "34.00", LocalDate.of(2026, 10, 10), true);
         parent.setId(entryId);
+        Subexpense existing = new Subexpense(parent, "Existente", new BigDecimal("34.00"), null, false);
+        existing.setId(UUID.randomUUID());
         when(entryRepository.findByIdAndUserId(entryId, userId)).thenReturn(Optional.of(parent));
+        when(subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(entryId)).thenReturn(List.of(existing));
         when(subexpenseRepository.save(any(Subexpense.class))).thenAnswer(invocation -> {
             Subexpense subexpense = invocation.getArgument(0);
             subexpense.setId(UUID.randomUUID());
@@ -254,6 +257,8 @@ class EntryServiceTests {
         assertEquals("Mercado", response.name());
         assertEquals(new BigDecimal("120.00"), response.amount());
         assertTrue(response.paid());
+        assertEquals(new BigDecimal("154.00"), parent.getAmount());
+        verify(entryRepository).save(parent);
 
         FinancialEntry income = entry(
                 user(userId), EntryType.INCOME, "8500.00", LocalDate.of(2026, 10, 31), false);
@@ -268,6 +273,38 @@ class EntryServiceTests {
                         new SubexpenseRequest("Item", BigDecimal.TEN, null, false, RecurrenceFrequency.NONE, 0)));
     }
 
+    @Test
+    void shouldRecalculateDetailedExpenseWhenUpdatingAndDeletingItem() {
+        UUID userId = UUID.randomUUID();
+        UUID entryId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        FinancialEntry parent = entry(
+                user(userId), EntryType.EXPENSE, "142.00", LocalDate.of(2026, 10, 10), true);
+        parent.setId(entryId);
+        Subexpense edited = new Subexpense(parent, "Chat", new BigDecimal("108.00"), "1/12", false);
+        edited.setId(itemId);
+        Subexpense other = new Subexpense(parent, "Mercado", new BigDecimal("34.00"), null, false);
+        other.setId(UUID.randomUUID());
+
+        when(subexpenseRepository.findByIdAndEntryIdAndEntryUserId(itemId, entryId, userId))
+                .thenReturn(Optional.of(edited));
+        when(subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(entryId))
+                .thenReturn(List.of(edited, other));
+        when(subexpenseRepository.save(edited)).thenReturn(edited);
+
+        entryService.updateSubexpense(
+                userId,
+                entryId,
+                itemId,
+                new SubexpenseRequest("Chat", new BigDecimal("120.00"), "1/12", false, RecurrenceFrequency.NONE, 0));
+
+        assertEquals(new BigDecimal("154.00"), parent.getAmount());
+
+        entryService.deleteSubexpense(userId, entryId, itemId);
+
+        assertEquals(new BigDecimal("34.00"), parent.getAmount());
+        verify(subexpenseRepository).delete(edited);
+    }
     private User user(UUID id) {
         User user = new User("google-subject", "usuario@gmail.com", "Usuário", null);
         user.setId(id);
