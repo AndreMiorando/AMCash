@@ -216,6 +216,13 @@ public class EntryService {
         return toResponse(series.get(selectedEntry.getRecurrenceIndex()));
     }
     @Transactional
+    public EntryResponse setPaid(UUID userId, UUID entryId, boolean paid) {
+        FinancialEntry entry = findOwnedEntry(userId, entryId);
+        entry.setPaid(paid);
+        return toResponse(entryRepository.save(entry));
+    }
+
+    @Transactional
     public void delete(UUID userId, UUID entryId) {
         entryRepository.delete(findOwnedEntry(userId, entryId));
     }
@@ -274,6 +281,14 @@ public class EntryService {
                 .map(this::toResponse)
                 .toList();
         int completed = (int) subexpenses.stream().filter(SubexpenseResponse::paid).count();
+        int totalOccurrences = entry.getSeriesId() == null
+                ? 1
+                : Math.toIntExact(entryRepository.countBySeriesIdAndUserId(
+                        entry.getSeriesId(), entry.getUser().getId()));
+        int paidOccurrences = entry.getSeriesId() == null
+                ? (entry.isPaid() ? 1 : 0)
+                : Math.toIntExact(entryRepository.countBySeriesIdAndUserIdAndPaidTrue(
+                        entry.getSeriesId(), entry.getUser().getId()));
 
         return new EntryResponse(
                 entry.getId(),
@@ -287,6 +302,9 @@ public class EntryService {
                 entry.getRecurrenceIndex(),
                 entry.getSeriesId(),
                 entry.isHasSubexpenses(),
+                entry.isPaid(),
+                paidOccurrences,
+                totalOccurrences,
                 completed,
                 subexpenses.size(),
                 subexpenses,

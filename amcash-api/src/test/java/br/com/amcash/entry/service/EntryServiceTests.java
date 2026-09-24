@@ -148,6 +148,25 @@ class EntryServiceTests {
     }
 
     @Test
+    void shouldMarkEntryAsPaid() {
+        UUID userId = UUID.randomUUID();
+        FinancialEntry entry = entry(
+                user(userId), EntryType.EXPENSE, "250.00", LocalDate.of(2026, 9, 24), false);
+
+        when(entryRepository.findByIdAndUserId(entry.getId(), userId)).thenReturn(Optional.of(entry));
+        when(entryRepository.save(entry)).thenReturn(entry);
+        when(subexpenseRepository.findAllByEntryIdOrderByCreatedAtAsc(entry.getId()))
+                .thenReturn(List.of());
+
+        var response = entryService.setPaid(userId, entry.getId(), true);
+
+        assertTrue(entry.isPaid());
+        assertTrue(response.paid());
+        assertEquals(1, response.paidOccurrences());
+        assertEquals(1, response.totalOccurrences());
+    }
+
+    @Test
     void shouldRejectInvalidRecurrenceAndProtectOtherUsersData() {
         UUID userId = UUID.randomUUID();
         CreateEntryRequest request = new CreateEntryRequest(

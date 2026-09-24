@@ -47,6 +47,9 @@ export type ApiEntry = {
   recurrenceIndex: number;
   seriesId: string | null;
   hasSubexpenses: boolean;
+  paid: boolean;
+  paidOccurrences: number;
+  totalOccurrences: number;
   completedSubexpenses: number;
   totalSubexpenses: number;
   subexpenses: ApiSubexpense[];
@@ -141,6 +144,12 @@ export const financeApi = {
     return apiRequest<ApiEntry>(`/api/v1/transactions/${entryId}`, {
       method: "PUT",
       body: JSON.stringify(payload),
+    });
+  },
+
+  setPaid(entryId: string, paid: boolean) {
+    return apiRequest<ApiEntry>(`/api/v1/transactions/${entryId}/paid?paid=${paid}`, {
+      method: "PATCH",
     });
   },
 
