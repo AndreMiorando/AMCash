@@ -7,6 +7,7 @@ import br.com.amcash.entry.dto.request.SubexpenseRequest;
 import br.com.amcash.entry.dto.request.UpdateEntryRequest;
 import br.com.amcash.entry.dto.response.CreatedEntriesResponse;
 import br.com.amcash.entry.dto.response.EntryResponse;
+import br.com.amcash.entry.dto.response.ForecastResponse;
 import br.com.amcash.entry.dto.response.MonthlyEntriesResponse;
 import br.com.amcash.entry.dto.response.SubexpenseResponse;
 import br.com.amcash.entry.entity.SeriesScope;
@@ -44,6 +45,16 @@ public class EntryController {
             @RequestParam int month) {
 
         return entryService.listMonth(user.userId(), year, month);
+    }
+
+    @GetMapping("/forecast")
+    public ForecastResponse forecast(
+            @CurrentUser AuthenticatedUser user,
+            @RequestParam int year,
+            @RequestParam int month,
+            @RequestParam(defaultValue = "6") int months) {
+
+        return entryService.forecast(user.userId(), year, month, months);
     }
 
     @PostMapping

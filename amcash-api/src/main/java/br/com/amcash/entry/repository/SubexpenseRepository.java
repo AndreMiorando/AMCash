@@ -15,7 +15,15 @@ public interface SubexpenseRepository extends JpaRepository<Subexpense, UUID> {
 
     List<Subexpense> findAllByEntryIdOrderByCreatedAtAsc(UUID entryId);
 
-    List<Subexpense> findAllByEntryIdInOrderByEntryIdAscCreatedAtAsc(Collection<UUID> entryIds);
+    @Query("""
+            select item
+            from Subexpense item
+            join fetch item.entry entry
+            where entry.id in :entryIds
+            order by entry.id asc, item.createdAt asc
+            """)
+    List<Subexpense> findAllByEntryIdInOrderByEntryIdAscCreatedAtAsc(
+            @Param("entryIds") Collection<UUID> entryIds);
 
     boolean existsByEntryId(UUID entryId);
 

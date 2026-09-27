@@ -64,6 +64,7 @@ Authorization: Bearer <token>
 Endpoints disponíveis:
 
 - `GET /api/v1/transactions?year=2026&month=10`: lançamentos e resumo do mês.
+- `GET /api/v1/transactions/forecast?year=2026&month=10&months=6`: Radar financeiro agregado para 6 ou 12 meses.
 - `POST /api/v1/transactions`: cria receita ou despesa, incluindo repetições.
 - `GET /api/v1/transactions/{id}`: detalhes do lançamento.
 - `PUT /api/v1/transactions/{id}`: edita o lançamento.

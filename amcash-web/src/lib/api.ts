@@ -100,6 +100,36 @@ export type MonthlyEntries = {
   entries: ApiEntry[];
 };
 
+export type ApiForecastEvent = {
+  type: "STARTING" | "ENDING";
+  source: "ENTRY" | "ITEM";
+  name: string;
+  amount: number;
+  date: string;
+  recurrenceFrequency: ApiRecurrenceFrequency;
+};
+
+export type ApiForecastMonth = {
+  year: number;
+  month: number;
+  income: number;
+  totalExpenses: number;
+  paidExpenses: number;
+  pendingExpenses: number;
+  projectedBalance: number;
+  freeBalance: number;
+  expenseChange: number;
+  freeBalanceChange: number;
+  events: ApiForecastEvent[];
+};
+
+export type ApiForecast = {
+  startYear: number;
+  startMonth: number;
+  months: number;
+  timeline: ApiForecastMonth[];
+};
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -141,6 +171,12 @@ async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
 export const financeApi = {
   listMonth(year: number, month: number) {
     return apiRequest<MonthlyEntries>(`/api/v1/transactions?year=${year}&month=${month}`);
+  },
+
+  forecast(year: number, month: number, months: 6 | 12) {
+    return apiRequest<ApiForecast>(
+      `/api/v1/transactions/forecast?year=${year}&month=${month}&months=${months}`,
+    );
   },
 
   create(payload: EntryPayload) {

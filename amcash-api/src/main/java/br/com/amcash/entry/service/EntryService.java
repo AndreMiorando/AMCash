@@ -5,6 +5,9 @@ import br.com.amcash.entry.dto.request.SubexpenseRequest;
 import br.com.amcash.entry.dto.request.UpdateEntryRequest;
 import br.com.amcash.entry.dto.response.CreatedEntriesResponse;
 import br.com.amcash.entry.dto.response.EntryResponse;
+import br.com.amcash.entry.dto.response.ForecastEventResponse;
+import br.com.amcash.entry.dto.response.ForecastMonthResponse;
+import br.com.amcash.entry.dto.response.ForecastResponse;
 import br.com.amcash.entry.dto.response.MonthlyEntriesResponse;
 import br.com.amcash.entry.dto.response.MonthlySummaryResponse;
 import br.com.amcash.entry.dto.response.SubexpenseResponse;
@@ -171,6 +174,162 @@ public class EntryService {
                 new MonthlySummaryResponse(income, expenses, income.subtract(expenses)),
                 toResponses(entries)
         );
+    }
+
+    @Transactional(readOnly = true)
+    public ForecastResponse forecast(UUID userId, int year, int month, int months) {
+        if (months != 6 && months != 12) {
+            throw new BadRequestException("O horizonte do Radar deve ser de 6 ou 12 meses");
+        }
+
+        YearMonth startMonth;
+        try {
+            startMonth = YearMonth.of(year, month);
+        } catch (DateTimeException exception) {
+            throw new BadRequestException("Ano ou mês inválido");
+        }
+
+        YearMonth queryStart = startMonth.minusMonths(1);
+        YearMonth endMonth = startMonth.plusMonths(months - 1L);
+        List<FinancialEntry> entries = entryRepository
+                .findAllByUserIdAndDueDateBetweenOrderByDueDateAscCreatedAtAsc(
+                        userId,
+                        queryStart.atDay(1),
+                        endMonth.atEndOfMonth());
+
+        List<UUID> detailedEntryIds = entries.stream()
+                .filter(FinancialEntry::isHasSubexpenses)
+                .map(FinancialEntry::getId)
+                .toList();
+        Map<UUID, List<Subexpense>> itemsByEntryId = new HashMap<>();
+        if (!detailedEntryIds.isEmpty()) {
+            for (Subexpense item : subexpenseRepository
+                    .findAllByEntryIdInOrderByEntryIdAscCreatedAtAsc(detailedEntryIds)) {
+                itemsByEntryId
+                        .computeIfAbsent(item.getEntry().getId(), ignored -> new ArrayList<>())
+                        .add(item);
+            }
+        }
+
+        Map<YearMonth, ForecastTotals> totalsByMonth = new LinkedHashMap<>();
+        for (int offset = -1; offset < months; offset++) {
+            totalsByMonth.put(startMonth.plusMonths(offset), new ForecastTotals());
+        }
+
+        for (FinancialEntry entry : entries) {
+            YearMonth entryMonth = YearMonth.from(entry.getDueDate());
+            ForecastTotals totals = totalsByMonth.get(entryMonth);
+            if (totals == null) continue;
+
+            if (entry.getType() == EntryType.INCOME) {
+                totals.income = totals.income.add(entry.getAmount());
+            } else {
+                totals.totalExpenses = totals.totalExpenses.add(entry.getAmount());
+                addExpensePaymentTotals(
+                        totals,
+                        entry,
+                        itemsByEntryId.getOrDefault(entry.getId(), List.of()));
+            }
+
+            if (!entry.isHasSubexpenses()) {
+                addEntryForecastEvents(totals, entry);
+            }
+            itemsByEntryId.getOrDefault(entry.getId(), List.of())
+                    .forEach(item -> addItemForecastEvents(totals, item));
+        }
+
+        List<ForecastMonthResponse> timeline = new ArrayList<>(months);
+        ForecastTotals previous = totalsByMonth.get(queryStart);
+        for (int offset = 0; offset < months; offset++) {
+            YearMonth period = startMonth.plusMonths(offset);
+            ForecastTotals current = totalsByMonth.get(period);
+            current.events.sort(Comparator
+                    .comparing(ForecastEventResponse::date)
+                    .thenComparing(ForecastEventResponse::type)
+                    .thenComparing(ForecastEventResponse::name));
+
+            BigDecimal projectedBalance = current.income.subtract(current.totalExpenses);
+            BigDecimal freeBalance = current.income.subtract(current.pendingExpenses);
+            BigDecimal previousFreeBalance = previous.income.subtract(previous.pendingExpenses);
+            timeline.add(new ForecastMonthResponse(
+                    period.getYear(),
+                    period.getMonthValue(),
+                    current.income,
+                    current.totalExpenses,
+                    current.paidExpenses,
+                    current.pendingExpenses,
+                    projectedBalance,
+                    freeBalance,
+                    current.totalExpenses.subtract(previous.totalExpenses),
+                    freeBalance.subtract(previousFreeBalance),
+                    List.copyOf(current.events)));
+            previous = current;
+        }
+
+        return new ForecastResponse(year, month, months, timeline);
+    }
+
+    private void addExpensePaymentTotals(
+            ForecastTotals totals,
+            FinancialEntry entry,
+            List<Subexpense> items) {
+        if (entry.isPaid()) {
+            totals.paidExpenses = totals.paidExpenses.add(entry.getAmount());
+            return;
+        }
+        if (items.isEmpty()) {
+            totals.pendingExpenses = totals.pendingExpenses.add(entry.getAmount());
+            return;
+        }
+
+        BigDecimal paidItems = items.stream()
+                .filter(Subexpense::isPaid)
+                .map(Subexpense::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal pendingItems = items.stream()
+                .filter(item -> !item.isPaid())
+                .map(Subexpense::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal unallocated = entry.getAmount().subtract(paidItems.add(pendingItems));
+        totals.paidExpenses = totals.paidExpenses.add(paidItems);
+        totals.pendingExpenses = totals.pendingExpenses.add(pendingItems.add(unallocated.max(BigDecimal.ZERO)));
+    }
+
+    private void addEntryForecastEvents(ForecastTotals totals, FinancialEntry entry) {
+        if (entry.getSeriesId() == null || entry.getRecurrenceCount() < 2) return;
+        String name = baseName(entry.getName());
+        if (entry.getRecurrenceIndex() == 0) {
+            totals.events.add(new ForecastEventResponse(
+                    "STARTING", "ENTRY", name, entry.getAmount(), entry.getDueDate(),
+                    entry.getRecurrenceFrequency().name()));
+        }
+        if (entry.getRecurrenceIndex() == entry.getRecurrenceCount() - 1) {
+            totals.events.add(new ForecastEventResponse(
+                    "ENDING", "ENTRY", name, entry.getAmount(), entry.getDueDate(),
+                    entry.getRecurrenceFrequency().name()));
+        }
+    }
+
+    private void addItemForecastEvents(ForecastTotals totals, Subexpense item) {
+        if (item.getSeriesId() == null || item.getRecurrenceCount() < 2) return;
+        if (item.getRecurrenceIndex() == 0) {
+            totals.events.add(new ForecastEventResponse(
+                    "STARTING", "ITEM", item.getName(), item.getAmount(), item.getEntry().getDueDate(),
+                    item.getRecurrenceFrequency().name()));
+        }
+        if (item.getRecurrenceIndex() == item.getRecurrenceCount() - 1) {
+            totals.events.add(new ForecastEventResponse(
+                    "ENDING", "ITEM", item.getName(), item.getAmount(), item.getEntry().getDueDate(),
+                    item.getRecurrenceFrequency().name()));
+        }
+    }
+
+    private static final class ForecastTotals {
+        private BigDecimal income = BigDecimal.ZERO;
+        private BigDecimal totalExpenses = BigDecimal.ZERO;
+        private BigDecimal paidExpenses = BigDecimal.ZERO;
+        private BigDecimal pendingExpenses = BigDecimal.ZERO;
+        private final List<ForecastEventResponse> events = new ArrayList<>();
     }
 
     @Transactional(readOnly = true)
