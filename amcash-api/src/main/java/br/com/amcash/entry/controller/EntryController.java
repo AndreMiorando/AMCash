@@ -9,6 +9,7 @@ import br.com.amcash.entry.dto.response.CreatedEntriesResponse;
 import br.com.amcash.entry.dto.response.EntryResponse;
 import br.com.amcash.entry.dto.response.MonthlyEntriesResponse;
 import br.com.amcash.entry.dto.response.SubexpenseResponse;
+import br.com.amcash.entry.entity.SeriesScope;
 import br.com.amcash.entry.service.EntryService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -66,9 +67,10 @@ public class EntryController {
     public EntryResponse update(
             @CurrentUser AuthenticatedUser user,
             @PathVariable UUID entryId,
+            @RequestParam(defaultValue = "CURRENT") SeriesScope scope,
             @Valid @RequestBody UpdateEntryRequest request) {
 
-        return entryService.update(user.userId(), entryId, request);
+        return entryService.update(user.userId(), entryId, request, scope);
     }
 
     @PatchMapping("/{entryId}/paid")
@@ -83,9 +85,10 @@ public class EntryController {
     @DeleteMapping("/{entryId}")
     public ResponseEntity<Void> delete(
             @CurrentUser AuthenticatedUser user,
-            @PathVariable UUID entryId) {
+            @PathVariable UUID entryId,
+            @RequestParam(defaultValue = "CURRENT") SeriesScope scope) {
 
-        entryService.delete(user.userId(), entryId);
+        entryService.delete(user.userId(), entryId, scope);
         return ResponseEntity.noContent().build();
     }
 
@@ -104,18 +107,20 @@ public class EntryController {
             @CurrentUser AuthenticatedUser user,
             @PathVariable UUID entryId,
             @PathVariable UUID subexpenseId,
+            @RequestParam(defaultValue = "CURRENT") SeriesScope scope,
             @Valid @RequestBody SubexpenseRequest request) {
 
-        return entryService.updateSubexpense(user.userId(), entryId, subexpenseId, request);
+        return entryService.updateSubexpense(user.userId(), entryId, subexpenseId, request, scope);
     }
 
     @DeleteMapping("/{entryId}/subexpenses/{subexpenseId}")
     public ResponseEntity<Void> deleteSubexpense(
             @CurrentUser AuthenticatedUser user,
             @PathVariable UUID entryId,
-            @PathVariable UUID subexpenseId) {
+            @PathVariable UUID subexpenseId,
+            @RequestParam(defaultValue = "CURRENT") SeriesScope scope) {
 
-        entryService.deleteSubexpense(user.userId(), entryId, subexpenseId);
+        entryService.deleteSubexpense(user.userId(), entryId, subexpenseId, scope);
         return ResponseEntity.noContent().build();
     }
 }

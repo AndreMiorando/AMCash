@@ -12,6 +12,7 @@ import br.com.amcash.entry.entity.EntryType;
 import br.com.amcash.entry.entity.EntryCategory;
 import br.com.amcash.entry.entity.FinancialEntry;
 import br.com.amcash.entry.entity.RecurrenceFrequency;
+import br.com.amcash.entry.entity.SeriesScope;
 import br.com.amcash.entry.entity.Subexpense;
 import br.com.amcash.entry.repository.FinancialEntryRepository;
 import br.com.amcash.entry.repository.SubexpenseRepository;
@@ -160,7 +161,7 @@ public class EntryService {
                 .map(FinancialEntry::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal expenses = entries.stream()
-                .filter(entry -> entry.getType() == EntryType.EXPENSE)
+                .filter(entry -> entry.getType() == EntryType.EXPENSE && !entry.isPaid())
                 .map(FinancialEntry::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -178,7 +179,7 @@ public class EntryService {
     }
 
     @Transactional
-    public EntryResponse update(UUID userId, UUID entryId, UpdateEntryRequest request) {
+    public EntryResponse update(UUID userId, UUID entryId, UpdateEntryRequest request, SeriesScope scope) {
         validateRecurrence(request.recurrenceFrequency(), request.recurrenceCount());
         validateSubexpenses(request.type(), request.hasSubexpenses());
         validateCategory(request.type(), request.category());
@@ -190,10 +191,25 @@ public class EntryService {
         }
 
         if (request.type() == EntryType.EXPENSE && request.hasSubexpenses()) {
-            return updateDetailedEntry(userId, selectedEntry, request);
+            return updateDetailedEntry(userId, selectedEntry, request, scope);
         }
 
         String baseName = baseName(request.name());
+        if (scope == SeriesScope.CURRENT && selectedEntry.getSeriesId() != null) {
+            selectedEntry.update(
+                    request.name().trim(),
+                    request.category(),
+                    request.type(),
+                    request.amount(),
+                    request.dueDate(),
+                    selectedEntry.getRecurrenceFrequency(),
+                    selectedEntry.getRecurrenceCount(),
+                    selectedEntry.getRecurrenceIndex(),
+                    selectedEntry.getSeriesId(),
+                    false);
+            return toResponse(entryRepository.save(selectedEntry));
+        }
+
         int totalOccurrences = request.recurrenceFrequency() == RecurrenceFrequency.NONE
                 ? 1
                 : request.recurrenceCount();
@@ -203,7 +219,9 @@ public class EntryService {
                 List<FinancialEntry> series = entryRepository
                         .findAllBySeriesIdAndUserIdOrderByRecurrenceIndexAsc(selectedEntry.getSeriesId(), userId);
                 entryRepository.deleteAll(series.stream()
-                        .filter(item -> !item.getId().equals(selectedEntry.getId()))
+                        .filter(item -> scope == SeriesScope.ALL
+                                ? !item.getId().equals(selectedEntry.getId())
+                                : item.getRecurrenceIndex() > selectedEntry.getRecurrenceIndex())
                         .toList());
             }
 
@@ -235,17 +253,27 @@ public class EntryService {
                 request.recurrenceFrequency(),
                 -selectedEntry.getRecurrenceIndex());
 
-        if (series.size() > totalOccurrences) {
-            entryRepository.deleteAll(new ArrayList<>(series.subList(totalOccurrences, series.size())));
-            series = new ArrayList<>(series.subList(0, totalOccurrences));
-        }
+        List<FinancialEntry> removed = series.stream()
+                .filter(item -> item.getRecurrenceIndex() >= totalOccurrences)
+                .toList();
+        if (!removed.isEmpty()) entryRepository.deleteAll(removed);
+        series.removeAll(removed);
 
-        for (int index = 0; index < totalOccurrences; index++) {
+        int startIndex = selectedEntry.getSeriesId() == null || scope == SeriesScope.ALL
+                ? 0
+                : selectedEntry.getRecurrenceIndex();
+        List<FinancialEntry> changed = new ArrayList<>();
+        for (int index = startIndex; index < totalOccurrences; index++) {
             String installmentName = baseName + " - " + (index + 1) + "/" + totalOccurrences;
             LocalDate installmentDate = recurrenceDate(initialDate, request.recurrenceFrequency(), index);
+            int occurrenceIndex = index;
+            FinancialEntry occurrence = series.stream()
+                    .filter(item -> item.getRecurrenceIndex() == occurrenceIndex)
+                    .findFirst()
+                    .orElse(null);
 
-            if (index < series.size()) {
-                series.get(index).update(
+            if (occurrence != null) {
+                occurrence.update(
                         installmentName,
                         request.category(),
                         request.type(),
@@ -256,8 +284,9 @@ public class EntryService {
                         index,
                         seriesId,
                         request.type() == EntryType.EXPENSE && request.hasSubexpenses());
+                changed.add(occurrence);
             } else {
-                series.add(new FinancialEntry(
+                FinancialEntry created = new FinancialEntry(
                         selectedEntry.getUser(),
                         installmentName,
                         request.category(),
@@ -268,18 +297,21 @@ public class EntryService {
                         totalOccurrences,
                         index,
                         seriesId,
-                        request.type() == EntryType.EXPENSE && request.hasSubexpenses()));
+                        request.type() == EntryType.EXPENSE && request.hasSubexpenses());
+                series.add(created);
+                changed.add(created);
             }
         }
 
-        entryRepository.saveAll(series);
-        return toResponse(series.get(selectedEntry.getRecurrenceIndex()));
+        entryRepository.saveAll(changed);
+        return toResponse(selectedEntry);
     }
 
     private EntryResponse updateDetailedEntry(
             UUID userId,
             FinancialEntry selectedEntry,
-            UpdateEntryRequest request) {
+            UpdateEntryRequest request,
+            SeriesScope scope) {
 
         List<FinancialEntry> series = selectedEntry.getSeriesId() == null
                 ? List.of(selectedEntry)
@@ -287,7 +319,13 @@ public class EntryService {
                         selectedEntry.getSeriesId(), userId);
         String name = baseName(request.name());
 
-        for (FinancialEntry entry : series) {
+        List<FinancialEntry> affected = series.stream()
+                .filter(entry -> scope == SeriesScope.CURRENT
+                        ? entry.getId().equals(selectedEntry.getId())
+                        : scope == SeriesScope.ALL
+                                || entry.getRecurrenceIndex() >= selectedEntry.getRecurrenceIndex())
+                .toList();
+        for (FinancialEntry entry : affected) {
             boolean selected = entry.getId().equals(selectedEntry.getId());
             entry.update(
                     name,
@@ -302,7 +340,7 @@ public class EntryService {
                     true);
         }
 
-        entryRepository.saveAll(series);
+        entryRepository.saveAll(affected);
         return toResponse(selectedEntry);
     }
 
@@ -314,8 +352,19 @@ public class EntryService {
     }
 
     @Transactional
-    public void delete(UUID userId, UUID entryId) {
-        entryRepository.delete(findOwnedEntry(userId, entryId));
+    public void delete(UUID userId, UUID entryId, SeriesScope scope) {
+        FinancialEntry selected = findOwnedEntry(userId, entryId);
+        if (scope == SeriesScope.CURRENT || selected.getSeriesId() == null) {
+            entryRepository.delete(selected);
+            return;
+        }
+        List<FinancialEntry> future = entryRepository
+                .findAllBySeriesIdAndUserIdOrderByRecurrenceIndexAsc(selected.getSeriesId(), userId)
+                .stream()
+                .filter(entry -> scope == SeriesScope.ALL
+                        || entry.getRecurrenceIndex() >= selected.getRecurrenceIndex())
+                .toList();
+        entryRepository.deleteAll(future);
     }
 
     @Transactional
@@ -379,10 +428,31 @@ public class EntryService {
             UUID userId,
             UUID entryId,
             UUID subexpenseId,
-            SubexpenseRequest request) {
+            SubexpenseRequest request,
+            SeriesScope scope) {
 
         validateRecurrence(request.recurrenceFrequency(), request.recurrenceCount());
         Subexpense selected = findOwnedSubexpense(userId, entryId, subexpenseId);
+        if (scope == SeriesScope.CURRENT && selected.getSeriesId() != null) {
+            BigDecimal currentTotal = sumSubexpenses(selected.getEntry().getId());
+            BigDecimal previousAmount = selected.getAmount();
+            selected.synchronize(
+                    selected.getEntry(),
+                    request.name().trim(),
+                    request.amount(),
+                    selected.getInstallmentDescription(),
+                    request.paid(),
+                    selected.getRecurrenceFrequency(),
+                    selected.getRecurrenceCount(),
+                    selected.getRecurrenceIndex(),
+                    selected.getSeriesId());
+            Subexpense saved = subexpenseRepository.save(selected);
+            updateEntryAmount(
+                    selected.getEntry(),
+                    currentTotal.subtract(previousAmount).add(request.amount()));
+            return toResponse(saved);
+        }
+
         List<Subexpense> originalSeries = selected.getSeriesId() == null
                 ? new ArrayList<>(List.of(selected))
                 : new ArrayList<>(subexpenseRepository
@@ -392,18 +462,24 @@ public class EntryService {
             originalSeries.add(selected);
         }
 
-        int selectedIndex = request.recurrenceFrequency() == RecurrenceFrequency.NONE
-                ? 0
-                : selected.getRecurrenceIndex();
+        int selectedIndex = selected.getSeriesId() == null ? 0 : selected.getRecurrenceIndex();
         if (request.recurrenceFrequency() != RecurrenceFrequency.NONE
                 && selectedIndex >= request.recurrenceCount()) {
             throw new BadRequestException("O total de repetições não pode ser menor que a repetição atual");
         }
 
+        List<Subexpense> affectedOriginalSeries = scope == SeriesScope.CURRENT_AND_FUTURE
+                ? originalSeries.stream()
+                        .filter(item -> item.getRecurrenceIndex() >= selectedIndex)
+                        .toList()
+                : originalSeries;
+
         List<FinancialEntry> parents;
+        List<FinancialEntry> targetParents;
         UUID itemSeriesId;
         if (request.recurrenceFrequency() == RecurrenceFrequency.NONE) {
             parents = List.of(selected.getEntry());
+            targetParents = parents;
             itemSeriesId = null;
         } else {
             LocalDate initialDate = recurrenceDate(
@@ -415,30 +491,36 @@ public class EntryService {
                 occurrenceDates.add(recurrenceDate(initialDate, request.recurrenceFrequency(), index));
             }
             parents = ensureDetailedParentEntries(selected.getEntry(), userId, occurrenceDates, request.amount());
+            int firstTargetIndex = scope == SeriesScope.CURRENT_AND_FUTURE ? selectedIndex : 0;
+            targetParents = parents.subList(firstTargetIndex, parents.size());
             itemSeriesId = selected.getSeriesId() == null ? UUID.randomUUID() : selected.getSeriesId();
         }
 
         Map<UUID, FinancialEntry> affectedParents = new LinkedHashMap<>();
-        originalSeries.forEach(item -> affectedParents.put(item.getEntry().getId(), item.getEntry()));
-        parents.forEach(parent -> affectedParents.put(parent.getId(), parent));
+        affectedOriginalSeries.forEach(item -> affectedParents.put(item.getEntry().getId(), item.getEntry()));
+        targetParents.forEach(parent -> affectedParents.put(parent.getId(), parent));
         Map<UUID, BigDecimal> storedTotals = sumSubexpensesByEntryIds(affectedParents.keySet());
         Map<FinancialEntry, BigDecimal> totals = new LinkedHashMap<>();
         affectedParents.forEach((affectedEntryId, parent) ->
                 totals.put(parent, storedTotals.getOrDefault(affectedEntryId, BigDecimal.ZERO)));
-        for (Subexpense item : originalSeries) {
+        for (Subexpense item : affectedOriginalSeries) {
             totals.computeIfPresent(item.getEntry(), (parent, total) -> total.subtract(item.getAmount()));
         }
-        for (FinancialEntry parent : parents) {
+        for (FinancialEntry parent : targetParents) {
             totals.computeIfPresent(parent, (item, total) -> total.add(request.amount()));
         }
 
         int totalOccurrences = request.recurrenceFrequency() == RecurrenceFrequency.NONE
                 ? 1
                 : request.recurrenceCount();
-        List<Subexpense> synchronizedSeries = new ArrayList<>(totalOccurrences);
-        for (int index = 0; index < totalOccurrences; index++) {
+        int firstSynchronizedIndex = scope == SeriesScope.CURRENT_AND_FUTURE
+                && request.recurrenceFrequency() != RecurrenceFrequency.NONE
+                ? selectedIndex
+                : 0;
+        List<Subexpense> synchronizedSeries = new ArrayList<>(totalOccurrences - firstSynchronizedIndex);
+        for (int index = firstSynchronizedIndex; index < totalOccurrences; index++) {
             int occurrenceIndex = index;
-            Subexpense occurrence = originalSeries.stream()
+            Subexpense occurrence = affectedOriginalSeries.stream()
                     .filter(item -> item.getRecurrenceIndex() == occurrenceIndex)
                     .findFirst()
                     .orElseGet(() -> new Subexpense(
@@ -460,22 +542,49 @@ public class EntryService {
             synchronizedSeries.add(occurrence);
         }
 
-        List<Subexpense> removed = originalSeries.stream()
+        List<Subexpense> removed = affectedOriginalSeries.stream()
                 .filter(item -> !synchronizedSeries.contains(item))
                 .toList();
         if (!removed.isEmpty()) subexpenseRepository.deleteAll(removed);
         subexpenseRepository.saveAll(synchronizedSeries);
         totals.forEach(FinancialEntry::updateAmount);
         entryRepository.saveAll(new ArrayList<>(totals.keySet()));
-        return toResponse(synchronizedSeries.get(selectedIndex));
+        return toResponse(synchronizedSeries.get(0));
     }
 
     @Transactional
-    public void deleteSubexpense(UUID userId, UUID entryId, UUID subexpenseId) {
-        Subexpense subexpense = findOwnedSubexpense(userId, entryId, subexpenseId);
-        BigDecimal currentTotal = sumSubexpenses(entryId);
-        subexpenseRepository.delete(subexpense);
-        updateEntryAmount(subexpense.getEntry(), currentTotal.subtract(subexpense.getAmount()));
+    public void deleteSubexpense(
+            UUID userId,
+            UUID entryId,
+            UUID subexpenseId,
+            SeriesScope scope) {
+        Subexpense selected = findOwnedSubexpense(userId, entryId, subexpenseId);
+        List<Subexpense> targets;
+        if (scope == SeriesScope.CURRENT || selected.getSeriesId() == null) {
+            targets = List.of(selected);
+        } else {
+            List<Subexpense> series = subexpenseRepository
+                    .findAllBySeriesIdAndEntryUserIdOrderByRecurrenceIndexAsc(selected.getSeriesId(), userId);
+            targets = scope == SeriesScope.ALL
+                    ? series
+                    : series.stream()
+                            .filter(item -> item.getRecurrenceIndex() >= selected.getRecurrenceIndex())
+                            .toList();
+        }
+
+        Map<UUID, FinancialEntry> affectedParents = new LinkedHashMap<>();
+        targets.forEach(item -> affectedParents.put(item.getEntry().getId(), item.getEntry()));
+        Map<UUID, BigDecimal> storedTotals = sumSubexpensesByEntryIds(affectedParents.keySet());
+        Map<FinancialEntry, BigDecimal> totals = new LinkedHashMap<>();
+        affectedParents.forEach((affectedEntryId, parent) ->
+                totals.put(parent, storedTotals.getOrDefault(affectedEntryId, BigDecimal.ZERO)));
+        targets.forEach(item -> totals.computeIfPresent(
+                item.getEntry(),
+                (parent, total) -> total.subtract(item.getAmount())));
+
+        subexpenseRepository.deleteAll(targets);
+        totals.forEach(FinancialEntry::updateAmount);
+        entryRepository.saveAll(new ArrayList<>(totals.keySet()));
     }
 
     private List<FinancialEntry> ensureDetailedParentEntries(

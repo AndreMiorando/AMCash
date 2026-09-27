@@ -8,6 +8,7 @@ import {
   ApiEntryCategory,
   ApiError,
   ApiRecurrenceFrequency,
+  ApiSeriesScope,
   ApiSubexpense,
   financeApi,
 } from "@/lib/api";
@@ -135,6 +136,8 @@ type Subexpense = {
   paid: boolean;
   recurrenceFrequency: RecurrenceFrequency;
   recurrenceCount: number;
+  recurrenceIndex: number;
+  seriesId?: string;
 };
 
 type IconName = Transaction["kind"] | "search" | "more" | "back" | "forward" | "home" | "edit" | "trash" | "plus" | "check";
@@ -220,14 +223,49 @@ function mapSubexpense(item: ApiSubexpense): Subexpense {
     paid: item.paid,
     recurrenceFrequency: recurrenceFromApi[item.recurrenceFrequency],
     recurrenceCount: item.recurrenceCount,
+    recurrenceIndex: item.recurrenceIndex,
+    seriesId: item.seriesId ?? undefined,
   };
+}
+
+function SeriesScopeDialog({
+  title,
+  description,
+  currentLabel = "Somente este lançamento",
+  danger = false,
+  busy,
+  onCancel,
+  onSelect,
+}: {
+  title: string;
+  description: string;
+  currentLabel?: string;
+  danger?: boolean;
+  busy: boolean;
+  onCancel: () => void;
+  onSelect: (scope: ApiSeriesScope) => void;
+}) {
+  return (
+    <div className="sheet-backdrop confirm-backdrop" role="presentation" onMouseDown={() => !busy && onCancel()}>
+      <section className={`confirm-dialog scope-dialog${danger ? " scope-dialog--danger" : ""}`} role="alertdialog" aria-modal="true" aria-labelledby="series-scope-title" onMouseDown={(event) => event.stopPropagation()}>
+        <h2 id="series-scope-title">{title}</h2>
+        <p>{description}</p>
+        <div className="scope-actions">
+          <button type="button" disabled={busy} onClick={onCancel}>Cancelar</button>
+          <button type="button" disabled={busy} onClick={() => onSelect("CURRENT")}>{currentLabel}</button>
+          <button type="button" disabled={busy} onClick={() => onSelect("CURRENT_AND_FUTURE")}>Este e os futuros</button>
+          <button type="button" disabled={busy} onClick={() => onSelect("ALL")}>Toda a série, incluindo anteriores</button>
+        </div>
+      </section>
+    </div>
+  );
 }
 
 function mapEntries(entries: ApiEntry[]) {
   let balance = 0;
   return entries.map((entry): Transaction => {
     const income = entry.type === "INCOME";
-    balance += income ? Number(entry.amount) : -Number(entry.amount);
+    balance += income ? Number(entry.amount) : entry.paid ? 0 : -Number(entry.amount);
     return {
       id: entry.id,
       name: entry.name,
@@ -888,7 +926,7 @@ function Dashboard({
   items: Transaction[];
   onOpen: (transaction: Transaction) => void;
   onCreate: (transaction: NewTransaction) => Promise<void>;
-  onDelete: (transaction: Transaction) => Promise<void>;
+  onDelete: (transaction: Transaction, scope: ApiSeriesScope) => Promise<void>;
   onPaid: (transaction: Transaction) => Promise<void>;
   onMonthChange: (year: number, month: number) => void;
   initialPeriod: { year: number; month: number };
@@ -921,7 +959,7 @@ function Dashboard({
     return year === selectedMonth.getFullYear() && month === selectedMonth.getMonth() + 1;
   });
   const totalIncome = visibleItems.filter((item) => item.income).reduce((total, item) => total + item.value, 0);
-  const totalExpenses = visibleItems.filter((item) => !item.income).reduce((total, item) => total + item.value, 0);
+  const totalExpenses = visibleItems.filter((item) => !item.income && !item.paid).reduce((total, item) => total + item.value, 0);
   const monthBalance = totalIncome - totalExpenses;
   const defaultDay = selectedMonth.getFullYear() === today.getFullYear() && selectedMonth.getMonth() === today.getMonth() ? today.getDate() : 1;
   const defaultDate = `${selectedMonth.getFullYear()}-${String(selectedMonth.getMonth() + 1).padStart(2, "0")}-${String(defaultDay).padStart(2, "0")}`;
@@ -964,12 +1002,12 @@ function Dashboard({
     }
   }
 
-  async function confirmDeleteTransaction() {
+  async function confirmDeleteTransaction(scope: ApiSeriesScope = "CURRENT") {
     if (!pendingDelete || isDeleting) return;
     setIsDeleting(true);
     setActionError("");
     try {
-      await onDelete(pendingDelete);
+      await onDelete(pendingDelete, scope);
       setPendingDelete(null);
     } catch (requestError) {
       setActionError(messageFromError(requestError));
@@ -1085,7 +1123,16 @@ function Dashboard({
         />
       )}
 
-      {pendingDelete && (
+      {pendingDelete?.seriesId ? (
+        <SeriesScopeDialog
+          title="Quais lançamentos deseja excluir?"
+          description={`${pendingDelete.subexpenses.length > 0 ? "Os itens dessas despesas também serão excluídos. " : ""}Escolha se a exclusão vale só para este lançamento, para este e os futuros ou para toda a série, incluindo os anteriores.`}
+          danger
+          busy={isDeleting}
+          onCancel={() => setPendingDelete(null)}
+          onSelect={confirmDeleteTransaction}
+        />
+      ) : pendingDelete && (
         <div className="sheet-backdrop confirm-backdrop" role="presentation" onMouseDown={() => !isDeleting && setPendingDelete(null)}>
           <section className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="swipe-delete-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="confirm-icon"><Icon name="trash" /></div>
@@ -1093,7 +1140,7 @@ function Dashboard({
             <p>{pendingDelete.subexpenses.length > 0
               ? `Esta despesa possui ${pendingDelete.subexpenses.length} ${pendingDelete.subexpenses.length === 1 ? "item" : "itens"}. Todos serão excluídos junto com ela.`
               : "Esta despesa será excluída permanentemente."}</p>
-            <div><button type="button" disabled={isDeleting} onClick={() => setPendingDelete(null)}>Cancelar</button><button type="button" disabled={isDeleting} onClick={confirmDeleteTransaction}>{isDeleting ? "Excluindo..." : "Excluir"}</button></div>
+            <div><button type="button" disabled={isDeleting} onClick={() => setPendingDelete(null)}>Cancelar</button><button type="button" disabled={isDeleting} onClick={() => confirmDeleteTransaction("CURRENT")}>{isDeleting ? "Excluindo..." : "Excluir"}</button></div>
           </section>
         </div>
       )}
@@ -1109,41 +1156,65 @@ function SubexpenseEditor({
 }: {
   item: Subexpense;
   onClose: () => void;
-  onSave: (item: Subexpense) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
+  onSave: (item: Subexpense, scope: ApiSeriesScope) => Promise<void>;
+  onDelete: (id: string, scope: ApiSeriesScope) => Promise<void>;
 }) {
   const [draft, setDraft] = useState(item);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [pendingAction, setPendingAction] = useState<"save" | "delete" | null>(null);
   const amountValue = parseCurrencyInput(draft.amount);
   const itemRecurrenceIsValid = draft.recurrenceFrequency === "none" || (Number.isInteger(draft.recurrenceCount) && draft.recurrenceCount >= 2 && draft.recurrenceCount <= 120);
   const canSave = draft.name.trim().length > 0 && Number.isFinite(amountValue) && amountValue > 0 && itemRecurrenceIsValid;
 
-  async function save() {
+  async function executeSave(scope: ApiSeriesScope) {
     if (!canSave || isSubmitting) return;
+    setPendingAction(null);
     setIsSubmitting(true);
     setError("");
     try {
-      await onSave({ ...draft, name: draft.name.trim(), amount: completeCurrencyInput(draft.amount) });
+      await onSave({ ...draft, name: draft.name.trim(), amount: completeCurrencyInput(draft.amount) }, scope);
     } catch (requestError) {
       setError(messageFromError(requestError));
       setIsSubmitting(false);
     }
   }
 
-  async function remove() {
+  function save() {
+    if (!canSave || isSubmitting) return;
+    if (item.id && item.seriesId) {
+      setPendingAction("save");
+      return;
+    }
+    void executeSave("CURRENT");
+  }
+
+  async function executeRemove(scope: ApiSeriesScope) {
     if (!item.id || isSubmitting) {
       onClose();
       return;
     }
+    setPendingAction(null);
     setIsSubmitting(true);
     setError("");
     try {
-      await onDelete(item.id);
+      await onDelete(item.id, scope);
     } catch (requestError) {
       setError(messageFromError(requestError));
       setIsSubmitting(false);
     }
+  }
+
+  function remove() {
+    if (!item.id) {
+      onClose();
+      return;
+    }
+    if (item.seriesId) {
+      setPendingAction("delete");
+      return;
+    }
+    void executeRemove("CURRENT");
   }
 
   return (
@@ -1198,6 +1269,17 @@ function SubexpenseEditor({
           <button type="button" className="primary-button" disabled={!canSave || isSubmitting} onClick={save}>{isSubmitting ? "Salvando..." : "Salvar alteração"}</button>
         </div>
       </section>
+      {pendingAction && (
+        <SeriesScopeDialog
+          title={pendingAction === "save" ? "Quais itens deseja alterar?" : "Quais itens deseja excluir?"}
+          description="Escolha se a ação vale só para este item, para este e os futuros ou para toda a série, incluindo os anteriores."
+          currentLabel="Somente este item"
+          danger={pendingAction === "delete"}
+          busy={isSubmitting}
+          onCancel={() => setPendingAction(null)}
+          onSelect={(scope) => pendingAction === "save" ? void executeSave(scope) : void executeRemove(scope)}
+        />
+      )}
     </div>
   );
 }
@@ -1210,7 +1292,7 @@ function DetailScreen({
 }: {
   transaction: Transaction;
   onBack: () => void;
-  onDelete: (id: string) => Promise<void>;
+  onDelete: (id: string, scope: ApiSeriesScope) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
   const [type, setType] = useState<"expense" | "income">(transaction.income ? "income" : "expense");
@@ -1223,6 +1305,7 @@ function DetailScreen({
   const [subexpenses, setSubexpenses] = useState<Subexpense[]>(transaction.subexpenses);
   const [editing, setEditing] = useState<Subexpense | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmSaveScope, setConfirmSaveScope] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const numericRecurrenceCount = Number(recurrenceCount);
@@ -1236,7 +1319,7 @@ function DetailScreen({
     setSubexpenses(transaction.subexpenses);
   }, [transaction.subexpenses, transaction.value]);
 
-  async function saveDetails() {
+  async function executeSaveDetails(scope: ApiSeriesScope) {
     const numericAmount = parseCurrencyInput(amount);
     if (!name.trim() || !category || !dueDate || !Number.isFinite(numericAmount) || numericAmount <= 0 || !recurrenceIsValid || isSaving) return;
     setIsSaving(true);
@@ -1251,7 +1334,7 @@ function DetailScreen({
         recurrenceFrequency: transaction.hasSubexpenses ? "NONE" : recurrenceToApi[recurrenceFrequency],
         recurrenceCount: transaction.hasSubexpenses || recurrenceFrequency === "none" ? 0 : numericRecurrenceCount,
         hasSubexpenses: type === "expense" && transaction.hasSubexpenses,
-      });
+      }, scope);
       await onChanged();
       onBack();
     } catch (requestError) {
@@ -1259,6 +1342,14 @@ function DetailScreen({
     } finally {
       setIsSaving(false);
     }
+  }
+
+  function saveDetails() {
+    if (transaction.seriesId) {
+      setConfirmSaveScope(true);
+      return;
+    }
+    void executeSaveDetails("CURRENT");
   }
 
   function addSubexpense() {
@@ -1271,11 +1362,12 @@ function DetailScreen({
       paid: false,
       recurrenceFrequency: "none",
       recurrenceCount: 0,
+      recurrenceIndex: 0,
     };
     setEditing(newItem);
   }
 
-  async function saveSubexpense(item: Subexpense) {
+  async function saveSubexpense(item: Subexpense, scope: ApiSeriesScope) {
     const payload = {
       name: item.name,
       amount: parseCurrencyInput(item.amount),
@@ -1285,7 +1377,7 @@ function DetailScreen({
       recurrenceCount: item.recurrenceFrequency === "none" ? 0 : item.recurrenceCount,
     };
     if (item.id) {
-      const updated = mapSubexpense(await financeApi.updateSubexpense(transaction.id, item.id, payload));
+      const updated = mapSubexpense(await financeApi.updateSubexpense(transaction.id, item.id, payload, scope));
       setSubexpenses((current) => current.map((currentItem) => currentItem.id === updated.id ? updated : currentItem));
     } else {
       const created = mapSubexpense(await financeApi.addSubexpense(transaction.id, payload));
@@ -1295,19 +1387,19 @@ function DetailScreen({
     await onChanged();
   }
 
-  async function deleteSubexpense(subexpenseId: string) {
-    await financeApi.deleteSubexpense(transaction.id, subexpenseId);
+  async function deleteSubexpense(subexpenseId: string, scope: ApiSeriesScope) {
+    await financeApi.deleteSubexpense(transaction.id, subexpenseId, scope);
     setSubexpenses((current) => current.filter((item) => item.id !== subexpenseId));
     setEditing(null);
     await onChanged();
   }
 
-  async function deleteEntry() {
+  async function deleteEntry(scope: ApiSeriesScope = "CURRENT") {
     if (isSaving) return;
     setIsSaving(true);
     setError("");
     try {
-      await onDelete(transaction.id);
+      await onDelete(transaction.id, scope);
     } catch (requestError) {
       setConfirmDelete(false);
       setError(messageFromError(requestError));
@@ -1402,13 +1494,32 @@ function DetailScreen({
         />
       )}
 
-      {confirmDelete && (
+      {confirmSaveScope && (
+        <SeriesScopeDialog
+          title="Quais lançamentos deseja alterar?"
+          description="Escolha se a alteração vale só para este lançamento, para este e os futuros ou para toda a série, incluindo os anteriores."
+          busy={isSaving}
+          onCancel={() => setConfirmSaveScope(false)}
+          onSelect={(scope) => { setConfirmSaveScope(false); void executeSaveDetails(scope); }}
+        />
+      )}
+
+      {confirmDelete && transaction.seriesId ? (
+        <SeriesScopeDialog
+          title="Quais lançamentos deseja excluir?"
+          description={`${subexpenses.length > 0 ? "Os itens dessas despesas também serão excluídos. " : ""}Escolha se a exclusão vale só para este lançamento, para este e os futuros ou para toda a série, incluindo os anteriores.`}
+          danger
+          busy={isSaving}
+          onCancel={() => setConfirmDelete(false)}
+          onSelect={(scope) => void deleteEntry(scope)}
+        />
+      ) : confirmDelete && (
         <div className="sheet-backdrop confirm-backdrop" role="presentation" onMouseDown={() => setConfirmDelete(false)}>
           <section className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="confirm-icon"><Icon name="trash" /></div>
             <h2 id="delete-title">Excluir lançamento?</h2>
             <p>{subexpenses.length > 0 ? `Esta despesa possui ${subexpenses.length} ${subexpenses.length === 1 ? "item" : "itens"}. Todos serão excluídos junto com ela.` : "Esta despesa será excluída permanentemente."}</p>
-            <div><button type="button" disabled={isSaving} onClick={() => setConfirmDelete(false)}>Cancelar</button><button type="button" disabled={isSaving} onClick={deleteEntry}>{isSaving ? "Excluindo..." : "Excluir"}</button></div>
+            <div><button type="button" disabled={isSaving} onClick={() => setConfirmDelete(false)}>Cancelar</button><button type="button" disabled={isSaving} onClick={() => deleteEntry("CURRENT")}>{isSaving ? "Excluindo..." : "Excluir"}</button></div>
           </section>
         </div>
       )}
@@ -1539,14 +1650,14 @@ export default function Home() {
     await loadMonth(period.year, period.month);
   }
 
-  async function deleteTransaction(entryId: string) {
-    await financeApi.delete(entryId);
+  async function deleteTransaction(entryId: string, scope: ApiSeriesScope) {
+    await financeApi.delete(entryId, scope);
     setSelected(null);
     await loadMonth(period.year, period.month);
   }
 
-  async function deleteDashboardTransaction(transaction: Transaction) {
-    await deleteTransaction(transaction.id);
+  async function deleteDashboardTransaction(transaction: Transaction, scope: ApiSeriesScope) {
+    await deleteTransaction(transaction.id, scope);
   }
 
   async function markTransactionPaid(transaction: Transaction) {
@@ -1559,7 +1670,7 @@ export default function Home() {
   }
 
   const idleCreate = async () => {};
-  const idleTransactionAction = async (_transaction: Transaction) => {};
+  const idleTransactionAction = async (_transaction: Transaction, _scope?: ApiSeriesScope) => {};
   const idleMonthChange = () => {};
 
   if (screen === "checking" || screen === "refreshing") return <Dashboard items={items} onOpen={setSelected} onCreate={idleCreate} onDelete={idleTransactionAction} onPaid={idleTransactionAction} onMonthChange={idleMonthChange} initialPeriod={period} isLoading />;
