@@ -7,6 +7,7 @@ import {
   ApiEntry,
   ApiEntryCategory,
   ApiError,
+  ApiForecast,
   ApiRecurrenceFrequency,
   ApiSeriesScope,
   ApiSubexpense,
@@ -140,7 +141,7 @@ type Subexpense = {
   seriesId?: string;
 };
 
-type IconName = Transaction["kind"] | "search" | "more" | "back" | "forward" | "home" | "edit" | "trash" | "plus" | "check";
+type IconName = Transaction["kind"] | "search" | "more" | "back" | "forward" | "home" | "radar" | "edit" | "trash" | "plus" | "check";
 
 function Icon({ name }: { name: IconName }) {
   if (name === "more") {
@@ -152,6 +153,7 @@ function Icon({ name }: { name: IconName }) {
     back: <path d="m15 18-6-6 6-6" />,
     forward: <path d="m9 18 6-6-6-6" />,
     home: <><path d="m3.5 10 8.5-7 8.5 7" /><path d="M5.5 9v11h13V9M9.5 20v-6h5v6" /></>,
+    radar: <><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /><path d="m3 7 6-4 6 6 6-5" /></>,
     food: <><path d="M6 3v7M9 3v7M6 7h3M7.5 10v11" /><path d="M15.5 3v18M15.5 3c3 2 3.2 7 0 9" /></>,
     card: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18M7 15h4" /></>,
     shield: <><path d="M12 3 5 6v5c0 4.6 3 8.2 7 10 4-1.8 7-5.4 7-10V6l-7-3Z" /><path d="m9.5 12 1.7 1.7 3.5-4" /></>,
@@ -165,6 +167,25 @@ function Icon({ name }: { name: IconName }) {
   };
 
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+}
+
+function BottomNavigation({ active, onHome, onRadar }: {
+  active: "home" | "radar";
+  onHome: () => void;
+  onRadar: () => void;
+}) {
+  return (
+    <nav className="bottom-nav" aria-label="Navegação principal">
+      <button type="button" className={`nav-item${active === "home" ? " active" : ""}`} onClick={onHome} aria-current={active === "home" ? "page" : undefined}>
+        <Icon name="home" />
+        <span>Início</span>
+      </button>
+      <button type="button" className={`nav-item${active === "radar" ? " active" : ""}`} onClick={onRadar} aria-current={active === "radar" ? "page" : undefined}>
+        <Icon name="radar" />
+        <span>Radar</span>
+      </button>
+    </nav>
+  );
 }
 
 function formatCurrency(value: number) {
@@ -918,6 +939,7 @@ function Dashboard({
   onCreate,
   onDelete,
   onPaid,
+  onRadar,
   onMonthChange,
   initialPeriod,
   error = "",
@@ -928,6 +950,7 @@ function Dashboard({
   onCreate: (transaction: NewTransaction) => Promise<void>;
   onDelete: (transaction: Transaction, scope: ApiSeriesScope) => Promise<void>;
   onPaid: (transaction: Transaction) => Promise<void>;
+  onRadar: () => void;
   onMonthChange: (year: number, month: number) => void;
   initialPeriod: { year: number; month: number };
   error?: string;
@@ -1065,12 +1088,7 @@ function Dashboard({
         <div><span>Saldo do mês</span><strong>{monthBalance < 0 ? "- " : ""}{formatCurrency(monthBalance)}</strong></div>
       </section>
 
-      <nav className="bottom-nav" aria-label="Navegação principal">
-        <a href="#inicio" className="nav-home" aria-current="page">
-          <Icon name="home" />
-          <span>Início</span>
-        </a>
-      </nav>
+      <BottomNavigation active="home" onHome={() => {}} onRadar={onRadar} />
 
       {isMonthPickerOpen && (
         <div className="month-picker-backdrop" role="presentation" onMouseDown={() => setIsMonthPickerOpen(false)}>
@@ -1315,8 +1333,11 @@ function DetailScreen({
     : 0;
 
   useEffect(() => {
-    setAmount(transaction.value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-    setSubexpenses(transaction.subexpenses);
+    const synchronize = window.setTimeout(() => {
+      setAmount(transaction.value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+      setSubexpenses(transaction.subexpenses);
+    }, 0);
+    return () => window.clearTimeout(synchronize);
   }, [transaction.subexpenses, transaction.value]);
 
   async function executeSaveDetails(scope: ApiSeriesScope) {
@@ -1527,8 +1548,157 @@ function DetailScreen({
   );
 }
 
+function RadarScreen({ onHome }: { onHome: () => void }) {
+  const now = new Date();
+  const startYear = now.getFullYear();
+  const startMonth = now.getMonth() + 1;
+  const [horizon, setHorizon] = useState<6 | 12>(6);
+  const [forecast, setForecast] = useState<ApiForecast | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    financeApi.forecast(startYear, startMonth, horizon)
+      .then((response) => {
+        if (active) setForecast(response);
+      })
+      .catch((requestError) => {
+        if (active) setError(messageFromError(requestError));
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => { active = false; };
+  }, [horizon, startMonth, startYear]);
+
+  function changeHorizon(months: 6 | 12) {
+    if (months === horizon) return;
+    setIsLoading(true);
+    setError("");
+    setForecast(null);
+    setHorizon(months);
+  }
+
+  const timeline = forecast?.timeline ?? [];
+  const current = timeline[0];
+  const totalPending = timeline.reduce((total, period) => total + Number(period.pendingExpenses), 0);
+  const lowestBalance = timeline.reduce<(typeof timeline)[number] | undefined>((lowest, period) => (
+    !lowest || Number(period.freeBalance) < Number(lowest.freeBalance) ? period : lowest
+  ), undefined);
+  const endingEvent = timeline.flatMap((period) => period.events.map((event) => ({ event, period })))
+    .find(({ event }) => event.type === "ENDING");
+  const monthName = (year: number, month: number, style: "long" | "short" = "long") => (
+    new Intl.DateTimeFormat("pt-BR", { month: style, year: "numeric" }).format(new Date(year, month - 1, 1))
+  );
+  const signedCurrency = (value: number) => `${value < 0 ? "- " : "+ "}${formatCurrency(value)}`;
+
+  return (
+    <main className="dashboard-screen radar-screen">
+      <header className="dashboard-header radar-header">
+        <div className="header-brand" aria-label="AMCash">
+          <Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority />
+          <span><b>AM</b>Cash</span>
+        </div>
+        <span className="radar-header-label">RADAR FINANCEIRO</span>
+      </header>
+
+      <div className="radar-content">
+        <section className="radar-intro">
+          <div>
+            <span>PREVISÃO</span>
+            <h1>Seus próximos meses</h1>
+            <p>Veja quando seus compromissos começam, terminam e quanto fica livre.</p>
+          </div>
+          <div className="radar-horizon" aria-label="Horizonte da previsão">
+            <button type="button" className={horizon === 6 ? "active" : ""} onClick={() => changeHorizon(6)}>6 meses</button>
+            <button type="button" className={horizon === 12 ? "active" : ""} onClick={() => changeHorizon(12)}>12 meses</button>
+          </div>
+        </section>
+
+        {error && <p className="auth-error" role="alert">{error}</p>}
+        {isLoading ? (
+          <div className="radar-loading" role="status"><div className="loader" aria-hidden="true" /><span>Calculando sua previsão</span></div>
+        ) : (
+          <>
+            <section className="radar-summary" aria-label="Resumo da previsão">
+              <article className="radar-balance-card">
+                <span>Saldo livre neste mês</span>
+                <strong className={Number(current?.freeBalance ?? 0) < 0 ? "negative" : ""}>
+                  {Number(current?.freeBalance ?? 0) < 0 ? "- " : ""}{formatCurrency(Number(current?.freeBalance ?? 0))}
+                </strong>
+                <small>Receitas menos despesas que ainda estão pendentes.</small>
+              </article>
+              <div className="radar-mini-cards">
+                <article><span>Pendente no período</span><strong>{formatCurrency(totalPending)}</strong></article>
+                <article><span>Menor saldo previsto</span><strong className={Number(lowestBalance?.freeBalance ?? 0) < 0 ? "negative" : ""}>{Number(lowestBalance?.freeBalance ?? 0) < 0 ? "- " : ""}{formatCurrency(Number(lowestBalance?.freeBalance ?? 0))}</strong><small>{lowestBalance ? monthName(lowestBalance.year, lowestBalance.month, "short") : "—"}</small></article>
+              </div>
+            </section>
+
+            {endingEvent && (
+              <section className="radar-insight">
+                <span className="radar-insight-icon"><Icon name="radar" /></span>
+                <div>
+                  <span>ALÍVIO À FRENTE</span>
+                  <strong>{endingEvent.event.name} termina em {monthName(endingEvent.period.year, endingEvent.period.month)}.</strong>
+                  <p>{endingEvent.event.recurrenceFrequency === "MONTHLY"
+                    ? `${formatCurrency(Number(endingEvent.event.amount))} deixarão de comprometer os meses seguintes.`
+                    : `Esse compromisso de ${formatCurrency(Number(endingEvent.event.amount))} será encerrado.`}</p>
+                </div>
+              </section>
+            )}
+
+            <section className="radar-timeline" aria-label="Previsão mensal">
+              {timeline.map((period, index) => {
+                const freeBalance = Number(period.freeBalance);
+                const expenseChange = Number(period.expenseChange);
+                const income = Number(period.income);
+                const pending = Number(period.pendingExpenses);
+                const barWidth = income > 0 ? Math.min(100, Math.round((pending / income) * 100)) : pending > 0 ? 100 : 0;
+                return (
+                  <article className="forecast-month" key={`${period.year}-${period.month}`}>
+                    <div className="forecast-month-heading">
+                      <div><span>{index === 0 ? "MÊS ATUAL" : `EM ${index} ${index === 1 ? "MÊS" : "MESES"}`}</span><h2>{monthName(period.year, period.month)}</h2></div>
+                      <div className="forecast-free"><span>Saldo livre</span><strong className={freeBalance < 0 ? "negative" : ""}>{freeBalance < 0 ? "- " : ""}{formatCurrency(freeBalance)}</strong></div>
+                    </div>
+                    <div className="forecast-values">
+                      <div><span>Receitas</span><strong>{formatCurrency(Number(period.income))}</strong></div>
+                      <div><span>Pendentes</span><strong>{formatCurrency(pending)}</strong></div>
+                      <div><span>Já pagas</span><strong>{formatCurrency(Number(period.paidExpenses))}</strong></div>
+                    </div>
+                    <div className="forecast-bar" aria-label={`${barWidth}% das receitas comprometidas`}><span style={{ width: `${barWidth}%` }} /></div>
+                    <p className={`forecast-comparison${expenseChange > 0 ? " worse" : expenseChange < 0 ? " better" : ""}`}>
+                      {expenseChange === 0 ? "Compromissos estáveis em relação ao mês anterior." : expenseChange > 0
+                        ? `${signedCurrency(expenseChange)} em despesas comparado ao mês anterior.`
+                        : `${formatCurrency(expenseChange)} a menos em despesas que no mês anterior.`}
+                    </p>
+                    {period.events.length > 0 && (
+                      <div className="forecast-events">
+                        {period.events.map((event) => (
+                          <div className={`forecast-event ${event.type === "ENDING" ? "ending" : "starting"}`} key={`${event.type}-${event.source}-${event.name}-${event.date}`}>
+                            <span>{event.type === "ENDING" ? "Termina" : "Começa"}</span>
+                            <strong>{event.name}</strong>
+                            <b>{formatCurrency(Number(event.amount))}</b>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </section>
+          </>
+        )}
+      </div>
+
+      <BottomNavigation active="radar" onHome={onHome} onRadar={() => {}} />
+    </main>
+  );
+}
+
 export default function Home() {
   const [screen, setScreen] = useState<"checking" | "auth" | "loading" | "refreshing" | "app">("checking");
+  const [activeTab, setActiveTab] = useState<"home" | "radar">("home");
   const [items, setItems] = useState<Transaction[]>([]);
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -1670,12 +1840,13 @@ export default function Home() {
   }
 
   const idleCreate = async () => {};
-  const idleTransactionAction = async (_transaction: Transaction, _scope?: ApiSeriesScope) => {};
+  const idleTransactionAction = async () => {};
   const idleMonthChange = () => {};
 
-  if (screen === "checking" || screen === "refreshing") return <Dashboard items={items} onOpen={setSelected} onCreate={idleCreate} onDelete={idleTransactionAction} onPaid={idleTransactionAction} onMonthChange={idleMonthChange} initialPeriod={period} isLoading />;
+  if (screen === "checking" || screen === "refreshing") return <Dashboard items={items} onOpen={setSelected} onCreate={idleCreate} onDelete={idleTransactionAction} onPaid={idleTransactionAction} onRadar={() => setActiveTab("radar")} onMonthChange={idleMonthChange} initialPeriod={period} isLoading />;
   if (screen === "auth") return <AuthScreen onAuthenticated={() => setScreen("loading")} />;
   if (screen === "loading") return <LoadingScreen />;
+  if (activeTab === "radar") return <RadarScreen onHome={() => setActiveTab("home")} />;
   if (selected) {
     return (
       <DetailScreen
@@ -1687,5 +1858,5 @@ export default function Home() {
     );
   }
 
-  return <Dashboard items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onMonthChange={changeMonth} initialPeriod={period} error={error} isLoading={isLoading} />;
+  return <Dashboard items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onRadar={() => setActiveTab("radar")} onMonthChange={changeMonth} initialPeriod={period} error={error} isLoading={isLoading} />;
 }

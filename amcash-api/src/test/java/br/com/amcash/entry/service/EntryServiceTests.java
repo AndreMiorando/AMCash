@@ -648,6 +648,83 @@ class EntryServiceTests {
         verify(subexpenseRepository).deleteAll(List.of(second, third));
     }
 
+    @Test
+    void shouldBuildSixMonthForecastWithTwoBulkReadsAndPartialItemPayments() {
+        UUID userId = UUID.randomUUID();
+        UUID notebookSeriesId = UUID.randomUUID();
+        User user = user(userId);
+        FinancialEntry septemberExpense = entry(
+                user, EntryType.EXPENSE, "100.00", LocalDate.of(2026, 9, 10), false);
+        FinancialEntry octoberIncome = entry(
+                user, EntryType.INCOME, "1000.00", LocalDate.of(2026, 10, 5), false);
+        FinancialEntry detailed = entry(
+                user, EntryType.EXPENSE, "300.00", LocalDate.of(2026, 10, 8), true);
+        FinancialEntry notebookFirst = new FinancialEntry(
+                user, "Notebook - 1/2", EntryCategory.SHOPPING, EntryType.EXPENSE,
+                new BigDecimal("100.00"), LocalDate.of(2026, 10, 12),
+                RecurrenceFrequency.MONTHLY, 2, 0, notebookSeriesId, false);
+        FinancialEntry novemberIncome = entry(
+                user, EntryType.INCOME, "1000.00", LocalDate.of(2026, 11, 5), false);
+        FinancialEntry notebookLast = new FinancialEntry(
+                user, "Notebook - 2/2", EntryCategory.SHOPPING, EntryType.EXPENSE,
+                new BigDecimal("100.00"), LocalDate.of(2026, 11, 12),
+                RecurrenceFrequency.MONTHLY, 2, 1, notebookSeriesId, false);
+        notebookFirst.setId(UUID.randomUUID());
+        notebookLast.setId(UUID.randomUUID());
+        Subexpense paidItem = new Subexpense(
+                detailed, "Streaming", new BigDecimal("100.00"), null, true);
+        Subexpense pendingItem = new Subexpense(
+                detailed, "Mercado", new BigDecimal("200.00"), null, false);
+        paidItem.setId(UUID.randomUUID());
+        pendingItem.setId(UUID.randomUUID());
+
+        when(entryRepository.findAllByUserIdAndDueDateBetweenOrderByDueDateAscCreatedAtAsc(
+                userId, LocalDate.of(2026, 9, 1), LocalDate.of(2027, 3, 31)))
+                .thenReturn(List.of(
+                        septemberExpense,
+                        octoberIncome,
+                        detailed,
+                        notebookFirst,
+                        novemberIncome,
+                        notebookLast));
+        when(subexpenseRepository.findAllByEntryIdInOrderByEntryIdAscCreatedAtAsc(
+                List.of(detailed.getId())))
+                .thenReturn(List.of(paidItem, pendingItem));
+
+        var response = entryService.forecast(userId, 2026, 10, 6);
+
+        assertEquals(6, response.timeline().size());
+        var october = response.timeline().get(0);
+        assertEquals(new BigDecimal("1000.00"), october.income());
+        assertEquals(new BigDecimal("400.00"), october.totalExpenses());
+        assertEquals(new BigDecimal("100.00"), october.paidExpenses());
+        assertEquals(new BigDecimal("300.00"), october.pendingExpenses());
+        assertEquals(new BigDecimal("600.00"), october.projectedBalance());
+        assertEquals(new BigDecimal("700.00"), october.freeBalance());
+        assertEquals(new BigDecimal("300.00"), october.expenseChange());
+        assertEquals("STARTING", october.events().get(0).type());
+        assertEquals("Notebook", october.events().get(0).name());
+
+        var november = response.timeline().get(1);
+        assertEquals(new BigDecimal("900.00"), november.freeBalance());
+        assertEquals(new BigDecimal("-300.00"), november.expenseChange());
+        assertEquals("ENDING", november.events().get(0).type());
+        assertEquals("Notebook", november.events().get(0).name());
+
+        verify(entryRepository).findAllByUserIdAndDueDateBetweenOrderByDueDateAscCreatedAtAsc(
+                userId, LocalDate.of(2026, 9, 1), LocalDate.of(2027, 3, 31));
+        verify(subexpenseRepository).findAllByEntryIdInOrderByEntryIdAscCreatedAtAsc(
+                List.of(detailed.getId()));
+    }
+
+    @Test
+    void shouldRejectUnsupportedForecastHorizon() {
+        assertThrows(BadRequestException.class, () ->
+                entryService.forecast(UUID.randomUUID(), 2026, 10, 9));
+        verify(entryRepository, never())
+                .findAllByUserIdAndDueDateBetweenOrderByDueDateAscCreatedAtAsc(any(), any(), any());
+    }
+
     private FinancialEntryRepository.SeriesStatistics seriesStatistics(
             UUID seriesId,
             long totalOccurrences,
