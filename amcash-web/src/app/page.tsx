@@ -6,8 +6,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ApiEntry,
   ApiEntryCategory,
+  ApiDayOfWeek,
   ApiError,
   ApiForecast,
+  ApiGoal,
   ApiRecurrenceFrequency,
   ApiSeriesScope,
   ApiSubexpense,
@@ -141,7 +143,7 @@ type Subexpense = {
   seriesId?: string;
 };
 
-type IconName = Transaction["kind"] | "search" | "more" | "back" | "forward" | "home" | "radar" | "edit" | "trash" | "plus" | "check";
+type IconName = Transaction["kind"] | "search" | "more" | "back" | "forward" | "home" | "radar" | "target" | "edit" | "trash" | "plus" | "check";
 
 function Icon({ name }: { name: IconName }) {
   if (name === "more") {
@@ -154,6 +156,7 @@ function Icon({ name }: { name: IconName }) {
     forward: <path d="m9 18 6-6-6-6" />,
     home: <><path d="m3.5 10 8.5-7 8.5 7" /><path d="M5.5 9v11h13V9M9.5 20v-6h5v6" /></>,
     radar: <><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /><path d="m3 7 6-4 6 6 6-5" /></>,
+    target: <><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /><path d="M12 2v3M22 12h-3M12 22v-3M2 12h3" /></>,
     food: <><path d="M6 3v7M9 3v7M6 7h3M7.5 10v11" /><path d="M15.5 3v18M15.5 3c3 2 3.2 7 0 9" /></>,
     card: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18M7 15h4" /></>,
     shield: <><path d="M12 3 5 6v5c0 4.6 3 8.2 7 10 4-1.8 7-5.4 7-10V6l-7-3Z" /><path d="m9.5 12 1.7 1.7 3.5-4" /></>,
@@ -169,10 +172,11 @@ function Icon({ name }: { name: IconName }) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-function BottomNavigation({ active, onHome, onRadar }: {
-  active: "home" | "radar";
+function BottomNavigation({ active, onHome, onRadar, onGoals }: {
+  active: "home" | "radar" | "goals";
   onHome: () => void;
   onRadar: () => void;
+  onGoals: () => void;
 }) {
   return (
     <nav className="bottom-nav" aria-label="Navegação principal">
@@ -183,6 +187,10 @@ function BottomNavigation({ active, onHome, onRadar }: {
       <button type="button" className={`nav-item${active === "radar" ? " active" : ""}`} onClick={onRadar} aria-current={active === "radar" ? "page" : undefined}>
         <Icon name="radar" />
         <span>Radar</span>
+      </button>
+      <button type="button" className={`nav-item${active === "goals" ? " active" : ""}`} onClick={onGoals} aria-current={active === "goals" ? "page" : undefined}>
+        <Icon name="target" />
+        <span>Metas</span>
       </button>
     </nav>
   );
@@ -940,6 +948,7 @@ function Dashboard({
   onDelete,
   onPaid,
   onRadar,
+  onGoals,
   onMonthChange,
   initialPeriod,
   error = "",
@@ -951,6 +960,7 @@ function Dashboard({
   onDelete: (transaction: Transaction, scope: ApiSeriesScope) => Promise<void>;
   onPaid: (transaction: Transaction) => Promise<void>;
   onRadar: () => void;
+  onGoals: () => void;
   onMonthChange: (year: number, month: number) => void;
   initialPeriod: { year: number; month: number };
   error?: string;
@@ -1088,7 +1098,7 @@ function Dashboard({
         <div><span>Saldo do mês</span><strong>{monthBalance < 0 ? "- " : ""}{formatCurrency(monthBalance)}</strong></div>
       </section>
 
-      <BottomNavigation active="home" onHome={() => {}} onRadar={onRadar} />
+      <BottomNavigation active="home" onHome={() => {}} onRadar={onRadar} onGoals={onGoals} />
 
       {isMonthPickerOpen && (
         <div className="month-picker-backdrop" role="presentation" onMouseDown={() => setIsMonthPickerOpen(false)}>
@@ -1548,7 +1558,7 @@ function DetailScreen({
   );
 }
 
-function RadarScreen({ onHome }: { onHome: () => void }) {
+function RadarScreen({ onHome, onGoals }: { onHome: () => void; onGoals: () => void }) {
   const now = new Date();
   const startYear = now.getFullYear();
   const startMonth = now.getMonth() + 1;
@@ -1586,8 +1596,6 @@ function RadarScreen({ onHome }: { onHome: () => void }) {
   const lowestBalance = timeline.reduce<(typeof timeline)[number] | undefined>((lowest, period) => (
     !lowest || Number(period.freeBalance) < Number(lowest.freeBalance) ? period : lowest
   ), undefined);
-  const endingEvent = timeline.flatMap((period) => period.events.map((event) => ({ event, period })))
-    .find(({ event }) => event.type === "ENDING");
   const monthName = (year: number, month: number, style: "long" | "short" = "long") => (
     new Intl.DateTimeFormat("pt-BR", { month: style, year: "numeric" }).format(new Date(year, month - 1, 1))
   );
@@ -1630,23 +1638,10 @@ function RadarScreen({ onHome }: { onHome: () => void }) {
                 <small>Receitas menos despesas que ainda estão pendentes.</small>
               </article>
               <div className="radar-mini-cards">
-                <article><span>Pendente no período</span><strong>{formatCurrency(totalPending)}</strong></article>
+                <article><span>Gastos previstos</span><strong>{formatCurrency(totalPending)}</strong></article>
                 <article><span>Menor saldo previsto</span><strong className={Number(lowestBalance?.freeBalance ?? 0) < 0 ? "negative" : ""}>{Number(lowestBalance?.freeBalance ?? 0) < 0 ? "- " : ""}{formatCurrency(Number(lowestBalance?.freeBalance ?? 0))}</strong><small>{lowestBalance ? monthName(lowestBalance.year, lowestBalance.month, "short") : "—"}</small></article>
               </div>
             </section>
-
-            {endingEvent && (
-              <section className="radar-insight">
-                <span className="radar-insight-icon"><Icon name="radar" /></span>
-                <div>
-                  <span>ALÍVIO À FRENTE</span>
-                  <strong>{endingEvent.event.name} termina em {monthName(endingEvent.period.year, endingEvent.period.month)}.</strong>
-                  <p>{endingEvent.event.recurrenceFrequency === "MONTHLY"
-                    ? `${formatCurrency(Number(endingEvent.event.amount))} deixarão de comprometer os meses seguintes.`
-                    : `Esse compromisso de ${formatCurrency(Number(endingEvent.event.amount))} será encerrado.`}</p>
-                </div>
-              </section>
-            )}
 
             <section className="radar-timeline" aria-label="Previsão mensal">
               {timeline.map((period, index) => {
@@ -1691,14 +1686,184 @@ function RadarScreen({ onHome }: { onHome: () => void }) {
         )}
       </div>
 
-      <BottomNavigation active="radar" onHome={onHome} onRadar={() => {}} />
+      <BottomNavigation active="radar" onHome={onHome} onRadar={() => {}} onGoals={onGoals} />
+    </main>
+  );
+}
+
+const goalWeekdays: { value: ApiDayOfWeek; short: string; label: string }[] = [
+  { value: "MONDAY", short: "Seg", label: "Segunda" },
+  { value: "TUESDAY", short: "Ter", label: "Terça" },
+  { value: "WEDNESDAY", short: "Qua", label: "Quarta" },
+  { value: "THURSDAY", short: "Qui", label: "Quinta" },
+  { value: "FRIDAY", short: "Sex", label: "Sexta" },
+  { value: "SATURDAY", short: "Sáb", label: "Sábado" },
+  { value: "SUNDAY", short: "Dom", label: "Domingo" },
+];
+
+function GoalsScreen({ onHome, onRadar }: { onHome: () => void; onRadar: () => void }) {
+  const [referenceDate, setReferenceDate] = useState(() => dateToInputValue(new Date()));
+  const [goal, setGoal] = useState<ApiGoal | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSavingDays, setIsSavingDays] = useState(false);
+  const [error, setError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    const updateDate = () => {
+      const currentDate = dateToInputValue(new Date());
+      setReferenceDate((savedDate) => savedDate === currentDate ? savedDate : currentDate);
+    };
+    const refreshOnFocus = () => {
+      updateDate();
+      setRefreshKey((current) => current + 1);
+    };
+    window.addEventListener("focus", refreshOnFocus);
+    const timer = window.setInterval(updateDate, 60_000);
+    return () => {
+      window.removeEventListener("focus", refreshOnFocus);
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    financeApi.goal(referenceDate)
+      .then((response) => {
+        if (active) setGoal(response);
+      })
+      .catch((requestError) => {
+        if (active) setError(messageFromError(requestError));
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => { active = false; };
+  }, [referenceDate, refreshKey]);
+
+  async function toggleWeekday(weekday: ApiDayOfWeek) {
+    if (!goal || isSavingDays) return;
+    const isSelected = goal.availableWeekdays.includes(weekday);
+    if (isSelected && goal.availableWeekdays.length === 1) {
+      setError("Selecione ao menos um dia disponível.");
+      return;
+    }
+    const availableWeekdays = isSelected
+      ? goal.availableWeekdays.filter((day) => day !== weekday)
+      : goalWeekdays.map(({ value }) => value).filter((day) => (
+          goal.availableWeekdays.includes(day) || day === weekday
+        ));
+    setIsSavingDays(true);
+    setError("");
+    try {
+      setGoal(await financeApi.updateGoalPreferences(referenceDate, availableWeekdays));
+    } catch (requestError) {
+      setError(messageFromError(requestError));
+    } finally {
+      setIsSavingDays(false);
+    }
+  }
+
+  const progress = Math.max(0, Math.min(100, Number(goal?.progressPercentage ?? 0)));
+  const monthLabel = goal
+    ? new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(new Date(goal.year, goal.month - 1, 1))
+    : "mês atual";
+
+  return (
+    <main className="dashboard-screen goals-screen">
+      <header className="dashboard-header goals-header">
+        <div className="header-brand" aria-label="AMCash">
+          <Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority />
+          <span><b>AM</b>Cash</span>
+        </div>
+        <span className="goals-header-label">METAS</span>
+      </header>
+
+      <div className="goals-content">
+        <section className="goals-intro">
+          <span>META DINÂMICA</span>
+          <h1>Quanto falta para cobrir o mês?</h1>
+          <p>A meta acompanha suas receitas, despesas pendentes e os dias que você tem disponíveis.</p>
+        </section>
+
+        {error && <p className="auth-error" role="alert">{error}</p>}
+        {isLoading ? (
+          <div className="goals-loading" role="status"><div className="loader" aria-hidden="true" /><span>Calculando sua meta</span></div>
+        ) : goal && (
+          <>
+            <section className={`goal-main-card${goal.covered ? " covered" : ""}`}>
+              {goal.covered ? (
+                <>
+                  <span className="goal-covered-icon"><Icon name="check" /></span>
+                  <div><span>{monthLabel}</span><h2>Mês coberto</h2><p>Suas receitas já são suficientes para cobrir as despesas restantes deste mês.</p></div>
+                </>
+              ) : (
+                <>
+                  <span>FALTA PARA COBRIR O MÊS</span>
+                  <strong>{formatCurrency(Number(goal.remainingAmount))}</strong>
+                  <div className="goal-progress-heading"><span>Progresso</span><b>{progress.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%</b></div>
+                  <div className="goal-progress" aria-label={`${progress}% da meta coberta`}><span style={{ width: `${progress}%` }} /></div>
+                </>
+              )}
+            </section>
+
+            <section className="goal-targets" aria-label="Metas do período restante">
+              <article>
+                <span>META SEMANAL</span>
+                <strong>{goal.covered ? "Concluída" : goal.availableDays > 0 ? formatCurrency(Number(goal.weeklyTarget)) : "—"}</strong>
+                <small>{goal.covered ? "Mês coberto" : "por semana até o fim do mês"}</small>
+              </article>
+              <article>
+                <span>META DIÁRIA</span>
+                <strong>{goal.covered ? "Concluída" : goal.availableDays > 0 ? formatCurrency(Number(goal.dailyTarget)) : "—"}</strong>
+                <small>{goal.covered ? "Nenhuma renda extra necessária" : "por dia disponível"}</small>
+              </article>
+            </section>
+
+            <section className="goal-days-card">
+              <div className="goal-days-heading">
+                <div><span>DIAS DISPONÍVEIS</span><h2>Quando você pretende gerar renda?</h2></div>
+                <strong>{goal.availableDays} {goal.availableDays === 1 ? "dia restante" : "dias restantes"}</strong>
+              </div>
+              <div className="goal-weekdays" aria-label="Dias disponíveis da semana">
+                {goalWeekdays.map((weekday) => {
+                  const selected = goal.availableWeekdays.includes(weekday.value);
+                  return (
+                    <button
+                      type="button"
+                      key={weekday.value}
+                      className={selected ? "selected" : ""}
+                      disabled={isSavingDays}
+                      onClick={() => toggleWeekday(weekday.value)}
+                      aria-pressed={selected}
+                      aria-label={weekday.label}
+                    >
+                      <span>{selected && <Icon name="check" />}</span>
+                      {weekday.short}
+                    </button>
+                  );
+                })}
+              </div>
+              {!goal.covered && goal.availableDays === 0 && <p className="goal-days-warning">Não há mais dias selecionados neste mês. Ajuste os dias disponíveis para recalcular sua meta.</p>}
+            </section>
+
+            <section className="goal-breakdown" aria-label="Resumo da meta">
+              <div><span>Receitas do mês</span><strong>{formatCurrency(Number(goal.income))}</strong></div>
+              <div><span>Despesas ainda pendentes</span><strong>{formatCurrency(Number(goal.pendingExpenses))}</strong></div>
+              <div><span>Falta cobrir</span><strong>{formatCurrency(Number(goal.remainingAmount))}</strong></div>
+            </section>
+          </>
+        )}
+      </div>
+
+      <BottomNavigation active="goals" onHome={onHome} onRadar={onRadar} onGoals={() => {}} />
     </main>
   );
 }
 
 export default function Home() {
   const [screen, setScreen] = useState<"checking" | "auth" | "loading" | "refreshing" | "app">("checking");
-  const [activeTab, setActiveTab] = useState<"home" | "radar">("home");
+  const [activeTab, setActiveTab] = useState<"home" | "radar" | "goals">("home");
   const [items, setItems] = useState<Transaction[]>([]);
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -1843,10 +2008,11 @@ export default function Home() {
   const idleTransactionAction = async () => {};
   const idleMonthChange = () => {};
 
-  if (screen === "checking" || screen === "refreshing") return <Dashboard items={items} onOpen={setSelected} onCreate={idleCreate} onDelete={idleTransactionAction} onPaid={idleTransactionAction} onRadar={() => setActiveTab("radar")} onMonthChange={idleMonthChange} initialPeriod={period} isLoading />;
+  if (screen === "checking" || screen === "refreshing") return <Dashboard items={items} onOpen={setSelected} onCreate={idleCreate} onDelete={idleTransactionAction} onPaid={idleTransactionAction} onRadar={() => setActiveTab("radar")} onGoals={() => setActiveTab("goals")} onMonthChange={idleMonthChange} initialPeriod={period} isLoading />;
   if (screen === "auth") return <AuthScreen onAuthenticated={() => setScreen("loading")} />;
   if (screen === "loading") return <LoadingScreen />;
-  if (activeTab === "radar") return <RadarScreen onHome={() => setActiveTab("home")} />;
+  if (activeTab === "radar") return <RadarScreen onHome={() => setActiveTab("home")} onGoals={() => setActiveTab("goals")} />;
+  if (activeTab === "goals") return <GoalsScreen onHome={() => setActiveTab("home")} onRadar={() => setActiveTab("radar")} />;
   if (selected) {
     return (
       <DetailScreen
@@ -1858,5 +2024,5 @@ export default function Home() {
     );
   }
 
-  return <Dashboard items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onRadar={() => setActiveTab("radar")} onMonthChange={changeMonth} initialPeriod={period} error={error} isLoading={isLoading} />;
+  return <Dashboard items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onRadar={() => setActiveTab("radar")} onGoals={() => setActiveTab("goals")} onMonthChange={changeMonth} initialPeriod={period} error={error} isLoading={isLoading} />;
 }

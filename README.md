@@ -65,6 +65,8 @@ Endpoints disponíveis:
 
 - `GET /api/v1/transactions?year=2026&month=10`: lançamentos e resumo do mês.
 - `GET /api/v1/transactions/forecast?year=2026&month=10&months=6`: Radar financeiro agregado para 6 ou 12 meses.
+- `GET /api/v1/goals?date=2026-10-15`: Meta dinâmica do mês e valores diário/semanal.
+- `PUT /api/v1/goals/preferences?date=2026-10-15`: atualiza os dias da semana disponíveis para a Meta.
 - `POST /api/v1/transactions`: cria receita ou despesa, incluindo repetições.
 - `GET /api/v1/transactions/{id}`: detalhes do lançamento.
 - `PUT /api/v1/transactions/{id}`: edita o lançamento.
