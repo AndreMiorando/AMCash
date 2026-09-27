@@ -40,6 +40,9 @@ public class User {
     @Column(name = "last_login_at", nullable = false)
     private OffsetDateTime lastLoginAt;
 
+    @Column(name = "goal_weekdays_mask", nullable = false)
+    private int goalWeekdaysMask = 31;
+
     protected User() {
     }
 
@@ -96,5 +99,14 @@ public class User {
 
     public OffsetDateTime getLastLoginAt() {
         return lastLoginAt;
+    }
+
+    public int getGoalWeekdaysMask() {
+        return goalWeekdaysMask;
+    }
+
+    public void updateGoalWeekdaysMask(int goalWeekdaysMask) {
+        this.goalWeekdaysMask = goalWeekdaysMask;
+        this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 }
