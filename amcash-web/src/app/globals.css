@@ -2468,6 +2468,19 @@ a {
   color: #fff;
 }
 
+.scope-dialog .scope-actions {
+  grid-template-columns: 1fr;
+}
+
+.scope-dialog .scope-actions button:last-child {
+  background: #1769ea;
+  color: #fff;
+}
+
+.scope-dialog--danger .scope-actions button:last-child {
+  background: #ed5064;
+}
+
 @keyframes sheet-in {
   from { transform: translateY(100%); }
   to { transform: translateY(0); }

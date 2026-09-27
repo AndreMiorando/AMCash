@@ -9,6 +9,7 @@ import br.com.amcash.entry.entity.EntryType;
 import br.com.amcash.entry.entity.EntryCategory;
 import br.com.amcash.entry.entity.FinancialEntry;
 import br.com.amcash.entry.entity.RecurrenceFrequency;
+import br.com.amcash.entry.entity.SeriesScope;
 import br.com.amcash.entry.entity.Subexpense;
 import br.com.amcash.entry.repository.FinancialEntryRepository;
 import br.com.amcash.entry.repository.SubexpenseRepository;
@@ -147,7 +148,8 @@ class EntryServiceTests {
                         LocalDate.of(2026, 10, 1),
                         RecurrenceFrequency.NONE,
                         0,
-                        true));
+                        true),
+                SeriesScope.ALL);
 
         assertEquals("Fatura Nubank", response.name());
         assertEquals("Fatura Nubank", november.getName());
@@ -195,7 +197,8 @@ class EntryServiceTests {
                         LocalDate.of(2026, 9, 24),
                         RecurrenceFrequency.MONTHLY,
                         2,
-                        false));
+                        false),
+                SeriesScope.ALL);
 
         assertEquals("Internet - 1/2", response.name());
         assertEquals(2, response.recurrenceCount());
@@ -208,9 +211,12 @@ class EntryServiceTests {
     void shouldCalculateMonthlySummary() {
         UUID userId = UUID.randomUUID();
         User user = user(userId);
+        FinancialEntry paidExpense = entry(
+                user, EntryType.EXPENSE, "1097.00", LocalDate.of(2026, 10, 1), false);
+        paidExpense.setPaid(true);
         List<FinancialEntry> entries = List.of(
                 entry(user, EntryType.INCOME, "8500.00", LocalDate.of(2026, 10, 31), false),
-                entry(user, EntryType.EXPENSE, "1097.00", LocalDate.of(2026, 10, 1), false),
+                paidExpense,
                 entry(user, EntryType.EXPENSE, "277.90", LocalDate.of(2026, 10, 8), false));
 
         when(entryRepository.findAllByUserIdAndDueDateBetweenOrderByDueDateAscCreatedAtAsc(
@@ -221,8 +227,8 @@ class EntryServiceTests {
         MonthlyEntriesResponse response = entryService.listMonth(userId, 2026, 10);
 
         assertEquals(new BigDecimal("8500.00"), response.summary().income());
-        assertEquals(new BigDecimal("1374.90"), response.summary().expenses());
-        assertEquals(new BigDecimal("7125.10"), response.summary().balance());
+        assertEquals(new BigDecimal("277.90"), response.summary().expenses());
+        assertEquals(new BigDecimal("8222.10"), response.summary().balance());
         assertEquals(3, response.entries().size());
     }
 
@@ -494,7 +500,8 @@ class EntryServiceTests {
                         null,
                         false,
                         RecurrenceFrequency.MONTHLY,
-                        2));
+                        2),
+                SeriesScope.ALL);
 
         assertEquals("1/2", response.installmentDescription());
         assertEquals(2, savedItems.size());
@@ -533,15 +540,114 @@ class EntryServiceTests {
                 userId,
                 entryId,
                 itemId,
-                new SubexpenseRequest("Chat", new BigDecimal("120.00"), "1/12", false, RecurrenceFrequency.NONE, 0));
+                new SubexpenseRequest("Chat", new BigDecimal("120.00"), "1/12", false, RecurrenceFrequency.NONE, 0),
+                SeriesScope.CURRENT);
 
         assertEquals(new BigDecimal("154.00"), parent.getAmount());
 
-        entryService.deleteSubexpense(userId, entryId, itemId);
+        entryService.deleteSubexpense(userId, entryId, itemId, SeriesScope.CURRENT);
 
         assertEquals(new BigDecimal("34.00"), parent.getAmount());
-        verify(subexpenseRepository).delete(edited);
+        verify(subexpenseRepository).deleteAll(List.of(edited));
     }
+
+    @Test
+    void shouldDeleteOnlyCurrentAndFutureEntriesWhenRequested() {
+        UUID userId = UUID.randomUUID();
+        UUID seriesId = UUID.randomUUID();
+        User user = user(userId);
+        FinancialEntry first = new FinancialEntry(
+                user, "Internet - 1/3", EntryCategory.BILLS_AND_SERVICES, EntryType.EXPENSE,
+                new BigDecimal("100.00"), LocalDate.of(2026, 9, 24),
+                RecurrenceFrequency.MONTHLY, 3, 0, seriesId, false);
+        FinancialEntry second = new FinancialEntry(
+                user, "Internet - 2/3", EntryCategory.BILLS_AND_SERVICES, EntryType.EXPENSE,
+                new BigDecimal("100.00"), LocalDate.of(2026, 10, 24),
+                RecurrenceFrequency.MONTHLY, 3, 1, seriesId, false);
+        FinancialEntry third = new FinancialEntry(
+                user, "Internet - 3/3", EntryCategory.BILLS_AND_SERVICES, EntryType.EXPENSE,
+                new BigDecimal("100.00"), LocalDate.of(2026, 11, 24),
+                RecurrenceFrequency.MONTHLY, 3, 2, seriesId, false);
+        first.setId(UUID.randomUUID());
+        second.setId(UUID.randomUUID());
+        third.setId(UUID.randomUUID());
+
+        when(entryRepository.findByIdAndUserId(second.getId(), userId)).thenReturn(Optional.of(second));
+        when(entryRepository.findAllBySeriesIdAndUserIdOrderByRecurrenceIndexAsc(seriesId, userId))
+                .thenReturn(List.of(first, second, third));
+
+        entryService.delete(userId, second.getId(), SeriesScope.CURRENT_AND_FUTURE);
+
+        verify(entryRepository).deleteAll(List.of(second, third));
+        verify(entryRepository, never()).delete(first);
+    }
+
+    @Test
+    void shouldDeletePastEntriesTooWhenWholeSeriesIsRequested() {
+        UUID userId = UUID.randomUUID();
+        UUID seriesId = UUID.randomUUID();
+        User user = user(userId);
+        FinancialEntry past = new FinancialEntry(
+                user, "Internet - 1/2", EntryCategory.BILLS_AND_SERVICES, EntryType.EXPENSE,
+                new BigDecimal("100.00"), LocalDate.of(2026, 9, 24),
+                RecurrenceFrequency.MONTHLY, 2, 0, seriesId, false);
+        FinancialEntry current = new FinancialEntry(
+                user, "Internet - 2/2", EntryCategory.BILLS_AND_SERVICES, EntryType.EXPENSE,
+                new BigDecimal("100.00"), LocalDate.of(2026, 10, 24),
+                RecurrenceFrequency.MONTHLY, 2, 1, seriesId, false);
+        past.setId(UUID.randomUUID());
+        current.setId(UUID.randomUUID());
+
+        when(entryRepository.findByIdAndUserId(current.getId(), userId)).thenReturn(Optional.of(current));
+        when(entryRepository.findAllBySeriesIdAndUserIdOrderByRecurrenceIndexAsc(seriesId, userId))
+                .thenReturn(List.of(past, current));
+
+        entryService.delete(userId, current.getId(), SeriesScope.ALL);
+
+        verify(entryRepository).deleteAll(List.of(past, current));
+    }
+
+    @Test
+    void shouldDeleteCurrentAndFutureItemsAndKeepPastItemTotals() {
+        UUID userId = UUID.randomUUID();
+        UUID itemSeriesId = UUID.randomUUID();
+        User user = user(userId);
+        FinancialEntry september = entry(user, EntryType.EXPENSE, "50.00", LocalDate.of(2026, 9, 1), true);
+        FinancialEntry october = entry(user, EntryType.EXPENSE, "50.00", LocalDate.of(2026, 10, 1), true);
+        FinancialEntry november = entry(user, EntryType.EXPENSE, "50.00", LocalDate.of(2026, 11, 1), true);
+        Subexpense first = new Subexpense(
+                september, "Telefone", BigDecimal.TEN, "1/3", false,
+                RecurrenceFrequency.MONTHLY, 3, 0, itemSeriesId);
+        Subexpense second = new Subexpense(
+                october, "Telefone", BigDecimal.TEN, "2/3", false,
+                RecurrenceFrequency.MONTHLY, 3, 1, itemSeriesId);
+        Subexpense third = new Subexpense(
+                november, "Telefone", BigDecimal.TEN, "3/3", false,
+                RecurrenceFrequency.MONTHLY, 3, 2, itemSeriesId);
+        first.setId(UUID.randomUUID());
+        second.setId(UUID.randomUUID());
+        third.setId(UUID.randomUUID());
+
+        when(subexpenseRepository.findByIdAndEntryIdAndEntryUserId(
+                second.getId(), october.getId(), userId)).thenReturn(Optional.of(second));
+        when(subexpenseRepository.findAllBySeriesIdAndEntryUserIdOrderByRecurrenceIndexAsc(
+                itemSeriesId, userId)).thenReturn(List.of(first, second, third));
+        when(subexpenseRepository.sumAmountsByEntryIds(any())).thenReturn(List.of(
+                entryTotal(october.getId(), "50.00"),
+                entryTotal(november.getId(), "50.00")));
+
+        entryService.deleteSubexpense(
+                userId,
+                october.getId(),
+                second.getId(),
+                SeriesScope.CURRENT_AND_FUTURE);
+
+        assertEquals(new BigDecimal("50.00"), september.getAmount());
+        assertEquals(new BigDecimal("40.00"), october.getAmount());
+        assertEquals(new BigDecimal("40.00"), november.getAmount());
+        verify(subexpenseRepository).deleteAll(List.of(second, third));
+    }
+
     private FinancialEntryRepository.SeriesStatistics seriesStatistics(
             UUID seriesId,
             long totalOccurrences,

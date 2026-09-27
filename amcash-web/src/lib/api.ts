@@ -1,5 +1,6 @@
 export type ApiEntryType = "EXPENSE" | "INCOME";
 export type ApiRecurrenceFrequency = "NONE" | "DAILY" | "WEEKLY" | "MONTHLY";
+export type ApiSeriesScope = "CURRENT" | "CURRENT_AND_FUTURE" | "ALL";
 export type ApiEntryCategory =
   | "FOOD"
   | "HOUSING"
@@ -153,8 +154,8 @@ export const financeApi = {
     return apiRequest<ApiEntry>(`/api/v1/transactions/${entryId}`);
   },
 
-  update(entryId: string, payload: EntryPayload) {
-    return apiRequest<ApiEntry>(`/api/v1/transactions/${entryId}`, {
+  update(entryId: string, payload: EntryPayload, scope: ApiSeriesScope = "CURRENT") {
+    return apiRequest<ApiEntry>(`/api/v1/transactions/${entryId}?scope=${scope}`, {
       method: "PUT",
       body: JSON.stringify(payload),
     });
@@ -166,8 +167,8 @@ export const financeApi = {
     });
   },
 
-  delete(entryId: string) {
-    return apiRequest<void>(`/api/v1/transactions/${entryId}`, { method: "DELETE" });
+  delete(entryId: string, scope: ApiSeriesScope = "CURRENT") {
+    return apiRequest<void>(`/api/v1/transactions/${entryId}?scope=${scope}`, { method: "DELETE" });
   },
 
   addSubexpense(entryId: string, payload: SubexpensePayload) {
@@ -177,16 +178,16 @@ export const financeApi = {
     });
   },
 
-  updateSubexpense(entryId: string, subexpenseId: string, payload: SubexpensePayload) {
+  updateSubexpense(entryId: string, subexpenseId: string, payload: SubexpensePayload, scope: ApiSeriesScope = "CURRENT") {
     return apiRequest<ApiSubexpense>(
-      `/api/v1/transactions/${entryId}/subexpenses/${subexpenseId}`,
+      `/api/v1/transactions/${entryId}/subexpenses/${subexpenseId}?scope=${scope}`,
       { method: "PUT", body: JSON.stringify(payload) },
     );
   },
 
-  deleteSubexpense(entryId: string, subexpenseId: string) {
+  deleteSubexpense(entryId: string, subexpenseId: string, scope: ApiSeriesScope = "CURRENT") {
     return apiRequest<void>(
-      `/api/v1/transactions/${entryId}/subexpenses/${subexpenseId}`,
+      `/api/v1/transactions/${entryId}/subexpenses/${subexpenseId}?scope=${scope}`,
       { method: "DELETE" },
     );
   },
