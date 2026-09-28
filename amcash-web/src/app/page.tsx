@@ -1701,6 +1701,28 @@ const goalWeekdays: { value: ApiDayOfWeek; short: string; label: string }[] = [
   { value: "SUNDAY", short: "Dom", label: "Domingo" },
 ];
 
+function remainingWeekdaysInMonth(dateValue: string) {
+  const [year, month, day] = dateValue.split("-").map(Number);
+  const currentDate = new Date(year, month - 1, day);
+  const lastDate = new Date(year, month, 0);
+  const weekdaysByIndex: ApiDayOfWeek[] = [
+    "SUNDAY",
+    "MONDAY",
+    "TUESDAY",
+    "WEDNESDAY",
+    "THURSDAY",
+    "FRIDAY",
+    "SATURDAY",
+  ];
+  const remaining = new Set<ApiDayOfWeek>();
+
+  for (const date = new Date(currentDate); date <= lastDate; date.setDate(date.getDate() + 1)) {
+    remaining.add(weekdaysByIndex[date.getDay()]);
+  }
+
+  return remaining;
+}
+
 function GoalsScreen({ onHome, onRadar }: { onHome: () => void; onRadar: () => void }) {
   const [referenceDate, setReferenceDate] = useState(() => dateToInputValue(new Date()));
   const [goal, setGoal] = useState<ApiGoal | null>(null);
@@ -1743,8 +1765,11 @@ function GoalsScreen({ onHome, onRadar }: { onHome: () => void; onRadar: () => v
 
   async function toggleWeekday(weekday: ApiDayOfWeek) {
     if (!goal || isSavingDays) return;
+    const selectableWeekdays = remainingWeekdaysInMonth(referenceDate);
+    if (!selectableWeekdays.has(weekday)) return;
     const isSelected = goal.availableWeekdays.includes(weekday);
-    if (isSelected && goal.availableWeekdays.length === 1) {
+    const selectedRemainingDays = goal.availableWeekdays.filter((day) => selectableWeekdays.has(day));
+    if (isSelected && selectedRemainingDays.length === 1) {
       setError("Selecione ao menos um dia disponível.");
       return;
     }
@@ -1765,6 +1790,7 @@ function GoalsScreen({ onHome, onRadar }: { onHome: () => void; onRadar: () => v
   }
 
   const progress = Math.max(0, Math.min(100, Number(goal?.progressPercentage ?? 0)));
+  const remainingWeekdays = remainingWeekdaysInMonth(referenceDate);
   const monthLabel = goal
     ? new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(new Date(goal.year, goal.month - 1, 1))
     : "mês atual";
@@ -1827,16 +1853,18 @@ function GoalsScreen({ onHome, onRadar }: { onHome: () => void; onRadar: () => v
               </div>
               <div className="goal-weekdays" aria-label="Dias disponíveis da semana">
                 {goalWeekdays.map((weekday) => {
-                  const selected = goal.availableWeekdays.includes(weekday.value);
+                  const selectable = remainingWeekdays.has(weekday.value);
+                  const selected = selectable && goal.availableWeekdays.includes(weekday.value);
                   return (
                     <button
                       type="button"
                       key={weekday.value}
                       className={selected ? "selected" : ""}
-                      disabled={isSavingDays}
+                      disabled={isSavingDays || !selectable}
                       onClick={() => toggleWeekday(weekday.value)}
                       aria-pressed={selected}
-                      aria-label={weekday.label}
+                      aria-label={selectable ? weekday.label : `${weekday.label}, sem dias restantes neste mês`}
+                      title={selectable ? undefined : "Este dia da semana não ocorre mais neste mês"}
                     >
                       <span>{selected && <Icon name="check" />}</span>
                       {weekday.short}
