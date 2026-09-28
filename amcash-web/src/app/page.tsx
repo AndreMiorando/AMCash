@@ -1701,11 +1701,14 @@ const goalWeekdays: { value: ApiDayOfWeek; short: string; label: string }[] = [
   { value: "SUNDAY", short: "Dom", label: "Domingo" },
 ];
 
-function remainingWeekdaysInMonth(dateValue: string) {
+function remainingWeekdaysInMonth(dateValue: string, targetYear?: number, targetMonth?: number) {
   const [year, month, day] = dateValue.split("-").map(Number);
-  const currentDate = new Date(year, month - 1, day);
-  currentDate.setDate(currentDate.getDate() + 1);
-  const lastDate = new Date(year, month, 0);
+  const firstAvailableDate = new Date(year, month - 1, day + 1);
+  const selectedYear = targetYear ?? year;
+  const selectedMonth = targetMonth ?? month;
+  const firstDate = new Date(selectedYear, selectedMonth - 1, 1);
+  const currentDate = firstAvailableDate > firstDate ? firstAvailableDate : firstDate;
+  const lastDate = new Date(selectedYear, selectedMonth, 0);
   const weekdaysByIndex: ApiDayOfWeek[] = [
     "SUNDAY",
     "MONDAY",
@@ -1727,7 +1730,10 @@ function remainingWeekdaysInMonth(dateValue: string) {
 function GoalsScreen({ onHome, onRadar }: { onHome: () => void; onRadar: () => void }) {
   const [referenceDate, setReferenceDate] = useState(() => dateToInputValue(new Date()));
   const [goal, setGoal] = useState<ApiGoal | null>(null);
+  const [nextGoal, setNextGoal] = useState<ApiGoal | null>(null);
+  const [isNextGoalExpanded, setIsNextGoalExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingNextGoal, setIsLoadingNextGoal] = useState(false);
   const [isSavingDays, setIsSavingDays] = useState(false);
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
@@ -1752,37 +1758,61 @@ function GoalsScreen({ onHome, onRadar }: { onHome: () => void; onRadar: () => v
   useEffect(() => {
     let active = true;
     financeApi.goal(referenceDate)
-      .then((response) => {
-        if (active) setGoal(response);
+      .then(async (response) => {
+        if (!active) return;
+        setGoal(response);
+        setNextGoal(null);
+        setIsNextGoalExpanded(false);
+        setIsLoading(false);
+        if (!response.covered) return;
+
+        const nextMonthDate = new Date(response.year, response.month, 1);
+        setIsLoadingNextGoal(true);
+        const followingGoal = await financeApi.goal(
+          referenceDate,
+          nextMonthDate.getFullYear(),
+          nextMonthDate.getMonth() + 1,
+        );
+        if (active) setNextGoal(followingGoal);
       })
       .catch((requestError) => {
         if (active) setError(messageFromError(requestError));
       })
       .finally(() => {
-        if (active) setIsLoading(false);
+        if (active) {
+          setIsLoading(false);
+          setIsLoadingNextGoal(false);
+        }
       });
     return () => { active = false; };
   }, [referenceDate, refreshKey]);
 
-  async function toggleWeekday(weekday: ApiDayOfWeek) {
-    if (!goal || isSavingDays) return;
-    const selectableWeekdays = remainingWeekdaysInMonth(referenceDate);
+  async function toggleWeekday(targetGoal: ApiGoal, weekday: ApiDayOfWeek) {
+    if (isSavingDays) return;
+    const selectableWeekdays = remainingWeekdaysInMonth(referenceDate, targetGoal.year, targetGoal.month);
     if (!selectableWeekdays.has(weekday)) return;
-    const isSelected = goal.availableWeekdays.includes(weekday);
-    const selectedRemainingDays = goal.availableWeekdays.filter((day) => selectableWeekdays.has(day));
+    const isSelected = targetGoal.availableWeekdays.includes(weekday);
+    const selectedRemainingDays = targetGoal.availableWeekdays.filter((day) => selectableWeekdays.has(day));
     if (isSelected && selectedRemainingDays.length === 1) {
       setError("Selecione ao menos um dia disponível.");
       return;
     }
     const availableWeekdays = isSelected
-      ? goal.availableWeekdays.filter((day) => day !== weekday)
+      ? targetGoal.availableWeekdays.filter((day) => day !== weekday)
       : goalWeekdays.map(({ value }) => value).filter((day) => (
-          goal.availableWeekdays.includes(day) || day === weekday
+          targetGoal.availableWeekdays.includes(day) || day === weekday
         ));
     setIsSavingDays(true);
     setError("");
     try {
-      setGoal(await financeApi.updateGoalPreferences(referenceDate, availableWeekdays));
+      const updatedGoal = await financeApi.updateGoalPreferences(
+        referenceDate,
+        availableWeekdays,
+        targetGoal.year,
+        targetGoal.month,
+      );
+      if (goal?.year === targetGoal.year && goal.month === targetGoal.month) setGoal(updatedGoal);
+      else setNextGoal(updatedGoal);
     } catch (requestError) {
       setError(messageFromError(requestError));
     } finally {
@@ -1790,11 +1820,67 @@ function GoalsScreen({ onHome, onRadar }: { onHome: () => void; onRadar: () => v
     }
   }
 
+  const goalMonthLabel = (targetGoal: ApiGoal) => (
+    new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" })
+      .format(new Date(targetGoal.year, targetGoal.month - 1, 1))
+  );
+  const monthLabel = goal ? goalMonthLabel(goal) : "mês atual";
   const progress = Math.max(0, Math.min(100, Number(goal?.progressPercentage ?? 0)));
-  const remainingWeekdays = remainingWeekdaysInMonth(referenceDate);
-  const monthLabel = goal
-    ? new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(new Date(goal.year, goal.month - 1, 1))
-    : "mês atual";
+
+  function renderGoalDetails(targetGoal: ApiGoal) {
+    const selectableWeekdays = remainingWeekdaysInMonth(referenceDate, targetGoal.year, targetGoal.month);
+    return (
+      <>
+        <section className="goal-targets" aria-label={`Metas restantes de ${goalMonthLabel(targetGoal)}`}>
+          <article>
+            <span>META SEMANAL</span>
+            <strong>{targetGoal.availableDays > 0 ? formatCurrency(Number(targetGoal.weeklyTarget)) : "—"}</strong>
+            <small>por semana até o fim do mês</small>
+          </article>
+          <article>
+            <span>META DIÁRIA</span>
+            <strong>{targetGoal.availableDays > 0 ? formatCurrency(Number(targetGoal.dailyTarget)) : "—"}</strong>
+            <small>por dia disponível</small>
+          </article>
+        </section>
+
+        <section className="goal-days-card">
+          <div className="goal-days-heading">
+            <div><span>DIAS DISPONÍVEIS</span><h2>Quando você pretende gerar renda?</h2></div>
+            <strong>{targetGoal.availableDays} {targetGoal.availableDays === 1 ? "dia restante" : "dias restantes"}</strong>
+          </div>
+          <div className="goal-weekdays" aria-label="Dias disponíveis da semana">
+            {goalWeekdays.map((weekday) => {
+              const selectable = selectableWeekdays.has(weekday.value);
+              const selected = selectable && targetGoal.availableWeekdays.includes(weekday.value);
+              return (
+                <button
+                  type="button"
+                  key={weekday.value}
+                  className={selected ? "selected" : ""}
+                  disabled={isSavingDays || !selectable}
+                  onClick={() => toggleWeekday(targetGoal, weekday.value)}
+                  aria-pressed={selected}
+                  aria-label={selectable ? weekday.label : `${weekday.label}, sem dias restantes neste mês`}
+                  title={selectable ? undefined : "Este dia da semana não ocorre mais neste mês"}
+                >
+                  <span>{selected && <Icon name="check" />}</span>
+                  {weekday.short}
+                </button>
+              );
+            })}
+          </div>
+          {targetGoal.availableDays === 0 && <p className="goal-days-warning">Não há mais dias selecionados neste mês. Ajuste os dias disponíveis para recalcular sua meta.</p>}
+        </section>
+
+        <section className="goal-breakdown" aria-label={`Resumo da meta de ${goalMonthLabel(targetGoal)}`}>
+          <div><span>Receitas do mês</span><strong>{formatCurrency(Number(targetGoal.income))}</strong></div>
+          <div><span>Despesas ainda pendentes</span><strong>{formatCurrency(Number(targetGoal.pendingExpenses))}</strong></div>
+          <div><span>Falta cobrir</span><strong>{formatCurrency(Number(targetGoal.remainingAmount))}</strong></div>
+        </section>
+      </>
+    );
+  }
 
   return (
     <main className="dashboard-screen goals-screen">
@@ -1834,56 +1920,36 @@ function GoalsScreen({ onHome, onRadar }: { onHome: () => void; onRadar: () => v
               )}
             </section>
 
-            {!goal.covered && (
-              <>
-                <section className="goal-targets" aria-label="Metas do período restante">
-                  <article>
-                    <span>META SEMANAL</span>
-                    <strong>{goal.availableDays > 0 ? formatCurrency(Number(goal.weeklyTarget)) : "—"}</strong>
-                    <small>por semana até o fim do mês</small>
-                  </article>
-                  <article>
-                    <span>META DIÁRIA</span>
-                    <strong>{goal.availableDays > 0 ? formatCurrency(Number(goal.dailyTarget)) : "—"}</strong>
-                    <small>por dia disponível</small>
-                  </article>
-                </section>
+            {!goal.covered && renderGoalDetails(goal)}
 
-                <section className="goal-days-card">
-                  <div className="goal-days-heading">
-                    <div><span>DIAS DISPONÍVEIS</span><h2>Quando você pretende gerar renda?</h2></div>
-                    <strong>{goal.availableDays} {goal.availableDays === 1 ? "dia restante" : "dias restantes"}</strong>
-                  </div>
-                  <div className="goal-weekdays" aria-label="Dias disponíveis da semana">
-                    {goalWeekdays.map((weekday) => {
-                      const selectable = remainingWeekdays.has(weekday.value);
-                      const selected = selectable && goal.availableWeekdays.includes(weekday.value);
-                      return (
-                        <button
-                          type="button"
-                          key={weekday.value}
-                          className={selected ? "selected" : ""}
-                          disabled={isSavingDays || !selectable}
-                          onClick={() => toggleWeekday(weekday.value)}
-                          aria-pressed={selected}
-                          aria-label={selectable ? weekday.label : `${weekday.label}, sem dias restantes neste mês`}
-                          title={selectable ? undefined : "Este dia da semana não ocorre mais neste mês"}
-                        >
-                          <span>{selected && <Icon name="check" />}</span>
-                          {weekday.short}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {goal.availableDays === 0 && <p className="goal-days-warning">Não há mais dias selecionados neste mês. Ajuste os dias disponíveis para recalcular sua meta.</p>}
-                </section>
+            {goal.covered && isLoadingNextGoal && (
+              <div className="goal-next-loading" role="status"><div className="loader" aria-hidden="true" /><span>Calculando o próximo mês</span></div>
+            )}
 
-                <section className="goal-breakdown" aria-label="Resumo da meta">
-                  <div><span>Receitas do mês</span><strong>{formatCurrency(Number(goal.income))}</strong></div>
-                  <div><span>Despesas ainda pendentes</span><strong>{formatCurrency(Number(goal.pendingExpenses))}</strong></div>
-                  <div><span>Falta cobrir</span><strong>{formatCurrency(Number(goal.remainingAmount))}</strong></div>
-                </section>
-              </>
+            {goal.covered && nextGoal && (
+              <section className={`goal-next-month${isNextGoalExpanded ? " expanded" : ""}`}>
+                <button
+                  type="button"
+                  className={`goal-next-summary${nextGoal.covered ? " covered" : ""}`}
+                  onClick={() => setIsNextGoalExpanded((expanded) => !expanded)}
+                  aria-expanded={isNextGoalExpanded}
+                >
+                  <span className="goal-next-copy">
+                    <small>PRÓXIMO MÊS · {goalMonthLabel(nextGoal)}</small>
+                    <strong>{nextGoal.covered ? "Mês coberto" : `Falta ${formatCurrency(Number(nextGoal.remainingAmount))}`}</strong>
+                    <span>{isNextGoalExpanded ? "Ocultar meta" : "Ver meta do próximo mês"}</span>
+                  </span>
+                  <span className="goal-next-toggle" aria-hidden="true">{isNextGoalExpanded ? "−" : "+"}</span>
+                </button>
+
+                {isNextGoalExpanded && (
+                  <div className="goal-next-details">
+                    {nextGoal.covered ? (
+                      <p className="goal-next-covered-message">As receitas previstas já cobrem as despesas pendentes deste mês.</p>
+                    ) : renderGoalDetails(nextGoal)}
+                  </div>
+                )}
+              </section>
             )}
           </>
         )}

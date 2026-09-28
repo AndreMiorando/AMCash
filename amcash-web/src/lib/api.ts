@@ -203,12 +203,14 @@ export const financeApi = {
     );
   },
 
-  goal(date: string) {
-    return apiRequest<ApiGoal>(`/api/v1/goals?date=${date}`);
+  goal(date: string, year?: number, month?: number) {
+    const target = year !== undefined && month !== undefined ? `&year=${year}&month=${month}` : "";
+    return apiRequest<ApiGoal>(`/api/v1/goals?date=${date}${target}`);
   },
 
-  updateGoalPreferences(date: string, availableWeekdays: ApiDayOfWeek[]) {
-    return apiRequest<ApiGoal>(`/api/v1/goals/preferences?date=${date}`, {
+  updateGoalPreferences(date: string, availableWeekdays: ApiDayOfWeek[], year?: number, month?: number) {
+    const target = year !== undefined && month !== undefined ? `&year=${year}&month=${month}` : "";
+    return apiRequest<ApiGoal>(`/api/v1/goals/preferences?date=${date}${target}`, {
       method: "PUT",
       body: JSON.stringify({ availableWeekdays }),
     });
