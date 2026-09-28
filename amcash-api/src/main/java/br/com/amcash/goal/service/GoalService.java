@@ -98,7 +98,7 @@ public class GoalService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal remainingAmount = pendingExpenses.subtract(income).max(BigDecimal.ZERO);
         Set<DayOfWeek> availableWeekdays = fromMask(user.getGoalWeekdaysMask());
-        int availableDays = countAvailableDays(referenceDate, selectedMonth.atEndOfMonth(), availableWeekdays);
+        int availableDays = countAvailableDays(referenceDate.plusDays(1), selectedMonth.atEndOfMonth(), availableWeekdays);
         BigDecimal dailyTarget = remainingAmount.signum() == 0 || availableDays == 0
                 ? BigDecimal.ZERO.setScale(2)
                 : remainingAmount.divide(BigDecimal.valueOf(availableDays), 2, RoundingMode.HALF_UP);
