@@ -312,7 +312,7 @@ body {
   place-items: center;
   overflow: hidden;
   isolation: isolate;
-  background: #ffffff;
+  background: linear-gradient(180deg, #f8faff 0%, #ffffff 24%);
 }
 
 .background-orb {
