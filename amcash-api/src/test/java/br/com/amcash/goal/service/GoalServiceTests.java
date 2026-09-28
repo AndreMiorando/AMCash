@@ -74,8 +74,8 @@ class GoalServiceTests {
         assertEquals(new BigDecimal("3000.00"), response.income());
         assertEquals(new BigDecimal("5000.00"), response.pendingExpenses());
         assertEquals(new BigDecimal("2000.00"), response.remainingAmount());
-        assertEquals(3, response.availableDays());
-        assertEquals(new BigDecimal("666.67"), response.dailyTarget());
+        assertEquals(2, response.availableDays());
+        assertEquals(new BigDecimal("1000.00"), response.dailyTarget());
         assertEquals(new BigDecimal("2000.00"), response.weeklyTarget());
         assertEquals(new BigDecimal("60.00"), response.progressPercentage());
         assertEquals(List.of(
@@ -102,10 +102,28 @@ class GoalServiceTests {
                 new UpdateGoalPreferencesRequest(Set.of(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY)));
 
         assertEquals(96, user.getGoalWeekdaysMask());
-        assertEquals(2, response.availableDays());
-        assertEquals(new BigDecimal("500.00"), response.dailyTarget());
+        assertEquals(1, response.availableDays());
+        assertEquals(new BigDecimal("1000.00"), response.dailyTarget());
         assertEquals(new BigDecimal("1000.00"), response.weeklyTarget());
         verify(userRepository).save(user);
+    }
+
+    @Test
+    void shouldNotCountCurrentWeekdayWhenItsNextOccurrenceIsInTheFollowingMonth() {
+        UUID userId = UUID.randomUUID();
+        User user = user(userId);
+        user.updateGoalWeekdaysMask(1 << (DayOfWeek.SUNDAY.getValue() - 1));
+        FinancialEntry expense = entry(user, EntryType.EXPENSE, "1000.00", false);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(entryRepository.findAllByUserIdAndDueDateBetweenOrderByDueDateAscCreatedAtAsc(
+                userId, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30)))
+                .thenReturn(List.of(expense));
+
+        var response = goalService.current(userId, LocalDate.of(2026, 9, 27));
+
+        assertEquals(0, response.availableDays());
+        assertEquals(new BigDecimal("0.00"), response.dailyTarget());
+        assertEquals(new BigDecimal("0.00"), response.weeklyTarget());
     }
 
     @Test

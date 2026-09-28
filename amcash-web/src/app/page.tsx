@@ -1704,6 +1704,7 @@ const goalWeekdays: { value: ApiDayOfWeek; short: string; label: string }[] = [
 function remainingWeekdaysInMonth(dateValue: string) {
   const [year, month, day] = dateValue.split("-").map(Number);
   const currentDate = new Date(year, month - 1, day);
+  currentDate.setDate(currentDate.getDate() + 1);
   const lastDate = new Date(year, month, 0);
   const weekdaysByIndex: ApiDayOfWeek[] = [
     "SUNDAY",
