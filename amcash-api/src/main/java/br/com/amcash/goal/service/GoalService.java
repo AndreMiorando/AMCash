@@ -47,7 +47,12 @@ public class GoalService {
 
     @Transactional(readOnly = true)
     public GoalResponse current(UUID userId, LocalDate referenceDate) {
-        return calculate(findUser(userId), referenceDate);
+        return current(userId, referenceDate, YearMonth.from(referenceDate));
+    }
+
+    @Transactional(readOnly = true)
+    public GoalResponse current(UUID userId, LocalDate referenceDate, YearMonth targetMonth) {
+        return calculate(findUser(userId), referenceDate, targetMonth);
     }
 
     @Transactional
@@ -55,17 +60,25 @@ public class GoalService {
             UUID userId,
             LocalDate referenceDate,
             UpdateGoalPreferencesRequest request) {
+        return updatePreferences(userId, referenceDate, YearMonth.from(referenceDate), request);
+    }
+
+    @Transactional
+    public GoalResponse updatePreferences(
+            UUID userId,
+            LocalDate referenceDate,
+            YearMonth targetMonth,
+            UpdateGoalPreferencesRequest request) {
         if (request.availableWeekdays() == null || request.availableWeekdays().isEmpty()) {
             throw new BadRequestException("Selecione ao menos um dia disponível");
         }
         User user = findUser(userId);
         user.updateGoalWeekdaysMask(toMask(request.availableWeekdays()));
         userRepository.save(user);
-        return calculate(user, referenceDate);
+        return calculate(user, referenceDate, targetMonth);
     }
 
-    private GoalResponse calculate(User user, LocalDate referenceDate) {
-        YearMonth selectedMonth = YearMonth.from(referenceDate);
+    private GoalResponse calculate(User user, LocalDate referenceDate, YearMonth selectedMonth) {
         List<FinancialEntry> entries = entryRepository
                 .findAllByUserIdAndDueDateBetweenOrderByDueDateAscCreatedAtAsc(
                         user.getId(),
@@ -98,7 +111,10 @@ public class GoalService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal remainingAmount = pendingExpenses.subtract(income).max(BigDecimal.ZERO);
         Set<DayOfWeek> availableWeekdays = fromMask(user.getGoalWeekdaysMask());
-        int availableDays = countAvailableDays(referenceDate.plusDays(1), selectedMonth.atEndOfMonth(), availableWeekdays);
+        LocalDate firstAvailableDate = referenceDate.plusDays(1).isAfter(selectedMonth.atDay(1))
+                ? referenceDate.plusDays(1)
+                : selectedMonth.atDay(1);
+        int availableDays = countAvailableDays(firstAvailableDate, selectedMonth.atEndOfMonth(), availableWeekdays);
         BigDecimal dailyTarget = remainingAmount.signum() == 0 || availableDays == 0
                 ? BigDecimal.ZERO.setScale(2)
                 : remainingAmount.divide(BigDecimal.valueOf(availableDays), 2, RoundingMode.HALF_UP);

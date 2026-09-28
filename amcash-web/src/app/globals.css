@@ -1551,6 +1551,103 @@ a {
   line-height: 1.45;
 }
 
+.goal-next-month {
+  overflow: hidden;
+  border: 1px solid #dbe6f6;
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 0.45rem 1.3rem rgb(27 65 112 / 5%);
+}
+
+.goal-next-summary {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 0;
+  background: linear-gradient(145deg, #0d61ee, #1d72f6);
+  color: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.goal-next-summary.covered {
+  background: linear-gradient(145deg, #0d9d61, #18b874);
+}
+
+.goal-next-copy {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.goal-next-copy small {
+  color: rgb(255 255 255 / 72%);
+  font-size: 0.53rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.goal-next-copy strong {
+  font-size: 1.05rem;
+}
+
+.goal-next-copy > span {
+  color: rgb(255 255 255 / 78%);
+  font-size: 0.58rem;
+}
+
+.goal-next-toggle {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 17%);
+  font-size: 1.2rem;
+  font-weight: 400;
+}
+
+.goal-next-details {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.75rem;
+  background: #f7f9fd;
+}
+
+.goal-next-covered-message {
+  margin: 0;
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  background: #ecfaf4;
+  color: #23835b;
+  font-size: 0.62rem;
+  line-height: 1.45;
+}
+
+.goal-next-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  min-height: 5rem;
+  border: 1px solid #e3eaf4;
+  border-radius: 1rem;
+  background: #fff;
+  color: #8194a9;
+  font-size: 0.62rem;
+}
+
+.goal-next-loading .loader {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-width: 2px;
+}
+
 .goal-targets {
   display: grid;
   grid-template-columns: 1fr 1fr;

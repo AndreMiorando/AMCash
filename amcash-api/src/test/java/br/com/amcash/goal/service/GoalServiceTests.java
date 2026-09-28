@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -124,6 +125,28 @@ class GoalServiceTests {
         assertEquals(0, response.availableDays());
         assertEquals(new BigDecimal("0.00"), response.dailyTarget());
         assertEquals(new BigDecimal("0.00"), response.weeklyTarget());
+    }
+
+    @Test
+    void shouldCalculateTheWholeFollowingMonthFromTheFirstDay() {
+        UUID userId = UUID.randomUUID();
+        User user = user(userId);
+        FinancialEntry expense = entry(user, EntryType.EXPENSE, "2200.00", false);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(entryRepository.findAllByUserIdAndDueDateBetweenOrderByDueDateAscCreatedAtAsc(
+                userId, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31)))
+                .thenReturn(List.of(expense));
+
+        var response = goalService.current(
+                userId,
+                LocalDate.of(2026, 9, 27),
+                YearMonth.of(2026, 10));
+
+        assertEquals(2026, response.year());
+        assertEquals(10, response.month());
+        assertEquals(22, response.availableDays());
+        assertEquals(new BigDecimal("100.00"), response.dailyTarget());
+        assertEquals(new BigDecimal("500.00"), response.weeklyTarget());
     }
 
     @Test
