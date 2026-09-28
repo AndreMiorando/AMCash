@@ -7,6 +7,8 @@ import br.com.amcash.entry.repository.FinancialEntryRepository;
 import br.com.amcash.entry.repository.SubexpenseRepository;
 import br.com.amcash.goal.dto.request.UpdateGoalPreferencesRequest;
 import br.com.amcash.goal.dto.response.GoalResponse;
+import br.com.amcash.goal.entity.GoalMonthPreference;
+import br.com.amcash.goal.repository.GoalMonthPreferenceRepository;
 import br.com.amcash.shared.exception.BadRequestException;
 import br.com.amcash.shared.exception.NotFoundException;
 import br.com.amcash.user.entity.User;
@@ -35,14 +37,17 @@ public class GoalService {
     private final FinancialEntryRepository entryRepository;
     private final SubexpenseRepository subexpenseRepository;
     private final UserRepository userRepository;
+    private final GoalMonthPreferenceRepository goalPreferenceRepository;
 
     public GoalService(
             FinancialEntryRepository entryRepository,
             SubexpenseRepository subexpenseRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            GoalMonthPreferenceRepository goalPreferenceRepository) {
         this.entryRepository = entryRepository;
         this.subexpenseRepository = subexpenseRepository;
         this.userRepository = userRepository;
+        this.goalPreferenceRepository = goalPreferenceRepository;
     }
 
     @Transactional(readOnly = true)
@@ -52,7 +57,12 @@ public class GoalService {
 
     @Transactional(readOnly = true)
     public GoalResponse current(UUID userId, LocalDate referenceDate, YearMonth targetMonth) {
-        return calculate(findUser(userId), referenceDate, targetMonth);
+        User user = findUser(userId);
+        Set<DayOfWeek> availableWeekdays = goalPreferenceRepository
+                .findByUserIdAndYearAndMonth(userId, targetMonth.getYear(), targetMonth.getMonthValue())
+                .map(preference -> fromMask(preference.getWeekdaysMask()))
+                .orElseGet(() -> fromMask(GoalMonthPreference.ALL_WEEKDAYS_MASK));
+        return calculate(user, referenceDate, targetMonth, availableWeekdays);
     }
 
     @Transactional
@@ -73,12 +83,23 @@ public class GoalService {
             throw new BadRequestException("Selecione ao menos um dia disponível");
         }
         User user = findUser(userId);
-        user.updateGoalWeekdaysMask(toMask(request.availableWeekdays()));
-        userRepository.save(user);
-        return calculate(user, referenceDate, targetMonth);
+        GoalMonthPreference preference = goalPreferenceRepository
+                .findByUserIdAndYearAndMonth(userId, targetMonth.getYear(), targetMonth.getMonthValue())
+                .orElseGet(() -> new GoalMonthPreference(
+                        user,
+                        targetMonth.getYear(),
+                        targetMonth.getMonthValue(),
+                        GoalMonthPreference.ALL_WEEKDAYS_MASK));
+        preference.updateWeekdaysMask(toMask(request.availableWeekdays()));
+        goalPreferenceRepository.save(preference);
+        return calculate(user, referenceDate, targetMonth, request.availableWeekdays());
     }
 
-    private GoalResponse calculate(User user, LocalDate referenceDate, YearMonth selectedMonth) {
+    private GoalResponse calculate(
+            User user,
+            LocalDate referenceDate,
+            YearMonth selectedMonth,
+            Set<DayOfWeek> availableWeekdays) {
         List<FinancialEntry> entries = entryRepository
                 .findAllByUserIdAndDueDateBetweenOrderByDueDateAscCreatedAtAsc(
                         user.getId(),
@@ -110,7 +131,6 @@ public class GoalService {
                         itemsByEntryId.getOrDefault(entry.getId(), List.of())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal remainingAmount = pendingExpenses.subtract(income).max(BigDecimal.ZERO);
-        Set<DayOfWeek> availableWeekdays = fromMask(user.getGoalWeekdaysMask());
         LocalDate firstAvailableDate = referenceDate.plusDays(1).isAfter(selectedMonth.atDay(1))
                 ? referenceDate.plusDays(1)
                 : selectedMonth.atDay(1);
