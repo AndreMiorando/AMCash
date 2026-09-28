@@ -330,6 +330,14 @@ body {
   background: linear-gradient(145deg, #f4f7ff 14%, #e5edff 84%);
 }
 
+@media (max-width: 47.999rem) {
+  .loading-screen .background-orb--top {
+    top: 0.75rem;
+    left: -8rem;
+    width: 18rem;
+  }
+}
+
 .background-orb--bottom {
   right: clamp(-13rem, -24vw, -7rem);
   bottom: clamp(-15rem, -27vw, -8rem);
