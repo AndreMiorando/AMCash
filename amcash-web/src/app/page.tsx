@@ -2054,11 +2054,12 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const backgroundColor = screen === "auth" ? "#f8faff" : "#ffffff";
+    const showingSplash = isLaunchSplashVisible || screen === "checking" || screen === "refreshing" || screen === "loading";
+    const backgroundColor = screen === "auth" || showingSplash ? "#f8faff" : "#ffffff";
     document.documentElement.style.backgroundColor = backgroundColor;
     document.body.style.backgroundColor = backgroundColor;
     document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute("content", backgroundColor);
-  }, [screen]);
+  }, [isLaunchSplashVisible, screen]);
 
   useEffect(() => {
     window.addEventListener("amcash:unauthorized", logout);
