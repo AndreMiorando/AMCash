@@ -1701,6 +1701,22 @@ const goalWeekdays: { value: ApiDayOfWeek; short: string; label: string }[] = [
   { value: "SUNDAY", short: "Dom", label: "Domingo" },
 ];
 
+const goalWeekdaysByDateIndex: ApiDayOfWeek[] = [
+  "SUNDAY",
+  "MONDAY",
+  "TUESDAY",
+  "WEDNESDAY",
+  "THURSDAY",
+  "FRIDAY",
+  "SATURDAY",
+];
+
+function orderedGoalWeekdays(year: number, month: number) {
+  const firstWeekday = goalWeekdaysByDateIndex[new Date(year, month - 1, 1).getDay()];
+  const firstIndex = goalWeekdays.findIndex((weekday) => weekday.value === firstWeekday);
+  return [...goalWeekdays.slice(firstIndex), ...goalWeekdays.slice(0, firstIndex)];
+}
+
 function remainingWeekdaysInMonth(dateValue: string, targetYear?: number, targetMonth?: number) {
   const [year, month, day] = dateValue.split("-").map(Number);
   const firstAvailableDate = new Date(year, month - 1, day + 1);
@@ -1709,19 +1725,10 @@ function remainingWeekdaysInMonth(dateValue: string, targetYear?: number, target
   const firstDate = new Date(selectedYear, selectedMonth - 1, 1);
   const currentDate = firstAvailableDate > firstDate ? firstAvailableDate : firstDate;
   const lastDate = new Date(selectedYear, selectedMonth, 0);
-  const weekdaysByIndex: ApiDayOfWeek[] = [
-    "SUNDAY",
-    "MONDAY",
-    "TUESDAY",
-    "WEDNESDAY",
-    "THURSDAY",
-    "FRIDAY",
-    "SATURDAY",
-  ];
   const remaining = new Set<ApiDayOfWeek>();
 
   for (const date = new Date(currentDate); date <= lastDate; date.setDate(date.getDate() + 1)) {
-    remaining.add(weekdaysByIndex[date.getDay()]);
+    remaining.add(goalWeekdaysByDateIndex[date.getDay()]);
   }
 
   return remaining;
@@ -1850,7 +1857,7 @@ function GoalsScreen({ onHome, onRadar }: { onHome: () => void; onRadar: () => v
             <strong>{targetGoal.availableDays} {targetGoal.availableDays === 1 ? "dia restante" : "dias restantes"}</strong>
           </div>
           <div className="goal-weekdays" aria-label="Dias disponíveis da semana">
-            {goalWeekdays.map((weekday) => {
+            {orderedGoalWeekdays(targetGoal.year, targetGoal.month).map((weekday) => {
               const selectable = selectableWeekdays.has(weekday.value);
               const selected = selectable && targetGoal.availableWeekdays.includes(weekday.value);
               return (
@@ -1923,7 +1930,10 @@ function GoalsScreen({ onHome, onRadar }: { onHome: () => void; onRadar: () => v
             {!goal.covered && renderGoalDetails(goal)}
 
             {goal.covered && isLoadingNextGoal && (
-              <div className="goal-next-loading" role="status"><div className="loader" aria-hidden="true" /><span>Calculando o próximo mês</span></div>
+              <div className="goal-next-loading" role="status">
+                <div className="loader" aria-hidden="true" />
+                <span className="goal-next-loading-copy"><strong>Próximo mês</strong><small>Calculando sua meta...</small></span>
+              </div>
             )}
 
             {goal.covered && nextGoal && (
