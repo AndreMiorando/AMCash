@@ -1962,6 +1962,7 @@ function GoalsScreen({ onHome, onRadar }: { onHome: () => void; onRadar: () => v
 
 export default function Home() {
   const [screen, setScreen] = useState<"checking" | "auth" | "loading" | "refreshing" | "app">("checking");
+  const [isLaunchSplashVisible, setIsLaunchSplashVisible] = useState(true);
   const [activeTab, setActiveTab] = useState<"home" | "radar" | "goals">("home");
   const [items, setItems] = useState<Transaction[]>([]);
   const [selected, setSelected] = useState<Transaction | null>(null);
@@ -2017,11 +2018,29 @@ export default function Home() {
   }, [logout]);
 
   useEffect(() => {
+    const savedToken = window.localStorage.getItem("amcash.accessToken");
     const sessionCheck = window.setTimeout(() => {
-      const savedToken = window.localStorage.getItem("amcash.accessToken");
       setScreen(savedToken ? "refreshing" : "auth");
-    }, 0);
+    }, savedToken ? 0 : 1000);
     return () => window.clearTimeout(sessionCheck);
+  }, []);
+
+  useEffect(() => {
+    let splashTimer = window.setTimeout(() => setIsLaunchSplashVisible(false), 1000);
+    const showSplash = () => {
+      if (document.visibilityState !== "visible") return;
+      window.clearTimeout(splashTimer);
+      setIsLaunchSplashVisible(true);
+      splashTimer = window.setTimeout(() => setIsLaunchSplashVisible(false), 1000);
+    };
+
+    document.addEventListener("visibilitychange", showSplash);
+    window.addEventListener("pageshow", showSplash);
+    return () => {
+      window.clearTimeout(splashTimer);
+      document.removeEventListener("visibilitychange", showSplash);
+      window.removeEventListener("pageshow", showSplash);
+    };
   }, []);
 
   useEffect(() => {
@@ -2039,7 +2058,7 @@ export default function Home() {
   useEffect(() => {
     if (screen !== "loading" && screen !== "refreshing") return;
     let active = true;
-    const minimumLoading = screen === "loading" ? 1400 : 0;
+    const minimumLoading = screen === "loading" ? 1400 : 1000;
     const startLoading = window.setTimeout(() => {
       Promise.all([
         loadMonth(period.year, period.month),
@@ -2103,13 +2122,8 @@ export default function Home() {
     await loadMonth(period.year, period.month);
   }
 
-  const idleCreate = async () => {};
-  const idleTransactionAction = async () => {};
-  const idleMonthChange = () => {};
-
-  if (screen === "checking" || screen === "refreshing") return <Dashboard items={items} onOpen={setSelected} onCreate={idleCreate} onDelete={idleTransactionAction} onPaid={idleTransactionAction} onRadar={() => setActiveTab("radar")} onGoals={() => setActiveTab("goals")} onMonthChange={idleMonthChange} initialPeriod={period} isLoading />;
+  if (isLaunchSplashVisible || screen === "checking" || screen === "refreshing" || screen === "loading") return <LoadingScreen />;
   if (screen === "auth") return <AuthScreen onAuthenticated={() => setScreen("loading")} />;
-  if (screen === "loading") return <LoadingScreen />;
   if (activeTab === "radar") return <RadarScreen onHome={() => setActiveTab("home")} onGoals={() => setActiveTab("goals")} />;
   if (activeTab === "goals") return <GoalsScreen onHome={() => setActiveTab("home")} onRadar={() => setActiveTab("radar")} />;
   if (selected) {

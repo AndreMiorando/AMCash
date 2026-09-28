@@ -8,6 +8,8 @@ import br.com.amcash.entry.entity.Subexpense;
 import br.com.amcash.entry.repository.FinancialEntryRepository;
 import br.com.amcash.entry.repository.SubexpenseRepository;
 import br.com.amcash.goal.dto.request.UpdateGoalPreferencesRequest;
+import br.com.amcash.goal.entity.GoalMonthPreference;
+import br.com.amcash.goal.repository.GoalMonthPreferenceRepository;
 import br.com.amcash.shared.exception.BadRequestException;
 import br.com.amcash.user.entity.User;
 import br.com.amcash.user.repository.UserRepository;
@@ -36,6 +38,7 @@ class GoalServiceTests {
     private FinancialEntryRepository entryRepository;
     private SubexpenseRepository subexpenseRepository;
     private UserRepository userRepository;
+    private GoalMonthPreferenceRepository goalPreferenceRepository;
     private GoalService goalService;
 
     @BeforeEach
@@ -43,7 +46,12 @@ class GoalServiceTests {
         entryRepository = mock(FinancialEntryRepository.class);
         subexpenseRepository = mock(SubexpenseRepository.class);
         userRepository = mock(UserRepository.class);
-        goalService = new GoalService(entryRepository, subexpenseRepository, userRepository);
+        goalPreferenceRepository = mock(GoalMonthPreferenceRepository.class);
+        goalService = new GoalService(
+                entryRepository,
+                subexpenseRepository,
+                userRepository,
+                goalPreferenceRepository);
     }
 
     @Test
@@ -84,7 +92,9 @@ class GoalServiceTests {
                 DayOfWeek.TUESDAY,
                 DayOfWeek.WEDNESDAY,
                 DayOfWeek.THURSDAY,
-                DayOfWeek.FRIDAY), response.availableWeekdays());
+                DayOfWeek.FRIDAY,
+                DayOfWeek.SATURDAY,
+                DayOfWeek.SUNDAY), response.availableWeekdays());
     }
 
     @Test
@@ -102,20 +112,25 @@ class GoalServiceTests {
                 LocalDate.of(2026, 9, 26),
                 new UpdateGoalPreferencesRequest(Set.of(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY)));
 
-        assertEquals(96, user.getGoalWeekdaysMask());
         assertEquals(1, response.availableDays());
         assertEquals(new BigDecimal("1000.00"), response.dailyTarget());
         assertEquals(new BigDecimal("1000.00"), response.weeklyTarget());
-        verify(userRepository).save(user);
+        verify(goalPreferenceRepository).save(any(GoalMonthPreference.class));
     }
 
     @Test
     void shouldNotCountCurrentWeekdayWhenItsNextOccurrenceIsInTheFollowingMonth() {
         UUID userId = UUID.randomUUID();
         User user = user(userId);
-        user.updateGoalWeekdaysMask(1 << (DayOfWeek.SUNDAY.getValue() - 1));
+        GoalMonthPreference preference = new GoalMonthPreference(
+                user,
+                2026,
+                9,
+                1 << (DayOfWeek.SUNDAY.getValue() - 1));
         FinancialEntry expense = entry(user, EntryType.EXPENSE, "1000.00", false);
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(goalPreferenceRepository.findByUserIdAndYearAndMonth(userId, 2026, 9))
+                .thenReturn(Optional.of(preference));
         when(entryRepository.findAllByUserIdAndDueDateBetweenOrderByDueDateAscCreatedAtAsc(
                 userId, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30)))
                 .thenReturn(List.of(expense));
@@ -144,9 +159,36 @@ class GoalServiceTests {
 
         assertEquals(2026, response.year());
         assertEquals(10, response.month());
-        assertEquals(22, response.availableDays());
-        assertEquals(new BigDecimal("100.00"), response.dailyTarget());
-        assertEquals(new BigDecimal("500.00"), response.weeklyTarget());
+        assertEquals(31, response.availableDays());
+        assertEquals(new BigDecimal("70.97"), response.dailyTarget());
+        assertEquals(new BigDecimal("496.79"), response.weeklyTarget());
+    }
+
+    @Test
+    void shouldNotReuseWeekdaysSelectedForAnotherMonth() {
+        UUID userId = UUID.randomUUID();
+        User user = user(userId);
+        GoalMonthPreference septemberPreference = new GoalMonthPreference(
+                user,
+                2026,
+                9,
+                7);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(goalPreferenceRepository.findByUserIdAndYearAndMonth(userId, 2026, 9))
+                .thenReturn(Optional.of(septemberPreference));
+        when(goalPreferenceRepository.findByUserIdAndYearAndMonth(userId, 2026, 10))
+                .thenReturn(Optional.empty());
+        when(entryRepository.findAllByUserIdAndDueDateBetweenOrderByDueDateAscCreatedAtAsc(
+                userId, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31)))
+                .thenReturn(List.of());
+
+        var october = goalService.current(
+                userId,
+                LocalDate.of(2026, 9, 27),
+                YearMonth.of(2026, 10));
+
+        assertEquals(List.of(DayOfWeek.values()), october.availableWeekdays());
+        assertEquals(31, october.availableDays());
     }
 
     @Test
