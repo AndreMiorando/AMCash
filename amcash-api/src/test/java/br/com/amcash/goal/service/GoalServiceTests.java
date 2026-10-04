@@ -112,7 +112,7 @@ class GoalServiceTests {
     }
 
     @Test
-    void shouldNotCountTodayAsAnAvailableDay() {
+    void shouldCountTodayAsAnAvailableDay() {
         UUID userId = UUID.randomUUID();
         User user = user(userId);
         GoalMonthPreference preference = new GoalMonthPreference(
@@ -131,7 +131,7 @@ class GoalServiceTests {
 
         var response = goalService.current(userId, LocalDate.of(2026, 9, 27));
 
-        assertEquals(0, response.availableDays());
+        assertEquals(1, response.availableDays());
         assertEquals(new BigDecimal("1000.00"), response.dailyTarget());
         assertEquals(new BigDecimal("1000.00"), response.weeklyTarget());
     }
@@ -160,7 +160,7 @@ class GoalServiceTests {
     }
 
     @Test
-    void shouldDivideCurrentMonthTargetOnlyByDaysAfterToday() {
+    void shouldDivideCurrentMonthTargetByDaysStartingToday() {
         UUID userId = UUID.randomUUID();
         User user = user(userId);
         FinancialEntry expense = entry(user, EntryType.EXPENSE, "2800.00", false);
@@ -179,9 +179,9 @@ class GoalServiceTests {
 
         var response = goalService.current(userId, LocalDate.of(2026, 10, 3));
 
-        assertEquals(28, response.availableDays());
-        assertEquals(new BigDecimal("100.00"), response.dailyTarget());
-        assertEquals(new BigDecimal("700.00"), response.weeklyTarget());
+        assertEquals(29, response.availableDays());
+        assertEquals(new BigDecimal("96.55"), response.dailyTarget());
+        assertEquals(new BigDecimal("675.85"), response.weeklyTarget());
     }
 
     @Test
