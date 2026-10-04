@@ -182,7 +182,7 @@ public class GoalService {
     private int countRemainingSelectedDays(LocalDate referenceDate, YearMonth month, Set<Integer> selectedDays) {
         return (int) selectedDays.stream()
                 .map(month::atDay)
-                .filter(date -> date.isAfter(referenceDate))
+                .filter(date -> !date.isBefore(referenceDate))
                 .count();
     }
 

@@ -1729,7 +1729,7 @@ function goalCalendarCells(year: number, month: number, referenceDate: string) {
       key: dateToInputValue(date),
       day: date.getDate(),
       inMonth,
-      passed: inMonth && date <= reference,
+      passed: inMonth && date < reference,
     };
   });
 }
