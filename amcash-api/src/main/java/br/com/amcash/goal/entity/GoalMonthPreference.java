@@ -43,6 +43,9 @@ public class GoalMonthPreference {
     @Column(name = "weekdays_mask", nullable = false)
     private int weekdaysMask;
 
+    @Column(name = "selected_days_mask", nullable = false)
+    private int selectedDaysMask;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
@@ -58,6 +61,7 @@ public class GoalMonthPreference {
         this.year = year;
         this.month = month;
         this.weekdaysMask = weekdaysMask;
+        this.selectedDaysMask = 0;
         this.createdAt = now;
         this.updatedAt = now;
     }
@@ -76,6 +80,15 @@ public class GoalMonthPreference {
 
     public void updateWeekdaysMask(int weekdaysMask) {
         this.weekdaysMask = weekdaysMask;
+        this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
+    }
+
+    public int getSelectedDaysMask() {
+        return selectedDaysMask;
+    }
+
+    public void updateSelectedDaysMask(int selectedDaysMask) {
+        this.selectedDaysMask = selectedDaysMask;
         this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 }

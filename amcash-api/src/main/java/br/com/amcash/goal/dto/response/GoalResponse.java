@@ -1,7 +1,6 @@
 package br.com.amcash.goal.dto.response;
 
 import java.math.BigDecimal;
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -17,6 +16,6 @@ public record GoalResponse(
         int availableDays,
         BigDecimal progressPercentage,
         boolean covered,
-        List<DayOfWeek> availableWeekdays
+        List<Integer> selectedDays
 ) {
 }
