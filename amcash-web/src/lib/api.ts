@@ -130,15 +130,6 @@ export type ApiForecast = {
   timeline: ApiForecastMonth[];
 };
 
-export type ApiDayOfWeek =
-  | "MONDAY"
-  | "TUESDAY"
-  | "WEDNESDAY"
-  | "THURSDAY"
-  | "FRIDAY"
-  | "SATURDAY"
-  | "SUNDAY";
-
 export type ApiGoal = {
   year: number;
   month: number;
@@ -151,7 +142,7 @@ export type ApiGoal = {
   availableDays: number;
   progressPercentage: number;
   covered: boolean;
-  availableWeekdays: ApiDayOfWeek[];
+  selectedDays: number[];
 };
 
 export class ApiError extends Error {
@@ -208,11 +199,11 @@ export const financeApi = {
     return apiRequest<ApiGoal>(`/api/v1/goals?date=${date}${target}`);
   },
 
-  updateGoalPreferences(date: string, availableWeekdays: ApiDayOfWeek[], year?: number, month?: number) {
+  updateGoalPreferences(date: string, selectedDays: number[], year?: number, month?: number) {
     const target = year !== undefined && month !== undefined ? `&year=${year}&month=${month}` : "";
     return apiRequest<ApiGoal>(`/api/v1/goals/preferences?date=${date}${target}`, {
       method: "PUT",
-      body: JSON.stringify({ availableWeekdays }),
+      body: JSON.stringify({ selectedDays }),
     });
   },
 

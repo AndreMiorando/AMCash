@@ -1,12 +1,11 @@
 package br.com.amcash.goal.dto.request;
 
-import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 
-import java.time.DayOfWeek;
 import java.util.Set;
 
 public record UpdateGoalPreferencesRequest(
-        @NotEmpty(message = "Selecione ao menos um dia disponível")
-        Set<DayOfWeek> availableWeekdays
+        @NotNull(message = "Informe os dias disponíveis")
+        Set<Integer> selectedDays
 ) {
 }

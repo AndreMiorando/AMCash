@@ -18,11 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
-import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,11 +57,11 @@ public class GoalService {
     @Transactional(readOnly = true)
     public GoalResponse current(UUID userId, LocalDate referenceDate, YearMonth targetMonth) {
         User user = findUser(userId);
-        Set<DayOfWeek> availableWeekdays = goalPreferenceRepository
+        Set<Integer> selectedDays = goalPreferenceRepository
                 .findByUserIdAndYearAndMonth(userId, targetMonth.getYear(), targetMonth.getMonthValue())
-                .map(preference -> fromMask(preference.getWeekdaysMask()))
-                .orElseGet(() -> fromMask(GoalMonthPreference.ALL_WEEKDAYS_MASK));
-        return calculate(user, referenceDate, targetMonth, availableWeekdays);
+                .map(preference -> daysFromMask(preference.getSelectedDaysMask(), targetMonth.lengthOfMonth()))
+                .orElseGet(Set::of);
+        return calculate(user, referenceDate, targetMonth, selectedDays);
     }
 
     @Transactional
@@ -79,8 +78,11 @@ public class GoalService {
             LocalDate referenceDate,
             YearMonth targetMonth,
             UpdateGoalPreferencesRequest request) {
-        if (request.availableWeekdays() == null || request.availableWeekdays().isEmpty()) {
-            throw new BadRequestException("Selecione ao menos um dia disponível");
+        if (request.selectedDays() == null) {
+            throw new BadRequestException("Informe os dias disponíveis");
+        }
+        if (request.selectedDays().stream().anyMatch(day -> day == null || day < 1 || day > targetMonth.lengthOfMonth())) {
+            throw new BadRequestException("Existe um dia inválido para o mês selecionado");
         }
         User user = findUser(userId);
         GoalMonthPreference preference = goalPreferenceRepository
@@ -90,16 +92,16 @@ public class GoalService {
                         targetMonth.getYear(),
                         targetMonth.getMonthValue(),
                         GoalMonthPreference.ALL_WEEKDAYS_MASK));
-        preference.updateWeekdaysMask(toMask(request.availableWeekdays()));
+        preference.updateSelectedDaysMask(daysToMask(request.selectedDays()));
         goalPreferenceRepository.save(preference);
-        return calculate(user, referenceDate, targetMonth, request.availableWeekdays());
+        return calculate(user, referenceDate, targetMonth, request.selectedDays());
     }
 
     private GoalResponse calculate(
             User user,
             LocalDate referenceDate,
             YearMonth selectedMonth,
-            Set<DayOfWeek> availableWeekdays) {
+            Set<Integer> selectedDays) {
         List<FinancialEntry> entries = entryRepository
                 .findAllByUserIdAndDueDateBetweenOrderByDueDateAscCreatedAtAsc(
                         user.getId(),
@@ -131,15 +133,14 @@ public class GoalService {
                         itemsByEntryId.getOrDefault(entry.getId(), List.of())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal remainingAmount = pendingExpenses.subtract(income).max(BigDecimal.ZERO);
-        LocalDate firstAvailableDate = referenceDate.plusDays(1).isAfter(selectedMonth.atDay(1))
-                ? referenceDate.plusDays(1)
-                : selectedMonth.atDay(1);
-        int availableDays = countAvailableDays(firstAvailableDate, selectedMonth.atEndOfMonth(), availableWeekdays);
-        BigDecimal dailyTarget = remainingAmount.signum() == 0 || availableDays == 0
+        int availableDays = countRemainingSelectedDays(referenceDate, selectedMonth, selectedDays);
+        BigDecimal dailyTarget = remainingAmount.signum() == 0
                 ? BigDecimal.ZERO.setScale(2)
-                : remainingAmount.divide(BigDecimal.valueOf(availableDays), 2, RoundingMode.HALF_UP);
+                : availableDays == 0
+                        ? remainingAmount.setScale(2, RoundingMode.HALF_UP)
+                        : remainingAmount.divide(BigDecimal.valueOf(availableDays), 2, RoundingMode.HALF_UP);
         BigDecimal weeklyTarget = dailyTarget
-                .multiply(BigDecimal.valueOf(Math.min(availableWeekdays.size(), Math.max(availableDays, 1))))
+                .multiply(BigDecimal.valueOf(Math.max(1, Math.min(availableDays, 7))))
                 .min(remainingAmount)
                 .setScale(2, RoundingMode.HALF_UP);
         BigDecimal progressPercentage = pendingExpenses.signum() == 0
@@ -160,7 +161,7 @@ public class GoalService {
                 availableDays,
                 progressPercentage,
                 remainingAmount.signum() == 0,
-                availableWeekdays.stream().sorted().toList());
+                selectedDays.stream().sorted().toList());
     }
 
     private BigDecimal pendingAmount(FinancialEntry entry, List<Subexpense> items) {
@@ -178,28 +179,25 @@ public class GoalService {
         return pendingItems.add(unallocated);
     }
 
-    private int countAvailableDays(LocalDate start, LocalDate end, Set<DayOfWeek> availableWeekdays) {
-        int count = 0;
-        for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
-            if (availableWeekdays.contains(date.getDayOfWeek())) count++;
-        }
-        return count;
+    private int countRemainingSelectedDays(LocalDate referenceDate, YearMonth month, Set<Integer> selectedDays) {
+        return (int) selectedDays.stream()
+                .map(month::atDay)
+                .filter(date -> date.isAfter(referenceDate))
+                .count();
     }
 
-    private int toMask(Set<DayOfWeek> weekdays) {
-        return weekdays.stream()
-                .mapToInt(day -> 1 << (day.getValue() - 1))
+    private int daysToMask(Set<Integer> days) {
+        return days.stream()
+                .mapToInt(day -> 1 << (day - 1))
                 .reduce(0, (mask, day) -> mask | day);
     }
 
-    private Set<DayOfWeek> fromMask(int mask) {
-        EnumSet<DayOfWeek> weekdays = EnumSet.noneOf(DayOfWeek.class);
-        for (DayOfWeek day : DayOfWeek.values()) {
-            if ((mask & (1 << (day.getValue() - 1))) != 0) weekdays.add(day);
+    private Set<Integer> daysFromMask(int mask, int daysInMonth) {
+        Set<Integer> days = new HashSet<>();
+        for (int day = 1; day <= daysInMonth; day++) {
+            if ((mask & (1 << (day - 1))) != 0) days.add(day);
         }
-        return weekdays.isEmpty()
-                ? EnumSet.range(DayOfWeek.MONDAY, DayOfWeek.FRIDAY)
-                : weekdays;
+        return days;
     }
 
     private User findUser(UUID userId) {

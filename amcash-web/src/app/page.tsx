@@ -6,7 +6,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ApiEntry,
   ApiEntryCategory,
-  ApiDayOfWeek,
   ApiError,
   ApiForecast,
   ApiGoal,
@@ -1336,8 +1335,26 @@ function DetailScreen({
   const [confirmSaveScope, setConfirmSaveScope] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
+  const numericAmount = parseCurrencyInput(amount);
   const numericRecurrenceCount = Number(recurrenceCount);
   const recurrenceIsValid = transaction.hasSubexpenses || recurrenceFrequency === "none" || (recurrenceCount !== "" && Number.isInteger(numericRecurrenceCount) && numericRecurrenceCount >= 2 && numericRecurrenceCount <= 120);
+  const parentFormIsValid = name.trim().length > 0
+    && category !== ""
+    && dueDate !== ""
+    && Number.isFinite(numericAmount)
+    && numericAmount > 0
+    && recurrenceIsValid;
+  const recurrenceCountChanged = recurrenceFrequency !== "none"
+    && numericRecurrenceCount !== transaction.recurrenceCount;
+  const hasParentChanges = type !== (transaction.income ? "income" : "expense")
+    || name.trim() !== transaction.name
+    || category !== transaction.category
+    || dueDate !== transaction.date
+    || (!transaction.hasSubexpenses && (
+      Math.round(numericAmount * 100) !== Math.round(transaction.value * 100)
+      || recurrenceFrequency !== transaction.recurrenceFrequency
+      || recurrenceCountChanged
+    ));
   const progress = transaction.totalOccurrences
     ? Math.round((transaction.paidOccurrences / transaction.totalOccurrences) * 100)
     : 0;
@@ -1351,8 +1368,7 @@ function DetailScreen({
   }, [transaction.subexpenses, transaction.value]);
 
   async function executeSaveDetails(scope: ApiSeriesScope) {
-    const numericAmount = parseCurrencyInput(amount);
-    if (!name.trim() || !category || !dueDate || !Number.isFinite(numericAmount) || numericAmount <= 0 || !recurrenceIsValid || isSaving) return;
+    if (!hasParentChanges || !parentFormIsValid || isSaving) return;
     setIsSaving(true);
     setError("");
     try {
@@ -1376,6 +1392,7 @@ function DetailScreen({
   }
 
   function saveDetails() {
+    if (!hasParentChanges || !parentFormIsValid || isSaving) return;
     if (transaction.seriesId) {
       setConfirmSaveScope(true);
       return;
@@ -1472,7 +1489,7 @@ function DetailScreen({
           <label className="field full-field"><span>Descrição</span><input value={name} onChange={(event) => setName(event.target.value)} /></label>
           <CategoryPickerInput value={category} options={type === "expense" ? expenseCategories : incomeCategories} onChange={setCategory} />
           <div className="field-grid">
-            <label className="field"><span>Valor</span><div className="currency-input"><b>R$</b><input value={amount} onChange={(event) => setAmount(maskCurrencyInput(event.target.value))} onBlur={() => setAmount(completeCurrencyInput(amount))} inputMode="numeric" /></div></label>
+            <label className="field"><span>Valor</span><div className="currency-input"><b>R$</b><input value={amount} onChange={(event) => setAmount(maskCurrencyInput(event.target.value))} onBlur={() => setAmount(completeCurrencyInput(amount))} inputMode="numeric" readOnly={transaction.hasSubexpenses} aria-readonly={transaction.hasSubexpenses} /></div></label>
             <DatePickerInput label="Vencimento" value={dueDate} onChange={setDueDate} />
           </div>
           {!transaction.hasSubexpenses && (
@@ -1512,7 +1529,7 @@ function DetailScreen({
         )}
 
         {error && <p className="auth-error" role="alert">{error}</p>}
-        <button type="button" className="primary-button save-details" disabled={isSaving} onClick={saveDetails}>{isSaving ? "Salvando..." : "Salvar alterações"}</button>
+        <button type="button" className="primary-button save-details" disabled={isSaving || !hasParentChanges || !parentFormIsValid} onClick={saveDetails}>{isSaving ? "Salvando..." : hasParentChanges ? "Salvar alterações" : "Tudo salvo"}</button>
         <button type="button" className="danger-button" onClick={() => setConfirmDelete(true)}><Icon name="trash" /> Excluir lançamento</button>
       </div>
 
@@ -1691,47 +1708,36 @@ function RadarScreen({ onHome, onGoals }: { onHome: () => void; onGoals: () => v
   );
 }
 
-const goalWeekdays: { value: ApiDayOfWeek; short: string; label: string }[] = [
-  { value: "MONDAY", short: "Seg", label: "Segunda" },
-  { value: "TUESDAY", short: "Ter", label: "Terça" },
-  { value: "WEDNESDAY", short: "Qua", label: "Quarta" },
-  { value: "THURSDAY", short: "Qui", label: "Quinta" },
-  { value: "FRIDAY", short: "Sex", label: "Sexta" },
-  { value: "SATURDAY", short: "Sáb", label: "Sábado" },
-  { value: "SUNDAY", short: "Dom", label: "Domingo" },
-];
+const goalCalendarWeekdays = ["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"];
 
-const goalWeekdaysByDateIndex: ApiDayOfWeek[] = [
-  "SUNDAY",
-  "MONDAY",
-  "TUESDAY",
-  "WEDNESDAY",
-  "THURSDAY",
-  "FRIDAY",
-  "SATURDAY",
-];
-
-function orderedGoalWeekdays(year: number, month: number) {
-  const firstWeekday = goalWeekdaysByDateIndex[new Date(year, month - 1, 1).getDay()];
-  const firstIndex = goalWeekdays.findIndex((weekday) => weekday.value === firstWeekday);
-  return [...goalWeekdays.slice(firstIndex), ...goalWeekdays.slice(0, firstIndex)];
+function localDateFromInput(dateValue: string) {
+  const [year, month, day] = dateValue.split("-").map(Number);
+  return new Date(year, month - 1, day);
 }
 
-function remainingWeekdaysInMonth(dateValue: string, targetYear?: number, targetMonth?: number) {
-  const [year, month, day] = dateValue.split("-").map(Number);
-  const firstAvailableDate = new Date(year, month - 1, day + 1);
-  const selectedYear = targetYear ?? year;
-  const selectedMonth = targetMonth ?? month;
-  const firstDate = new Date(selectedYear, selectedMonth - 1, 1);
-  const currentDate = firstAvailableDate > firstDate ? firstAvailableDate : firstDate;
-  const lastDate = new Date(selectedYear, selectedMonth, 0);
-  const remaining = new Set<ApiDayOfWeek>();
+function goalCalendarCells(year: number, month: number, referenceDate: string) {
+  const firstDate = new Date(year, month - 1, 1);
+  const offsetFromMonday = (firstDate.getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const totalCells = Math.ceil((offsetFromMonday + daysInMonth) / 7) * 7;
+  const reference = localDateFromInput(referenceDate);
 
-  for (const date = new Date(currentDate); date <= lastDate; date.setDate(date.getDate() + 1)) {
-    remaining.add(goalWeekdaysByDateIndex[date.getDay()]);
-  }
+  return Array.from({ length: totalCells }, (_, index) => {
+    const date = new Date(year, month - 1, index - offsetFromMonday + 1);
+    const inMonth = date.getFullYear() === year && date.getMonth() === month - 1;
+    return {
+      key: dateToInputValue(date),
+      day: date.getDate(),
+      inMonth,
+      passed: inMonth && date <= reference,
+    };
+  });
+}
 
-  return remaining;
+function remainingGoalDays(year: number, month: number, referenceDate: string) {
+  return goalCalendarCells(year, month, referenceDate)
+    .filter((cell) => cell.inMonth && !cell.passed)
+    .map((cell) => cell.day);
 }
 
 function GoalsScreen({ onHome, onRadar }: { onHome: () => void; onRadar: () => void }) {
@@ -1751,13 +1757,16 @@ function GoalsScreen({ onHome, onRadar }: { onHome: () => void; onRadar: () => v
       setReferenceDate((savedDate) => savedDate === currentDate ? savedDate : currentDate);
     };
     const refreshOnFocus = () => {
+      if (document.visibilityState !== "visible") return;
       updateDate();
       setRefreshKey((current) => current + 1);
     };
     window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", refreshOnFocus);
     const timer = window.setInterval(updateDate, 60_000);
     return () => {
       window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", refreshOnFocus);
       window.clearInterval(timer);
     };
   }, []);
@@ -1794,27 +1803,14 @@ function GoalsScreen({ onHome, onRadar }: { onHome: () => void; onRadar: () => v
     return () => { active = false; };
   }, [referenceDate, refreshKey]);
 
-  async function toggleWeekday(targetGoal: ApiGoal, weekday: ApiDayOfWeek) {
+  async function saveGoalDays(targetGoal: ApiGoal, selectedDays: number[]) {
     if (isSavingDays) return;
-    const selectableWeekdays = remainingWeekdaysInMonth(referenceDate, targetGoal.year, targetGoal.month);
-    if (!selectableWeekdays.has(weekday)) return;
-    const isSelected = targetGoal.availableWeekdays.includes(weekday);
-    const selectedRemainingDays = targetGoal.availableWeekdays.filter((day) => selectableWeekdays.has(day));
-    if (isSelected && selectedRemainingDays.length === 1) {
-      setError("Selecione ao menos um dia disponível.");
-      return;
-    }
-    const availableWeekdays = isSelected
-      ? targetGoal.availableWeekdays.filter((day) => day !== weekday)
-      : goalWeekdays.map(({ value }) => value).filter((day) => (
-          targetGoal.availableWeekdays.includes(day) || day === weekday
-        ));
     setIsSavingDays(true);
     setError("");
     try {
       const updatedGoal = await financeApi.updateGoalPreferences(
         referenceDate,
-        availableWeekdays,
+        [...selectedDays].sort((first, second) => first - second),
         targetGoal.year,
         targetGoal.month,
       );
@@ -1827,6 +1823,25 @@ function GoalsScreen({ onHome, onRadar }: { onHome: () => void; onRadar: () => v
     }
   }
 
+  function toggleGoalDay(targetGoal: ApiGoal, day: number) {
+    const selectableDays = remainingGoalDays(targetGoal.year, targetGoal.month, referenceDate);
+    if (!selectableDays.includes(day)) return;
+    const selectedDays = targetGoal.selectedDays.includes(day)
+      ? targetGoal.selectedDays.filter((selectedDay) => selectedDay !== day)
+      : [...targetGoal.selectedDays, day];
+    void saveGoalDays(targetGoal, selectedDays);
+  }
+
+  function selectRemainingGoalDays(targetGoal: ApiGoal) {
+    const remainingDays = remainingGoalDays(targetGoal.year, targetGoal.month, referenceDate);
+    void saveGoalDays(targetGoal, [...new Set([...targetGoal.selectedDays, ...remainingDays])]);
+  }
+
+  function clearRemainingGoalDays(targetGoal: ApiGoal) {
+    const remainingDays = new Set(remainingGoalDays(targetGoal.year, targetGoal.month, referenceDate));
+    void saveGoalDays(targetGoal, targetGoal.selectedDays.filter((day) => !remainingDays.has(day)));
+  }
+
   const goalMonthLabel = (targetGoal: ApiGoal) => (
     new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" })
       .format(new Date(targetGoal.year, targetGoal.month - 1, 1))
@@ -1835,49 +1850,65 @@ function GoalsScreen({ onHome, onRadar }: { onHome: () => void; onRadar: () => v
   const progress = Math.max(0, Math.min(100, Number(goal?.progressPercentage ?? 0)));
 
   function renderGoalDetails(targetGoal: ApiGoal) {
-    const selectableWeekdays = remainingWeekdaysInMonth(referenceDate, targetGoal.year, targetGoal.month);
+    const calendarCells = goalCalendarCells(targetGoal.year, targetGoal.month, referenceDate);
+    const remainingDays = remainingGoalDays(targetGoal.year, targetGoal.month, referenceDate);
+    const remainingDaysSet = new Set(remainingDays);
     return (
       <>
         <section className="goal-targets" aria-label={`Metas restantes de ${goalMonthLabel(targetGoal)}`}>
           <article>
             <span>META SEMANAL</span>
-            <strong>{targetGoal.availableDays > 0 ? formatCurrency(Number(targetGoal.weeklyTarget)) : "—"}</strong>
+            <strong>{formatCurrency(Number(targetGoal.weeklyTarget))}</strong>
             <small>por semana até o fim do mês</small>
           </article>
           <article>
             <span>META DIÁRIA</span>
-            <strong>{targetGoal.availableDays > 0 ? formatCurrency(Number(targetGoal.dailyTarget)) : "—"}</strong>
-            <small>por dia disponível</small>
+            <strong>{formatCurrency(Number(targetGoal.dailyTarget))}</strong>
+            <small>{targetGoal.availableDays > 0 ? "por dia selecionado" : "selecione dias para dividir"}</small>
           </article>
         </section>
 
         <section className="goal-days-card">
           <div className="goal-days-heading">
-            <div><span>DIAS DISPONÍVEIS</span><h2>Quando você pretende gerar renda?</h2></div>
-            <strong>{targetGoal.availableDays} {targetGoal.availableDays === 1 ? "dia restante" : "dias restantes"}</strong>
+            <div><span>DIAS DISPONÍVEIS</span><h2>Selecione os dias em que pretende gerar renda</h2></div>
+            <strong>{targetGoal.availableDays} {targetGoal.availableDays === 1 ? "dia selecionado" : "dias selecionados"}</strong>
           </div>
-          <div className="goal-weekdays" aria-label="Dias disponíveis da semana">
-            {orderedGoalWeekdays(targetGoal.year, targetGoal.month).map((weekday) => {
-              const selectable = selectableWeekdays.has(weekday.value);
-              const selected = selectable && targetGoal.availableWeekdays.includes(weekday.value);
+          <div className="goal-calendar-weekdays" aria-hidden="true">
+            {goalCalendarWeekdays.map((weekday) => <span key={weekday}>{weekday}</span>)}
+          </div>
+          <div className="goal-calendar" aria-label={`Calendário de ${goalMonthLabel(targetGoal)}`}>
+            {calendarCells.map((cell) => {
+              const selected = cell.inMonth && !cell.passed && targetGoal.selectedDays.includes(cell.day);
+              const selectable = cell.inMonth && remainingDaysSet.has(cell.day);
               return (
                 <button
                   type="button"
-                  key={weekday.value}
-                  className={selected ? "selected" : ""}
+                  key={cell.key}
+                  className={`${!cell.inMonth ? "outside" : cell.passed ? "passed" : selected ? "selected" : "available"}`}
                   disabled={isSavingDays || !selectable}
-                  onClick={() => toggleWeekday(targetGoal, weekday.value)}
+                  onClick={() => toggleGoalDay(targetGoal, cell.day)}
                   aria-pressed={selected}
-                  aria-label={selectable ? weekday.label : `${weekday.label}, sem dias restantes neste mês`}
-                  title={selectable ? undefined : "Este dia da semana não ocorre mais neste mês"}
+                  aria-label={!cell.inMonth
+                    ? `${cell.day}, fora do mês`
+                    : cell.passed
+                      ? `Dia ${cell.day}, já passou`
+                      : `Dia ${cell.day}${selected ? ", selecionado" : ", não selecionado"}`}
                 >
-                  <span>{selected && <Icon name="check" />}</span>
-                  {weekday.short}
+                  <span>{String(cell.day).padStart(2, "0")}</span>
+                  {selected && <i aria-hidden="true"><Icon name="check" /></i>}
                 </button>
               );
             })}
           </div>
-          {targetGoal.availableDays === 0 && <p className="goal-days-warning">Não há mais dias selecionados neste mês. Ajuste os dias disponíveis para recalcular sua meta.</p>}
+          <div className="goal-calendar-actions">
+            <button type="button" disabled={isSavingDays || remainingDays.length === 0} onClick={() => selectRemainingGoalDays(targetGoal)}><Icon name="check" />Selecionar restantes</button>
+            <button type="button" className="clear" disabled={isSavingDays || targetGoal.availableDays === 0} onClick={() => clearRemainingGoalDays(targetGoal)}><Icon name="trash" />Limpar restantes</button>
+          </div>
+          <div className="goal-calendar-legend" aria-hidden="true">
+            <span><i className="passed" />Já passou</span>
+            <span><i className="selected" />Selecionado</span>
+            <span><i />Não selecionado</span>
+          </div>
         </section>
 
         <section className="goal-breakdown" aria-label={`Resumo da meta de ${goalMonthLabel(targetGoal)}`}>
