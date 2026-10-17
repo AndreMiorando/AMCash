@@ -147,6 +147,52 @@ export type ApiGoal = {
   selectedDays: number[];
 };
 
+export type ApiWorkPeriod = "DAY" | "WEEK" | "MONTH";
+
+export type ApiWorkEarning = {
+  id: string;
+  source: string;
+  amount: number;
+};
+
+export type ApiWorkDay = {
+  id: string;
+  date: string;
+  kilometers: number;
+  fuelCost: number;
+  otherCosts: number;
+  grossEarnings: number;
+  totalCosts: number;
+  netEarnings: number;
+  earningsPerKilometer: number;
+  earnings: ApiWorkEarning[];
+};
+
+export type ApiWorkOverview = {
+  period: ApiWorkPeriod;
+  referenceDate: string;
+  rangeStart: string;
+  rangeEnd: string;
+  summary: {
+    grossEarnings: number;
+    fuelCost: number;
+    otherCosts: number;
+    totalCosts: number;
+    netEarnings: number;
+    kilometers: number;
+    earningsPerKilometer: number;
+    workedDays: number;
+  };
+  days: ApiWorkDay[];
+};
+
+export type WorkDayPayload = {
+  kilometers: number;
+  fuelCost: number;
+  otherCosts: number;
+  earnings: { source: string; amount: number }[];
+};
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -207,6 +253,21 @@ export const financeApi = {
       method: "PUT",
       body: JSON.stringify({ selectedDays }),
     });
+  },
+
+  workOverview(date: string, period: ApiWorkPeriod) {
+    return apiRequest<ApiWorkOverview>(`/api/v1/work?date=${date}&period=${period}`);
+  },
+
+  saveWorkDay(date: string, payload: WorkDayPayload) {
+    return apiRequest<ApiWorkDay>(`/api/v1/work/days/${date}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteWorkDay(date: string) {
+    return apiRequest<void>(`/api/v1/work/days/${date}`, { method: "DELETE" });
   },
 
   create(payload: EntryPayload) {
