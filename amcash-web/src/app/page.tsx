@@ -62,6 +62,7 @@ declare global {
 }
 
 type RecurrenceFrequency = "none" | "daily" | "weekly" | "monthly";
+type TransactionFilter = "pending" | "paid" | "all";
 
 const expenseCategories: { value: ApiEntryCategory; label: string }[] = [
   { value: "FOOD", label: "Alimentação" },
@@ -95,6 +96,8 @@ const incomeCategories: { value: ApiEntryCategory; label: string }[] = [
   { value: "BENEFITS", label: "Benefícios" },
   { value: "REFUND", label: "Reembolso" },
   { value: "GIFT", label: "Presente recebido" },
+  { value: "UBER", label: "Uber" },
+  { value: "NINETY_NINE", label: "99" },
   { value: "OTHER_INCOME", label: "Outras receitas" },
 ];
 
@@ -974,6 +977,7 @@ function Dashboard({
   const [pendingDelete, setPendingDelete] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [transactionFilter, setTransactionFilter] = useState<TransactionFilter>("pending");
   const periodFormatter = new Intl.DateTimeFormat("pt-BR", {
     month: "long",
     year: "numeric",
@@ -989,6 +993,10 @@ function Dashboard({
   const visibleItems = items.filter((item) => {
     const [year, month] = item.date.split("-").map(Number);
     return year === selectedMonth.getFullYear() && month === selectedMonth.getMonth() + 1;
+  });
+  const filteredItems = visibleItems.filter((item) => {
+    if (transactionFilter === "all" || item.income) return true;
+    return transactionFilter === "paid" ? item.paid : !item.paid;
   });
   const totalIncome = visibleItems.filter((item) => item.income).reduce((total, item) => total + item.value, 0);
   const totalExpenses = visibleItems.filter((item) => !item.income && !item.paid).reduce((total, item) => total + item.value, 0);
@@ -1067,21 +1075,27 @@ function Dashboard({
         <button type="button" className="month-arrow" onClick={() => changeMonth(1)} aria-label={`Ir para ${periodFormatter.format(nextMonth)}`}><Icon name="forward" /></button>
       </section>
 
+      <div className="transaction-filter" role="group" aria-label="Filtrar lançamentos por pagamento">
+        <button type="button" className={transactionFilter === "pending" ? "selected" : ""} aria-pressed={transactionFilter === "pending"} onClick={() => setTransactionFilter("pending")}>Pendentes</button>
+        <button type="button" className={transactionFilter === "paid" ? "selected" : ""} aria-pressed={transactionFilter === "paid"} onClick={() => setTransactionFilter("paid")}>Pagas</button>
+        <button type="button" className={transactionFilter === "all" ? "selected" : ""} aria-pressed={transactionFilter === "all"} onClick={() => setTransactionFilter("all")}>Todas</button>
+      </div>
+
       {(error || actionError) && <p className="auth-error" role="alert">{error || actionError}</p>}
 
-      <section className={`transactions${isLoading || visibleItems.length === 0 ? " transactions--empty" : ""}`} aria-label={`Movimentações de ${monthLabel}`} aria-busy={isLoading}>
+      <section className={`transactions${isLoading || filteredItems.length === 0 ? " transactions--empty" : ""}`} aria-label={`Movimentações de ${monthLabel}`} aria-busy={isLoading}>
         {isLoading ? (
           <div className="dashboard-loading" role="status">
             <div className="loader" aria-hidden="true" />
             <span>Carregando seus lançamentos</span>
           </div>
-        ) : visibleItems.length === 0 ? (
+        ) : filteredItems.length === 0 ? (
           <div className="empty-transactions">
             <div className="empty-transactions-icon" aria-hidden="true"><Icon name="wallet" /></div>
-            <h2>Nenhum lançamento neste mês</h2>
-            <p>Suas receitas e despesas aparecerão aqui quando forem adicionadas.</p>
+            <h2>{transactionFilter === "pending" ? "Nenhuma despesa pendente" : transactionFilter === "paid" ? "Nenhuma despesa paga" : "Nenhum lançamento neste mês"}</h2>
+            <p>{transactionFilter === "pending" ? "As despesas que ainda precisam ser pagas aparecerão aqui." : transactionFilter === "paid" ? "As despesas marcadas como pagas aparecerão aqui." : "Suas receitas e despesas aparecerão aqui quando forem adicionadas."}</p>
           </div>
-        ) : visibleItems.map((transaction) => (
+        ) : filteredItems.map((transaction) => (
           <TransactionRow
             key={transaction.id}
             transaction={transaction}
