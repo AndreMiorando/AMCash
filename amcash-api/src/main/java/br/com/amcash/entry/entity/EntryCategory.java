@@ -30,6 +30,8 @@ public enum EntryCategory {
     BENEFITS(EntryType.INCOME),
     REFUND(EntryType.INCOME),
     GIFT(EntryType.INCOME),
+    UBER(EntryType.INCOME),
+    NINETY_NINE(EntryType.INCOME),
     OTHER_INCOME(EntryType.INCOME);
 
     private final EntryType supportedType;

@@ -30,6 +30,8 @@ export type ApiEntryCategory =
   | "BENEFITS"
   | "REFUND"
   | "GIFT"
+  | "UBER"
+  | "NINETY_NINE"
   | "OTHER_INCOME";
 
 export type ApiSubexpense = {
