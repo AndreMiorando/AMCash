@@ -1657,6 +1657,7 @@ function RadarScreen({ onHome, onGoals, onWork }: { onHome: () => void; onGoals:
   const [forecast, setForecast] = useState<ApiForecast | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [expandedMonth, setExpandedMonth] = useState<string | null>(`${startYear}-${startMonth}`);
 
   useEffect(() => {
     let active = true;
@@ -1691,6 +1692,7 @@ function RadarScreen({ onHome, onGoals, onWork }: { onHome: () => void; onGoals:
     new Intl.DateTimeFormat("pt-BR", { month: style, year: "numeric" }).format(new Date(year, month - 1, 1))
   );
   const signedCurrency = (value: number) => `${value < 0 ? "- " : "+ "}${formatCurrency(value)}`;
+  const balanceStatus = (value: number) => value < 0 ? "Atenção" : value === 0 ? "No limite" : "Saldo positivo";
 
   return (
     <main className="dashboard-screen radar-screen">
@@ -1706,8 +1708,8 @@ function RadarScreen({ onHome, onGoals, onWork }: { onHome: () => void; onGoals:
         <section className="radar-intro">
           <div>
             <span>PREVISÃO</span>
-            <h1>Seus próximos meses</h1>
-            <p>Veja quando seus compromissos começam, terminam e quanto fica livre.</p>
+            <h1>Seu dinheiro nos próximos meses</h1>
+            <p>Antecipe meses apertados e veja quando seu orçamento ganha espaço.</p>
           </div>
           <div className="radar-horizon" aria-label="Horizonte da previsão">
             <button type="button" className={horizon === 6 ? "active" : ""} onClick={() => changeHorizon(6)}>6 meses</button>
@@ -1722,53 +1724,55 @@ function RadarScreen({ onHome, onGoals, onWork }: { onHome: () => void; onGoals:
           <>
             <section className="radar-summary" aria-label="Resumo da previsão">
               <article className="radar-balance-card">
-                <span>Saldo livre neste mês</span>
+                <span>SALDO PREVISTO NESTE MÊS</span>
                 <strong className={Number(current?.freeBalance ?? 0) < 0 ? "negative" : ""}>
                   {Number(current?.freeBalance ?? 0) < 0 ? "- " : ""}{formatCurrency(Number(current?.freeBalance ?? 0))}
                 </strong>
-                <small>Receitas menos despesas que ainda estão pendentes.</small>
+                <small>{balanceStatus(Number(current?.freeBalance ?? 0))} · receitas menos gastos previstos.</small>
               </article>
               <div className="radar-mini-cards">
-                <article><span>Gastos previstos</span><strong>{formatCurrency(totalPending)}</strong></article>
-                <article><span>Menor saldo previsto</span><strong className={Number(lowestBalance?.freeBalance ?? 0) < 0 ? "negative" : ""}>{Number(lowestBalance?.freeBalance ?? 0) < 0 ? "- " : ""}{formatCurrency(Number(lowestBalance?.freeBalance ?? 0))}</strong><small>{lowestBalance ? monthName(lowestBalance.year, lowestBalance.month, "short") : "—"}</small></article>
+                <article><span>Gastos nos {horizon} meses</span><strong>{formatCurrency(totalPending)}</strong><small>Ainda não pagos</small></article>
+                <article><span>Mês mais apertado</span><strong className={Number(lowestBalance?.freeBalance ?? 0) < 0 ? "negative" : ""}>{Number(lowestBalance?.freeBalance ?? 0) < 0 ? "- " : ""}{formatCurrency(Number(lowestBalance?.freeBalance ?? 0))}</strong><small>{lowestBalance ? monthName(lowestBalance.year, lowestBalance.month, "short") : "—"}</small></article>
               </div>
             </section>
 
             <section className="radar-timeline" aria-label="Previsão mensal">
+              <div className="radar-timeline-title"><div><span>PREVISÃO MÊS A MÊS</span><h2>Como seu saldo evolui</h2></div><small>Toque em um mês para ver os detalhes</small></div>
               {timeline.map((period, index) => {
                 const freeBalance = Number(period.freeBalance);
                 const expenseChange = Number(period.expenseChange);
                 const income = Number(period.income);
                 const pending = Number(period.pendingExpenses);
                 const barWidth = income > 0 ? Math.min(100, Math.round((pending / income) * 100)) : pending > 0 ? 100 : 0;
+                const monthKey = `${period.year}-${period.month}`;
+                const isExpanded = expandedMonth === monthKey;
                 return (
-                  <article className="forecast-month" key={`${period.year}-${period.month}`}>
-                    <div className="forecast-month-heading">
-                      <div><span>{index === 0 ? "MÊS ATUAL" : `EM ${index} ${index === 1 ? "MÊS" : "MESES"}`}</span><h2>{monthName(period.year, period.month)}</h2></div>
-                      <div className="forecast-free"><span>Saldo livre</span><strong className={freeBalance < 0 ? "negative" : ""}>{freeBalance < 0 ? "- " : ""}{formatCurrency(freeBalance)}</strong></div>
+                  <article className={`forecast-month${isExpanded ? " expanded" : ""}${freeBalance < 0 ? " deficit" : ""}`} key={monthKey}>
+                    <button className="forecast-month-toggle" type="button" aria-expanded={isExpanded} onClick={() => setExpandedMonth(isExpanded ? null : monthKey)}>
+                      <span className="forecast-month-position">{index === 0 ? "AGORA" : `+${index}`}</span>
+                      <span className="forecast-month-name"><strong>{monthName(period.year, period.month)}</strong><small>{balanceStatus(freeBalance)}</small></span>
+                      <span className="forecast-free"><small>Saldo previsto</small><strong className={freeBalance < 0 ? "negative" : ""}>{freeBalance < 0 ? "- " : ""}{formatCurrency(freeBalance)}</strong></span>
+                      <span className="forecast-chevron" aria-hidden="true">⌄</span>
+                    </button>
+                    <div className="forecast-core-values">
+                      <div><span>Receitas previstas</span><strong>{formatCurrency(income)}</strong></div>
+                      <span className="forecast-operation">−</span>
+                      <div><span>Gastos previstos</span><strong>{formatCurrency(pending)}</strong></div>
                     </div>
-                    <div className="forecast-values">
-                      <div><span>Receitas</span><strong>{formatCurrency(Number(period.income))}</strong></div>
-                      <div><span>Pendentes</span><strong>{formatCurrency(pending)}</strong></div>
-                      <div><span>Já pagas</span><strong>{formatCurrency(Number(period.paidExpenses))}</strong></div>
-                    </div>
-                    <div className="forecast-bar" aria-label={`${barWidth}% das receitas comprometidas`}><span style={{ width: `${barWidth}%` }} /></div>
-                    <p className={`forecast-comparison${expenseChange > 0 ? " worse" : expenseChange < 0 ? " better" : ""}`}>
-                      {expenseChange === 0 ? "Compromissos estáveis em relação ao mês anterior." : expenseChange > 0
-                        ? `${signedCurrency(expenseChange)} em despesas comparado ao mês anterior.`
-                        : `${formatCurrency(expenseChange)} a menos em despesas que no mês anterior.`}
-                    </p>
-                    {period.events.length > 0 && (
-                      <div className="forecast-events">
-                        {period.events.map((event) => (
-                          <div className={`forecast-event ${event.type === "ENDING" ? "ending" : "starting"}`} key={`${event.type}-${event.source}-${event.name}-${event.date}`}>
-                            <span>{event.type === "ENDING" ? "Termina" : "Começa"}</span>
-                            <strong>{event.name}</strong>
-                            <b>{formatCurrency(Number(event.amount))}</b>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <div className="forecast-commitment"><div className="forecast-bar" aria-label={`${barWidth}% das receitas comprometidas`}><span style={{ width: `${barWidth}%` }} /></div><small>{income > 0 ? `${barWidth}% da receita comprometida` : pending > 0 ? "Sem receita prevista" : "Sem gastos previstos"}</small></div>
+                    {isExpanded && <div className="forecast-details">
+                      {Number(period.paidExpenses) > 0 && <div className="forecast-paid"><span>Já pago neste mês</span><strong>{formatCurrency(Number(period.paidExpenses))}</strong></div>}
+                      <p className={`forecast-comparison${expenseChange > 0 ? " worse" : expenseChange < 0 ? " better" : ""}`}>
+                        {expenseChange === 0 ? "Gastos estáveis em relação ao mês anterior." : expenseChange > 0
+                          ? `${signedCurrency(expenseChange)} em gastos comparado ao mês anterior.`
+                          : `${formatCurrency(expenseChange)} a menos em gastos que no mês anterior.`}
+                      </p>
+                      {period.events.length > 0 && <div className="forecast-events">{period.events.map((event) => (
+                        <div className={`forecast-event ${event.type === "ENDING" ? "ending" : "starting"}`} key={`${event.type}-${event.source}-${event.name}-${event.date}`}>
+                          <span>{event.type === "ENDING" ? "Termina" : "Começa"}</span><strong>{event.name}</strong><b>{formatCurrency(Number(event.amount))}</b>
+                        </div>
+                      ))}</div>}
+                    </div>}
                   </article>
                 );
               })}
