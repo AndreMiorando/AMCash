@@ -52,21 +52,19 @@ public class WorkDay {
     protected WorkDay() {
     }
 
-    public WorkDay(User user, LocalDate date, BigDecimal kilometers, BigDecimal fuelCost, BigDecimal otherCosts) {
+    public WorkDay(User user, LocalDate date, BigDecimal kilometers) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         this.user = user;
         this.date = date;
         this.kilometers = kilometers;
-        this.fuelCost = fuelCost;
-        this.otherCosts = otherCosts;
+        this.fuelCost = BigDecimal.ZERO;
+        this.otherCosts = BigDecimal.ZERO;
         this.createdAt = now;
         this.updatedAt = now;
     }
 
-    public void update(BigDecimal kilometers, BigDecimal fuelCost, BigDecimal otherCosts) {
+    public void update(BigDecimal kilometers) {
         this.kilometers = kilometers;
-        this.fuelCost = fuelCost;
-        this.otherCosts = otherCosts;
         this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 
@@ -74,6 +72,4 @@ public class WorkDay {
     public User getUser() { return user; }
     public LocalDate getDate() { return date; }
     public BigDecimal getKilometers() { return kilometers; }
-    public BigDecimal getFuelCost() { return fuelCost; }
-    public BigDecimal getOtherCosts() { return otherCosts; }
 }
