@@ -9,5 +9,6 @@ public record WorkOverviewResponse(
         LocalDate rangeStart,
         LocalDate rangeEnd,
         WorkSummaryResponse summary,
-        List<WorkDayResponse> days) {
+        List<WorkDayResponse> days,
+        List<WorkCostResponse> costs) {
 }

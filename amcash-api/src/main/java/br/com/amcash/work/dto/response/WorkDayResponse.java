@@ -9,11 +9,7 @@ public record WorkDayResponse(
         UUID id,
         LocalDate date,
         BigDecimal kilometers,
-        BigDecimal fuelCost,
-        BigDecimal otherCosts,
         BigDecimal grossEarnings,
-        BigDecimal totalCosts,
-        BigDecimal netEarnings,
         BigDecimal earningsPerKilometer,
         List<WorkEarningResponse> earnings) {
 }

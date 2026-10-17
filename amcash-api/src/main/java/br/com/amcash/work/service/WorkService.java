@@ -5,14 +5,19 @@ import br.com.amcash.shared.exception.NotFoundException;
 import br.com.amcash.user.entity.User;
 import br.com.amcash.user.repository.UserRepository;
 import br.com.amcash.work.dto.request.UpsertWorkDayRequest;
+import br.com.amcash.work.dto.request.WorkCostRequest;
 import br.com.amcash.work.dto.request.WorkEarningRequest;
+import br.com.amcash.work.dto.response.WorkCostResponse;
 import br.com.amcash.work.dto.response.WorkDayResponse;
 import br.com.amcash.work.dto.response.WorkEarningResponse;
 import br.com.amcash.work.dto.response.WorkOverviewResponse;
 import br.com.amcash.work.dto.response.WorkSummaryResponse;
+import br.com.amcash.work.entity.WorkCost;
+import br.com.amcash.work.entity.WorkCostCategory;
 import br.com.amcash.work.entity.WorkDay;
 import br.com.amcash.work.entity.WorkEarning;
 import br.com.amcash.work.entity.WorkPeriod;
+import br.com.amcash.work.repository.WorkCostRepository;
 import br.com.amcash.work.repository.WorkDayRepository;
 import br.com.amcash.work.repository.WorkEarningRepository;
 import org.springframework.stereotype.Service;
@@ -35,19 +40,18 @@ import java.util.UUID;
 
 @Service
 public class WorkService {
-
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2);
 
     private final WorkDayRepository workDayRepository;
     private final WorkEarningRepository workEarningRepository;
+    private final WorkCostRepository workCostRepository;
     private final UserRepository userRepository;
 
-    public WorkService(
-            WorkDayRepository workDayRepository,
-            WorkEarningRepository workEarningRepository,
-            UserRepository userRepository) {
+    public WorkService(WorkDayRepository workDayRepository, WorkEarningRepository workEarningRepository,
+                       WorkCostRepository workCostRepository, UserRepository userRepository) {
         this.workDayRepository = workDayRepository;
         this.workEarningRepository = workEarningRepository;
+        this.workCostRepository = workCostRepository;
         this.userRepository = userRepository;
     }
 
@@ -55,30 +59,27 @@ public class WorkService {
     public WorkOverviewResponse overview(UUID userId, LocalDate referenceDate, WorkPeriod period) {
         LocalDate start = rangeStart(referenceDate, period);
         LocalDate end = rangeEnd(referenceDate, period);
-        List<WorkDay> days = workDayRepository
-                .findAllByUserIdAndDateBetweenOrderByDateDesc(userId, start, end);
+        List<WorkDay> days = workDayRepository.findAllByUserIdAndDateBetweenOrderByDateDesc(userId, start, end);
         Map<UUID, List<WorkEarning>> earningsByDay = loadEarnings(days);
-        List<WorkDayResponse> responses = days.stream()
+        List<WorkDayResponse> dayResponses = days.stream()
                 .map(day -> toResponse(day, earningsByDay.getOrDefault(day.getId(), List.of())))
                 .toList();
-        return new WorkOverviewResponse(
-                period.name(), referenceDate, start, end, summarize(responses), responses);
+        List<WorkCostResponse> costResponses = workCostRepository
+                .findAllByUserIdAndDateBetweenOrderByDateDescCreatedAtDesc(userId, start, end)
+                .stream().map(this::toResponse).toList();
+        return new WorkOverviewResponse(period.name(), referenceDate, start, end,
+                summarize(dayResponses, costResponses), dayResponses, costResponses);
     }
 
     @Transactional
-    public WorkDayResponse upsert(
-            UUID userId,
-            LocalDate date,
-            UpsertWorkDayRequest request) {
+    public WorkDayResponse upsert(UUID userId, LocalDate date, UpsertWorkDayRequest request) {
         validateEarnings(request.earnings());
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado"));
         WorkDay day = workDayRepository.findByUserIdAndDate(userId, date)
-                .orElseGet(() -> new WorkDay(
-                        user, date, request.kilometers(), request.fuelCost(), request.otherCosts()));
-        day.update(request.kilometers(), request.fuelCost(), request.otherCosts());
+                .orElseGet(() -> new WorkDay(user, date, request.kilometers()));
+        day.update(request.kilometers());
         day = workDayRepository.save(day);
-
         workEarningRepository.deleteAllByWorkDayId(day.getId());
         List<WorkEarning> earnings = new ArrayList<>();
         for (int index = 0; index < request.earnings().size(); index++) {
@@ -96,53 +97,73 @@ public class WorkService {
         workDayRepository.delete(day);
     }
 
+    @Transactional
+    public WorkCostResponse createCost(UUID userId, WorkCostRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado"));
+        WorkCost cost = new WorkCost(user, request.date(), request.category(),
+                normalize(request.description()), request.amount());
+        return toResponse(workCostRepository.save(cost));
+    }
+
+    @Transactional
+    public WorkCostResponse updateCost(UUID userId, UUID costId, WorkCostRequest request) {
+        WorkCost cost = workCostRepository.findByIdAndUserId(costId, userId)
+                .orElseThrow(() -> new NotFoundException("Custo não encontrado"));
+        cost.update(request.date(), request.category(), normalize(request.description()), request.amount());
+        return toResponse(workCostRepository.save(cost));
+    }
+
+    @Transactional
+    public void deleteCost(UUID userId, UUID costId) {
+        WorkCost cost = workCostRepository.findByIdAndUserId(costId, userId)
+                .orElseThrow(() -> new NotFoundException("Custo não encontrado"));
+        workCostRepository.delete(cost);
+    }
+
     private Map<UUID, List<WorkEarning>> loadEarnings(List<WorkDay> days) {
         if (days.isEmpty()) return Map.of();
         Map<UUID, List<WorkEarning>> earningsByDay = new HashMap<>();
         List<UUID> dayIds = days.stream().map(WorkDay::getId).toList();
-        for (WorkEarning earning : workEarningRepository
-                .findAllByWorkDayIdInOrderByWorkDayIdAscSortOrderAsc(dayIds)) {
-            earningsByDay.computeIfAbsent(earning.getWorkDay().getId(), ignored -> new ArrayList<>())
-                    .add(earning);
+        for (WorkEarning earning : workEarningRepository.findAllByWorkDayIdInOrderByWorkDayIdAscSortOrderAsc(dayIds)) {
+            earningsByDay.computeIfAbsent(earning.getWorkDay().getId(), ignored -> new ArrayList<>()).add(earning);
         }
         return earningsByDay;
     }
 
     private WorkDayResponse toResponse(WorkDay day, List<WorkEarning> earnings) {
-        BigDecimal gross = earnings.stream()
-                .map(WorkEarning::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal costs = day.getFuelCost().add(day.getOtherCosts());
-        BigDecimal net = gross.subtract(costs);
+        BigDecimal gross = earnings.stream().map(WorkEarning::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal perKilometer = day.getKilometers().signum() == 0
-                ? ZERO
-                : gross.divide(day.getKilometers(), 2, RoundingMode.HALF_UP);
+                ? ZERO : gross.divide(day.getKilometers(), 2, RoundingMode.HALF_UP);
         List<WorkEarningResponse> earningResponses = earnings.stream()
-                .map(earning -> new WorkEarningResponse(
-                        earning.getId(), earning.getSource(), earning.getAmount()))
+                .map(earning -> new WorkEarningResponse(earning.getId(), earning.getSource(), earning.getAmount()))
                 .toList();
-        return new WorkDayResponse(
-                day.getId(), day.getDate(), day.getKilometers(), day.getFuelCost(), day.getOtherCosts(),
-                money(gross), money(costs), money(net), perKilometer, earningResponses);
+        return new WorkDayResponse(day.getId(), day.getDate(), day.getKilometers(), money(gross),
+                perKilometer, earningResponses);
     }
 
-    private WorkSummaryResponse summarize(List<WorkDayResponse> days) {
+    private WorkCostResponse toResponse(WorkCost cost) {
+        return new WorkCostResponse(cost.getId(), cost.getDate(), cost.getCategory(),
+                cost.getDescription(), money(cost.getAmount()));
+    }
+
+    private WorkSummaryResponse summarize(List<WorkDayResponse> days, List<WorkCostResponse> costEntries) {
         BigDecimal gross = sum(days, WorkDayResponse::grossEarnings);
-        BigDecimal fuel = sum(days, WorkDayResponse::fuelCost);
-        BigDecimal other = sum(days, WorkDayResponse::otherCosts);
+        BigDecimal fuel = costEntries.stream().filter(cost -> cost.category() == WorkCostCategory.FUEL)
+                .map(WorkCostResponse::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal other = costEntries.stream().filter(cost -> cost.category() != WorkCostCategory.FUEL)
+                .map(WorkCostResponse::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal kilometers = sum(days, WorkDayResponse::kilometers);
         BigDecimal costs = fuel.add(other);
         BigDecimal perKilometer = kilometers.signum() == 0
-                ? ZERO
-                : gross.divide(kilometers, 2, RoundingMode.HALF_UP);
-        return new WorkSummaryResponse(
-                money(gross), money(fuel), money(other), money(costs), money(gross.subtract(costs)),
-                kilometers.setScale(2, RoundingMode.HALF_UP), perKilometer, days.size());
+                ? ZERO : gross.divide(kilometers, 2, RoundingMode.HALF_UP);
+        return new WorkSummaryResponse(money(gross), money(fuel), money(other), money(costs),
+                money(gross.subtract(costs)), kilometers.setScale(2, RoundingMode.HALF_UP),
+                perKilometer, days.size());
     }
 
-    private BigDecimal sum(
-            List<WorkDayResponse> days,
-            java.util.function.Function<WorkDayResponse, BigDecimal> value) {
+    private BigDecimal sum(List<WorkDayResponse> days,
+                           java.util.function.Function<WorkDayResponse, BigDecimal> value) {
         return days.stream().map(value).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
@@ -154,6 +175,11 @@ public class WorkService {
                 throw new BadRequestException("Cada fonte de faturamento deve aparecer apenas uma vez");
             }
         }
+    }
+
+    private String normalize(String value) {
+        if (value == null || value.isBlank()) return null;
+        return value.trim();
     }
 
     private LocalDate rangeStart(LocalDate date, WorkPeriod period) {

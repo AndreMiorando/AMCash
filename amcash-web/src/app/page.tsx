@@ -2141,21 +2141,8 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    let splashTimer = window.setTimeout(() => setIsLaunchSplashVisible(false), 1000);
-    const showSplash = () => {
-      if (document.visibilityState !== "visible") return;
-      window.clearTimeout(splashTimer);
-      setIsLaunchSplashVisible(true);
-      splashTimer = window.setTimeout(() => setIsLaunchSplashVisible(false), 1000);
-    };
-
-    document.addEventListener("visibilitychange", showSplash);
-    window.addEventListener("pageshow", showSplash);
-    return () => {
-      window.clearTimeout(splashTimer);
-      document.removeEventListener("visibilitychange", showSplash);
-      window.removeEventListener("pageshow", showSplash);
-    };
+    const splashTimer = window.setTimeout(() => setIsLaunchSplashVisible(false), 1000);
+    return () => window.clearTimeout(splashTimer);
   }, []);
 
   useEffect(() => {

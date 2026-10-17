@@ -159,13 +159,19 @@ export type ApiWorkDay = {
   id: string;
   date: string;
   kilometers: number;
-  fuelCost: number;
-  otherCosts: number;
   grossEarnings: number;
-  totalCosts: number;
-  netEarnings: number;
   earningsPerKilometer: number;
   earnings: ApiWorkEarning[];
+};
+
+export type ApiWorkCostCategory = "FUEL" | "MAINTENANCE" | "PARKING" | "TOLL" | "WASH" | "OTHER";
+
+export type ApiWorkCost = {
+  id: string;
+  date: string;
+  category: ApiWorkCostCategory;
+  description: string | null;
+  amount: number;
 };
 
 export type ApiWorkOverview = {
@@ -184,13 +190,19 @@ export type ApiWorkOverview = {
     workedDays: number;
   };
   days: ApiWorkDay[];
+  costs: ApiWorkCost[];
 };
 
 export type WorkDayPayload = {
   kilometers: number;
-  fuelCost: number;
-  otherCosts: number;
   earnings: { source: string; amount: number }[];
+};
+
+export type WorkCostPayload = {
+  date: string;
+  category: ApiWorkCostCategory;
+  description: string;
+  amount: number;
 };
 
 export class ApiError extends Error {
@@ -268,6 +280,24 @@ export const financeApi = {
 
   deleteWorkDay(date: string) {
     return apiRequest<void>(`/api/v1/work/days/${date}`, { method: "DELETE" });
+  },
+
+  createWorkCost(payload: WorkCostPayload) {
+    return apiRequest<ApiWorkCost>("/api/v1/work/costs", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateWorkCost(costId: string, payload: WorkCostPayload) {
+    return apiRequest<ApiWorkCost>(`/api/v1/work/costs/${costId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteWorkCost(costId: string) {
+    return apiRequest<void>(`/api/v1/work/costs/${costId}`, { method: "DELETE" });
   },
 
   create(payload: EntryPayload) {
