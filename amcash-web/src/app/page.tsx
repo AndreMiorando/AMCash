@@ -14,6 +14,7 @@ import {
   ApiSubexpense,
   financeApi,
 } from "@/lib/api";
+import WorkScreen from "@/app/components/WorkScreen";
 
 type GoogleCredentialResponse = {
   credential?: string;
@@ -121,6 +122,12 @@ type Transaction = {
   subexpenses: Subexpense[];
 };
 
+type TransactionGroup = {
+  date: string;
+  items: Transaction[];
+  total: number;
+};
+
 type NewTransaction = {
   name: string;
   category: ApiEntryCategory;
@@ -145,7 +152,7 @@ type Subexpense = {
   seriesId?: string;
 };
 
-type IconName = Transaction["kind"] | "search" | "more" | "back" | "forward" | "home" | "radar" | "target" | "edit" | "trash" | "plus" | "check";
+type IconName = Transaction["kind"] | "search" | "more" | "back" | "forward" | "home" | "radar" | "target" | "work" | "edit" | "trash" | "plus" | "check";
 
 function Icon({ name }: { name: IconName }) {
   if (name === "more") {
@@ -159,6 +166,7 @@ function Icon({ name }: { name: IconName }) {
     home: <><path d="m3.5 10 8.5-7 8.5 7" /><path d="M5.5 9v11h13V9M9.5 20v-6h5v6" /></>,
     radar: <><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /><path d="m3 7 6-4 6 6 6-5" /></>,
     target: <><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /><path d="M12 2v3M22 12h-3M12 22v-3M2 12h3" /></>,
+    work: <><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V4h8v3M3 12h18M10 12v2h4v-2" /></>,
     food: <><path d="M6 3v7M9 3v7M6 7h3M7.5 10v11" /><path d="M15.5 3v18M15.5 3c3 2 3.2 7 0 9" /></>,
     card: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18M7 15h4" /></>,
     shield: <><path d="M12 3 5 6v5c0 4.6 3 8.2 7 10 4-1.8 7-5.4 7-10V6l-7-3Z" /><path d="m9.5 12 1.7 1.7 3.5-4" /></>,
@@ -174,11 +182,12 @@ function Icon({ name }: { name: IconName }) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-function BottomNavigation({ active, onHome, onRadar, onGoals }: {
-  active: "home" | "radar" | "goals";
+function BottomNavigation({ active, onHome, onRadar, onGoals, onWork }: {
+  active: "home" | "radar" | "goals" | "work";
   onHome: () => void;
   onRadar: () => void;
   onGoals: () => void;
+  onWork: () => void;
 }) {
   return (
     <nav className="bottom-nav" aria-label="Navegação principal">
@@ -194,6 +203,10 @@ function BottomNavigation({ active, onHome, onRadar, onGoals }: {
         <Icon name="target" />
         <span>Metas</span>
       </button>
+      <button type="button" className={`nav-item${active === "work" ? " active" : ""}`} onClick={onWork} aria-current={active === "work" ? "page" : undefined}>
+        <Icon name="work" />
+        <span>Trabalho</span>
+      </button>
     </nav>
   );
 }
@@ -207,6 +220,17 @@ function formatCurrency(value: number) {
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat("pt-BR").format(new Date(`${date}T12:00:00`));
+}
+
+function formatTransactionGroupDate(date: string) {
+  const parsed = new Date(`${date}T12:00:00`);
+  const calendarDate = new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  }).format(parsed);
+  const weekday = new Intl.DateTimeFormat("pt-BR", { weekday: "long" }).format(parsed);
+  return { calendarDate, weekday };
 }
 
 function maskCurrencyInput(value: string) {
@@ -933,7 +957,10 @@ function TransactionRow({
         </div>
         <div className="transaction-main">
           <strong>{transaction.name}</strong>
-          <time dateTime={transaction.date}>{formatDate(transaction.date)}{transaction.paid && <span> · Pago</span>}</time>
+          <div className="transaction-meta">
+            <time dateTime={transaction.date}>{formatDate(transaction.date)}</time>
+            {!transaction.income && <span className={`transaction-status${transaction.paid ? " paid" : " pending"}`}>{transaction.paid ? "Pago" : "Pendente"}</span>}
+          </div>
         </div>
         <div className="transaction-values">
           <strong className={transaction.income ? "value-income" : "value-expense"}>{transaction.income ? "+ " : "- "}{formatCurrency(transaction.value)}</strong>
@@ -951,6 +978,7 @@ function Dashboard({
   onPaid,
   onRadar,
   onGoals,
+  onWork,
   onMonthChange,
   initialPeriod,
   error = "",
@@ -963,6 +991,7 @@ function Dashboard({
   onPaid: (transaction: Transaction) => Promise<void>;
   onRadar: () => void;
   onGoals: () => void;
+  onWork: () => void;
   onMonthChange: (year: number, month: number) => void;
   initialPeriod: { year: number; month: number };
   error?: string;
@@ -977,7 +1006,7 @@ function Dashboard({
   const [pendingDelete, setPendingDelete] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [actionError, setActionError] = useState("");
-  const [transactionFilter, setTransactionFilter] = useState<TransactionFilter>("pending");
+  const [transactionFilter, setTransactionFilter] = useState<TransactionFilter>("all");
   const periodFormatter = new Intl.DateTimeFormat("pt-BR", {
     month: "long",
     year: "numeric",
@@ -995,9 +1024,27 @@ function Dashboard({
     return year === selectedMonth.getFullYear() && month === selectedMonth.getMonth() + 1;
   });
   const filteredItems = visibleItems.filter((item) => {
-    if (transactionFilter === "all" || item.income) return true;
+    if (transactionFilter === "all") return true;
+    if (item.income) return transactionFilter === "pending";
     return transactionFilter === "paid" ? item.paid : !item.paid;
   });
+  const groupedItems = [...filteredItems]
+    .sort((left, right) => {
+      const dateOrder = left.date.localeCompare(right.date);
+      if (dateOrder !== 0) return dateOrder;
+      const priority = (item: Transaction) => item.income ? 1 : item.paid ? 2 : 0;
+      return priority(left) - priority(right);
+    })
+    .reduce<TransactionGroup[]>((groups, item) => {
+      const current = groups.at(-1);
+      if (current?.date === item.date) {
+        current.items.push(item);
+        current.total += item.income ? item.value : -item.value;
+      } else {
+        groups.push({ date: item.date, items: [item], total: item.income ? item.value : -item.value });
+      }
+      return groups;
+    }, []);
   const totalIncome = visibleItems.filter((item) => item.income).reduce((total, item) => total + item.value, 0);
   const totalExpenses = visibleItems.filter((item) => !item.income && !item.paid).reduce((total, item) => total + item.value, 0);
   const monthBalance = totalIncome - totalExpenses;
@@ -1063,7 +1110,7 @@ function Dashboard({
           <Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority />
           <span><b>AM</b>Cash</span>
         </div>
-        <button type="button" className="header-add-button" disabled={isLoading} onClick={() => setIsCreateOpen(true)} aria-label="Adicionar receita ou despesa"><Icon name="plus" /></button>
+        <button type="button" className="header-add-button" disabled={isLoading} onClick={() => setIsCreateOpen(true)} aria-label="Adicionar receita ou despesa"><Icon name="plus" /><span>Nova despesa</span></button>
       </header>
 
       <section className="month-selector" aria-label="Período selecionado">
@@ -1076,9 +1123,9 @@ function Dashboard({
       </section>
 
       <div className="transaction-filter" role="group" aria-label="Filtrar lançamentos por pagamento">
+        <button type="button" className={transactionFilter === "all" ? "selected" : ""} aria-pressed={transactionFilter === "all"} onClick={() => setTransactionFilter("all")}>Todos</button>
         <button type="button" className={transactionFilter === "pending" ? "selected" : ""} aria-pressed={transactionFilter === "pending"} onClick={() => setTransactionFilter("pending")}>Pendentes</button>
         <button type="button" className={transactionFilter === "paid" ? "selected" : ""} aria-pressed={transactionFilter === "paid"} onClick={() => setTransactionFilter("paid")}>Pagas</button>
-        <button type="button" className={transactionFilter === "all" ? "selected" : ""} aria-pressed={transactionFilter === "all"} onClick={() => setTransactionFilter("all")}>Todas</button>
       </div>
 
       {(error || actionError) && <p className="auth-error" role="alert">{error || actionError}</p>}
@@ -1095,15 +1142,28 @@ function Dashboard({
             <h2>{transactionFilter === "pending" ? "Nenhuma despesa pendente" : transactionFilter === "paid" ? "Nenhuma despesa paga" : "Nenhum lançamento neste mês"}</h2>
             <p>{transactionFilter === "pending" ? "As despesas que ainda precisam ser pagas aparecerão aqui." : transactionFilter === "paid" ? "As despesas marcadas como pagas aparecerão aqui." : "Suas receitas e despesas aparecerão aqui quando forem adicionadas."}</p>
           </div>
-        ) : filteredItems.map((transaction) => (
-          <TransactionRow
-            key={transaction.id}
-            transaction={transaction}
-            onOpen={onOpen}
-            onDelete={setPendingDelete}
-            onPaid={markPaid}
-          />
-        ))}      </section>
+        ) : groupedItems.map((group) => {
+          const groupDate = formatTransactionGroupDate(group.date);
+          return (
+            <section className="transaction-date-group" key={group.date} aria-label={`Lançamentos de ${groupDate.calendarDate}`}>
+              <header className="transaction-date-header">
+                <div><strong>{groupDate.calendarDate}</strong><span>·</span><small>{groupDate.weekday}</small></div>
+                <b className={group.total >= 0 ? "positive" : "negative"}>{group.total >= 0 ? "+ " : "- "}{formatCurrency(group.total)}</b>
+              </header>
+              <div className="transaction-group-list">
+                {group.items.map((transaction) => (
+                  <TransactionRow
+                    key={transaction.id}
+                    transaction={transaction}
+                    onOpen={onOpen}
+                    onDelete={setPendingDelete}
+                    onPaid={markPaid}
+                  />
+                ))}
+              </div>
+            </section>
+          );
+        })}      </section>
 
       <section className="monthly-summary" aria-label="Resumo do mês">
         <div><span>Receitas</span><strong>{formatCurrency(totalIncome)}</strong></div>
@@ -1111,7 +1171,7 @@ function Dashboard({
         <div><span>Saldo do mês</span><strong>{monthBalance < 0 ? "- " : ""}{formatCurrency(monthBalance)}</strong></div>
       </section>
 
-      <BottomNavigation active="home" onHome={() => {}} onRadar={onRadar} onGoals={onGoals} />
+      <BottomNavigation active="home" onHome={() => {}} onRadar={onRadar} onGoals={onGoals} onWork={onWork} />
 
       {isMonthPickerOpen && (
         <div className="month-picker-backdrop" role="presentation" onMouseDown={() => setIsMonthPickerOpen(false)}>
@@ -1589,7 +1649,7 @@ function DetailScreen({
   );
 }
 
-function RadarScreen({ onHome, onGoals }: { onHome: () => void; onGoals: () => void }) {
+function RadarScreen({ onHome, onGoals, onWork }: { onHome: () => void; onGoals: () => void; onWork: () => void }) {
   const now = new Date();
   const startYear = now.getFullYear();
   const startMonth = now.getMonth() + 1;
@@ -1717,7 +1777,7 @@ function RadarScreen({ onHome, onGoals }: { onHome: () => void; onGoals: () => v
         )}
       </div>
 
-      <BottomNavigation active="radar" onHome={onHome} onRadar={() => {}} onGoals={onGoals} />
+      <BottomNavigation active="radar" onHome={onHome} onRadar={() => {}} onGoals={onGoals} onWork={onWork} />
     </main>
   );
 }
@@ -1754,7 +1814,7 @@ function remainingGoalDays(year: number, month: number, referenceDate: string) {
     .map((cell) => cell.day);
 }
 
-function GoalsScreen({ onHome, onRadar }: { onHome: () => void; onRadar: () => void }) {
+function GoalsScreen({ onHome, onRadar, onWork }: { onHome: () => void; onRadar: () => void; onWork: () => void }) {
   const [referenceDate, setReferenceDate] = useState(() => dateToInputValue(new Date()));
   const [goal, setGoal] = useState<ApiGoal | null>(null);
   const [nextGoal, setNextGoal] = useState<ApiGoal | null>(null);
@@ -2010,7 +2070,7 @@ function GoalsScreen({ onHome, onRadar }: { onHome: () => void; onRadar: () => v
         )}
       </div>
 
-      <BottomNavigation active="goals" onHome={onHome} onRadar={onRadar} onGoals={() => {}} />
+      <BottomNavigation active="goals" onHome={onHome} onRadar={onRadar} onGoals={() => {}} onWork={onWork} />
     </main>
   );
 }
@@ -2018,7 +2078,7 @@ function GoalsScreen({ onHome, onRadar }: { onHome: () => void; onRadar: () => v
 export default function Home() {
   const [screen, setScreen] = useState<"checking" | "auth" | "loading" | "refreshing" | "app">("checking");
   const [isLaunchSplashVisible, setIsLaunchSplashVisible] = useState(true);
-  const [activeTab, setActiveTab] = useState<"home" | "radar" | "goals">("home");
+  const [activeTab, setActiveTab] = useState<"home" | "radar" | "goals" | "work">("home");
   const [items, setItems] = useState<Transaction[]>([]);
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -2180,8 +2240,15 @@ export default function Home() {
 
   if (isLaunchSplashVisible || screen === "checking" || screen === "refreshing" || screen === "loading") return <LoadingScreen />;
   if (screen === "auth") return <AuthScreen onAuthenticated={() => setScreen("loading")} />;
-  if (activeTab === "radar") return <RadarScreen onHome={() => setActiveTab("home")} onGoals={() => setActiveTab("goals")} />;
-  if (activeTab === "goals") return <GoalsScreen onHome={() => setActiveTab("home")} onRadar={() => setActiveTab("radar")} />;
+  if (activeTab === "radar") return <RadarScreen onHome={() => setActiveTab("home")} onGoals={() => setActiveTab("goals")} onWork={() => setActiveTab("work")} />;
+  if (activeTab === "goals") return <GoalsScreen onHome={() => setActiveTab("home")} onRadar={() => setActiveTab("radar")} onWork={() => setActiveTab("work")} />;
+  if (activeTab === "work") {
+    return (
+      <WorkScreen navigation={(
+        <BottomNavigation active="work" onHome={() => setActiveTab("home")} onRadar={() => setActiveTab("radar")} onGoals={() => setActiveTab("goals")} onWork={() => {}} />
+      )} />
+    );
+  }
   if (selected) {
     return (
       <DetailScreen
@@ -2193,5 +2260,5 @@ export default function Home() {
     );
   }
 
-  return <Dashboard items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onRadar={() => setActiveTab("radar")} onGoals={() => setActiveTab("goals")} onMonthChange={changeMonth} initialPeriod={period} error={error} isLoading={isLoading} />;
+  return <Dashboard items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onRadar={() => setActiveTab("radar")} onGoals={() => setActiveTab("goals")} onWork={() => setActiveTab("work")} onMonthChange={changeMonth} initialPeriod={period} error={error} isLoading={isLoading} />;
 }
