@@ -84,7 +84,7 @@ function periodTitle(overview: ApiWorkOverview | null, period: ApiWorkPeriod, re
 }
 
 export default function WorkScreen({ navigation }: { navigation: ReactNode }) {
-  const [period, setPeriod] = useState<ApiWorkPeriod>("MONTH");
+  const [period, setPeriod] = useState<ApiWorkPeriod>("DAY");
   const [referenceDate, setReferenceDate] = useState(() => isoDate(new Date()));
   const [overview, setOverview] = useState<ApiWorkOverview | null>(null);
   const [loading, setLoading] = useState(true);

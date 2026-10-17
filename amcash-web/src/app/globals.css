@@ -535,14 +535,15 @@ a {
   justify-content: center;
   gap: 0.34rem;
   border: 0;
-  border: 1px solid #075cf4;
-  border-radius: 0.78rem;
-  background: #075cf4;
+  border: 1px solid #1268f5;
+  border-radius: 0.92rem;
+  background: linear-gradient(180deg, #1475fa 0%, #075cf4 100%);
   color: #ffffff;
   font: inherit;
   font-size: 0.65rem;
-  font-weight: 750;
-  box-shadow: 0 0.45rem 1rem rgb(7 92 244 / 22%);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  box-shadow: 0 0.5rem 1.15rem rgb(7 92 244 / 23%);
   cursor: pointer;
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
@@ -550,7 +551,7 @@ a {
 .header-add-button:hover {
   transform: translateY(-0.08rem);
   border-color: #0753dc;
-  background: #0753dc;
+  background: linear-gradient(180deg, #0f6eed 0%, #0753dc 100%);
   box-shadow: 0 0.6rem 1.2rem rgb(7 92 244 / 28%);
 }
 
@@ -561,7 +562,7 @@ a {
 .header-add-button svg {
   width: 1rem;
   height: 1rem;
-  stroke-width: 2;
+  stroke-width: 1.65;
 }
 
 .header-add-button:disabled {
@@ -1300,20 +1301,21 @@ a {
   align-items: center;
   gap: 0.3rem;
   padding: 0.55rem 0.78rem;
-  border: 1px solid #075cf4;
-  border-radius: 0.72rem;
-  background: #075cf4;
+  border: 1px solid #1268f5;
+  border-radius: 0.92rem;
+  background: linear-gradient(180deg, #1475fa 0%, #075cf4 100%);
   color: #ffffff;
   font: inherit;
   font-size: 0.65rem;
-  font-weight: 750;
-  box-shadow: 0 0.45rem 1rem rgb(7 92 244 / 22%);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  box-shadow: 0 0.5rem 1.15rem rgb(7 92 244 / 23%);
   cursor: pointer;
   transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 
-.work-heading > button span { font-size: 1.1rem; font-weight: 400; }
-.work-heading > button:hover { transform: translateY(-0.08rem); background: #0753dc; box-shadow: 0 0.6rem 1.2rem rgb(7 92 244 / 28%); }
+.work-heading > button span { font-size: 1.15rem; font-weight: 300; line-height: 1; }
+.work-heading > button:hover { transform: translateY(-0.08rem); background: linear-gradient(180deg, #0f6eed 0%, #0753dc 100%); box-shadow: 0 0.6rem 1.2rem rgb(7 92 244 / 28%); }
 .work-heading > button:active { transform: scale(0.97); }
 
 .work-period-tabs {
