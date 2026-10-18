@@ -2056,7 +2056,8 @@ a {
 }
 
 .forecast-free strong.negative { color: #e45166; }
-.forecast-chevron { color: #8ca0b6; font-size: 1rem; transition: transform 0.18s ease; }
+.forecast-chevron { display: grid; width: 1.1rem; height: 1.1rem; flex: 0 0 auto; place-items: center; color: #8ca0b6; transition: transform 0.18s ease; }
+.forecast-chevron svg { width: 0.95rem; height: 0.95rem; }
 .forecast-month.expanded .forecast-chevron { transform: rotate(180deg); }
 
 .forecast-core-values {
@@ -2690,6 +2691,15 @@ a {
 .goal-home-selection small { color: #8698ac; font-size: 0.55rem; }
 .goal-home-selection > button { min-height: 2.15rem; padding: 0 0.7rem; flex: 0 0 auto; border: 1px solid #cdddf3; border-radius: 0.65rem; background: #fff; color: var(--brand-blue); font: inherit; font-size: 0.58rem; font-weight: 750; cursor: pointer; }
 .goal-home-selection > button:disabled { border-color: transparent; background: #e7f0ff; opacity: 1; cursor: default; }
+
+.goal-setup-empty { display: grid; min-height: 18rem; padding: 1.5rem; place-items: center; align-content: center; border: 1px solid #dfe8f5; border-radius: 1.1rem; background: linear-gradient(160deg, #fff 55%, #f2f7ff); text-align: center; box-shadow: 0 0.45rem 1.3rem rgb(27 65 112 / 5%); }
+.goal-setup-empty-icon { display: grid; width: 3.3rem; height: 3.3rem; margin-bottom: 0.8rem; place-items: center; border-radius: 50%; background: #eaf2ff; color: var(--brand-blue); }
+.goal-setup-empty-icon svg { width: 1.5rem; }
+.goal-setup-empty > span:not(.goal-setup-empty-icon) { color: #8da0b5; font-size: 0.55rem; font-weight: 800; letter-spacing: 0.13em; }
+.goal-setup-empty h2 { margin: 0.45rem 0 0; color: #183555; font-size: 1rem; }
+.goal-setup-empty p { max-width: 25rem; margin: 0.45rem 0 1rem; color: #8194a9; font-size: 0.66rem; line-height: 1.55; }
+.goal-setup-empty button { display: inline-flex; min-height: 2.65rem; padding: 0 0.9rem; align-items: center; gap: 0.35rem; border: 0; border-radius: 0.75rem; background: var(--brand-blue); color: #fff; font: inherit; font-size: 0.65rem; font-weight: 750; box-shadow: 0 0.5rem 1rem rgb(8 108 243 / 18%); cursor: pointer; }
+.goal-setup-empty button svg { width: 0.9rem; }
 
 .custom-goals-panel { display: grid; gap: 0.85rem; }
 .custom-goals-intro { display: flex; align-items: flex-end; justify-content: space-between; gap: 0.75rem; }
