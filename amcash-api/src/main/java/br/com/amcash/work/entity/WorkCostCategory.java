@@ -6,5 +6,6 @@ public enum WorkCostCategory {
     PARKING,
     TOLL,
     WASH,
+    MARKET,
     OTHER
 }

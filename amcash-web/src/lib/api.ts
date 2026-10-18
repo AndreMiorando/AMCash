@@ -152,20 +152,13 @@ export type ApiGoal = {
 
 export type ApiHome = {
   date: string;
-  financial: { income: number; totalExpenses: number; paidExpenses: number; pendingExpenses: number };
-  todayWork: { gross: number; costs: number; net: number };
-  monthWork: { gross: number; costs: number; net: number };
+  financial: { income: number; pendingExpenses: number; balance: number };
   goal: {
-    monthRemaining: number;
-    todayTarget: number;
-    todayAchieved: number;
-    todayRemaining: number;
-    todaySurplus: number;
-    progressPercentage: number;
-    availableDays: number;
+    dailyTarget: number;
     covered: boolean;
     todaySelected: boolean;
   };
+  nextExpense: { id: string; name: string; dueDate: string; amount: number } | null;
 };
 
 export type ApiWorkPeriod = "DAY" | "WEEK" | "MONTH";
@@ -185,7 +178,7 @@ export type ApiWorkDay = {
   earnings: ApiWorkEarning[];
 };
 
-export type ApiWorkCostCategory = "FUEL" | "MAINTENANCE" | "PARKING" | "TOLL" | "WASH" | "OTHER";
+export type ApiWorkCostCategory = "FUEL" | "MAINTENANCE" | "PARKING" | "TOLL" | "WASH" | "MARKET" | "OTHER";
 
 export type ApiWorkCost = {
   id: string;

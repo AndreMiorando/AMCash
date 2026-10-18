@@ -10,6 +10,8 @@ import {
   ApiForecast,
   ApiGoal,
   ApiHome,
+  ApiWorkCostCategory,
+  ApiWorkOverview,
   ApiRecurrenceFrequency,
   ApiSeriesScope,
   ApiSubexpense,
@@ -1014,7 +1016,7 @@ function Dashboard({
   const [pendingDelete, setPendingDelete] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [actionError, setActionError] = useState("");
-  const [transactionFilter, setTransactionFilter] = useState<TransactionFilter>("all");
+  const [transactionFilter, setTransactionFilter] = useState<TransactionFilter>("pending");
   const periodFormatter = new Intl.DateTimeFormat("pt-BR", {
     month: "long",
     year: "numeric",
@@ -2088,22 +2090,52 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork }: { onHome: () => voi
   );
 }
 
+const homeCostLabels: Record<ApiWorkCostCategory, string> = {
+  FUEL: "Combustível",
+  MAINTENANCE: "Manutenção",
+  PARKING: "Estacionamento",
+  TOLL: "Pedágio",
+  WASH: "Lavagem",
+  MARKET: "Mercado",
+  OTHER: "Outro",
+};
+
 function HomeDashboard({ onFinance, onRadar, onGoals, onWork }: {
   onFinance: () => void;
   onRadar: () => void;
   onGoals: () => void;
-  onWork: (action?: "work" | "cost") => void;
+  onWork: () => void;
 }) {
   const [summary, setSummary] = useState<ApiHome | null>(null);
+  const [workOverview, setWorkOverview] = useState<ApiWorkOverview | null>(null);
+  const [uber, setUber] = useState("");
+  const [ninetyNine, setNinetyNine] = useState("");
+  const [costCategory, setCostCategory] = useState<ApiWorkCostCategory>("FUEL");
+  const [costCategoryOpen, setCostCategoryOpen] = useState(false);
+  const [cost, setCost] = useState("");
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const today = dateToInputValue(new Date());
+  const homeCostPrefix = "HOME: ";
+  const legacyHomeCostDescription = "Custo do dia — Home";
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      setSummary(await financeApi.home(today));
+      const [home, work] = await Promise.all([
+        financeApi.home(today),
+        financeApi.workOverview(today, "DAY"),
+      ]);
+      const day = work.days.find((item) => item.date === today);
+      const homeCost = work.costs.find((item) => item.description === legacyHomeCostDescription || item.description?.startsWith(homeCostPrefix));
+      setSummary(home);
+      setWorkOverview(work);
+      setUber(maskCurrencyInput(String(Math.round(Number(day?.earnings.find((item) => item.source.toLowerCase() === "uber")?.amount ?? 0) * 100))));
+      setNinetyNine(maskCurrencyInput(String(Math.round(Number(day?.earnings.find((item) => item.source === "99")?.amount ?? 0) * 100))));
+      setCostCategory(homeCost?.category ?? "FUEL");
+      setCost(maskCurrencyInput(String(Math.round(Number(homeCost?.amount ?? 0) * 100))));
     } catch (requestError) {
       setError(messageFromError(requestError));
     } finally {
@@ -2116,47 +2148,98 @@ function HomeDashboard({ onFinance, onRadar, onGoals, onWork }: {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  const progress = summary?.goal.todayTarget
-    ? Math.min(100, Math.max(0, summary.goal.todayAchieved / summary.goal.todayTarget * 100))
-    : summary?.goal.covered ? 100 : 0;
   const dateLabel = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" })
     .format(new Date(`${today}T12:00:00`));
+  const uberValue = parseCurrencyInput(uber) || 0;
+  const ninetyNineValue = parseCurrencyInput(ninetyNine) || 0;
+  const costValue = parseCurrencyInput(cost) || 0;
+  const netValue = uberValue + ninetyNineValue - costValue;
+  const dailyRemaining = Math.max(0, Number(summary?.goal.dailyTarget ?? 0) - uberValue - ninetyNineValue + costValue);
+
+  async function saveDailyResult() {
+    if (!summary || saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      const day = workOverview?.days.find((item) => item.date === today);
+      const preservedEarnings = day?.earnings.filter((item) => {
+        const source = item.source.toLowerCase();
+        return source !== "uber" && item.source !== "99";
+      }).map((item) => ({ source: item.source, amount: Number(item.amount) })) ?? [];
+      await financeApi.saveWorkDay(today, {
+        kilometers: Number(day?.kilometers ?? 0),
+        earnings: [
+          { source: "Uber", amount: uberValue },
+          { source: "99", amount: ninetyNineValue },
+          ...preservedEarnings,
+        ],
+      });
+
+      const existingCost = workOverview?.costs.find((item) => item.description === legacyHomeCostDescription || item.description?.startsWith(homeCostPrefix));
+      if (costValue > 0) {
+        const payload = { date: today, category: costCategory, description: `${homeCostPrefix}${homeCostLabels[costCategory]}`, amount: costValue };
+        if (existingCost) await financeApi.updateWorkCost(existingCost.id, payload);
+        else await financeApi.createWorkCost(payload);
+      } else if (existingCost) {
+        await financeApi.deleteWorkCost(existingCost.id);
+      }
+      await load();
+    } catch (requestError) {
+      setError(messageFromError(requestError));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return <main className="daily-home-screen">
     <header className="dashboard-header daily-home-header">
       <div className="header-brand" aria-label="AMCash"><Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority /><span><b>AM</b>Cash</span></div>
-      <span className="daily-home-label">HOJE</span>
+      <span className="daily-home-label">RESUMO</span>
     </header>
     <div className="daily-home-content">
-      <section className="daily-home-heading"><span>SEU DIA</span><h1>Seu objetivo de hoje</h1><p>{dateLabel}</p></section>
+      <section className="daily-home-heading"><span>VISÃO GERAL</span><h1>Olá, este é o seu resumo</h1><p>{dateLabel}</p></section>
       {loading ? <div className="daily-home-loading"><div className="loader" /><span>Atualizando seu progresso</span></div> : error ?
         <div className="daily-home-error"><p>{error}</p><button type="button" onClick={() => void load()}>Tentar novamente</button></div> : summary && <>
           <section className={`daily-goal-card${summary.goal.covered ? " covered" : ""}`}>
-            <span>{summary.goal.covered ? "MÊS COBERTO" : summary.goal.todaySelected ? "META DE HOJE" : "HOJE NÃO ESTÁ SELECIONADO"}</span>
-            {summary.goal.covered ? <><strong>Você conseguiu!</strong><p>Seus recursos já cobrem as despesas pendentes deste mês.</p></> : summary.goal.todaySelected ? <>
-              <strong>{formatCurrency(summary.goal.todayRemaining)}</strong>
-              <p>{summary.goal.todayRemaining > 0 ? "ainda falta gerar hoje" : `Meta concluída${summary.goal.todaySurplus > 0 ? ` · ${formatCurrency(summary.goal.todaySurplus)} acima` : ""}`}</p>
-              <div className="daily-progress-track"><i style={{ width: `${progress}%` }} /></div>
-              <div className="daily-progress-caption"><span>{formatCurrency(summary.goal.todayAchieved)} líquido</span><span>Meta {formatCurrency(summary.goal.todayTarget)}</span></div>
-            </> : <><strong>{formatCurrency(summary.goal.monthRemaining)}</strong><p>Selecione hoje em Metas para distribuir o valor pelos seus dias de trabalho.</p></>}
+            <span>{summary.goal.covered ? "MÊS COBERTO" : "META DO DIA"}</span>
+            {summary.goal.covered ? <><strong>Você conseguiu!</strong><p>Suas receitas já cobrem as despesas pendentes deste mês.</p></> : summary.goal.todaySelected ? <>
+              <strong>{formatCurrency(dailyRemaining)}</strong>
+              <p>falta atingir hoje · meta base {formatCurrency(summary.goal.dailyTarget)}</p>
+            </> : <><strong>{formatCurrency(summary.goal.dailyTarget)}</strong><p>Hoje não está selecionado como dia disponível.</p></>}
           </section>
 
-          <section className="daily-work-breakdown">
-            <header><div><span>RESULTADO DO DIA</span><h2>O que realmente ficou</h2></div><strong className={summary.todayWork.net < 0 ? "negative" : ""}>{formatCurrency(summary.todayWork.net)}</strong></header>
-            <div><span>Faturamento bruto<b>{formatCurrency(summary.todayWork.gross)}</b></span><span>Custos operacionais<b className="cost">- {formatCurrency(summary.todayWork.costs)}</b></span></div>
+          <section className="home-quick-entry" aria-label="Resultado de hoje">
+            <div className="home-quick-entry-heading"><div><span>RESULTADO DE HOJE</span><h2>Informe quanto você faturou</h2></div><small>O custo aumenta o valor que falta.</small></div>
+            <div className="home-quick-entry-fields">
+              <label><span>Uber</span><div><b>R$</b><input value={uber} onChange={(event) => setUber(maskCurrencyInput(event.target.value))} placeholder="0,00" inputMode="numeric" /></div></label>
+              <label><span>99</span><div><b>R$</b><input value={ninetyNine} onChange={(event) => setNinetyNine(maskCurrencyInput(event.target.value))} placeholder="0,00" inputMode="numeric" /></div></label>
+              <div className="home-cost-field"><span>Categoria do custo</span><div className="home-cost-select">
+                <button type="button" className="home-cost-select-trigger" aria-haspopup="listbox" aria-expanded={costCategoryOpen} onClick={() => setCostCategoryOpen((open) => !open)}>
+                  <span>{homeCostLabels[costCategory]}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
+                </button>
+                {costCategoryOpen && <><button type="button" className="home-cost-select-dismiss" aria-label="Fechar categorias" onClick={() => setCostCategoryOpen(false)} /><div className="home-cost-select-menu" role="listbox" aria-label="Categoria do custo">
+                  {(Object.keys(homeCostLabels) as ApiWorkCostCategory[]).map((category) => <button type="button" role="option" aria-selected={category === costCategory} className={category === costCategory ? "selected" : ""} key={category} onClick={() => { setCostCategory(category); setCostCategoryOpen(false); }}><span>{homeCostLabels[category]}</span>{category === costCategory && <Icon name="check" />}</button>)}
+                </div></>}
+              </div></div>
+              <label><span>Custo</span><div><b>R$</b><input value={cost} onChange={(event) => setCost(maskCurrencyInput(event.target.value))} placeholder="0,00" inputMode="numeric" /></div></label>
+            </div>
+            <div className="home-quick-entry-result"><span>Resultado líquido informado</span><strong className={netValue < 0 ? "negative" : ""}>{netValue < 0 ? "- " : ""}{formatCurrency(netValue)}</strong></div>
+            <button type="button" disabled={saving} onClick={() => void saveDailyResult()}>{saving ? "Salvando..." : "Salvar resultado de hoje"}</button>
           </section>
 
-          <section className="daily-home-actions" aria-label="Ações rápidas">
-            <button type="button" onClick={() => onWork("work")}><Icon name="work" /><span><b>Registrar trabalho</b><small>Faturamento e quilômetros</small></span></button>
-            <button type="button" onClick={() => onWork("cost")}><Icon name="wallet" /><span><b>Registrar custo</b><small>Combustível e outros</small></span></button>
+          <section className="home-summary-card home-balance-card">
+            <div><span>SALDO DO MÊS</span><h2>Receitas menos despesas pendentes</h2></div>
+            <strong className={summary.financial.balance < 0 ? "negative" : "positive"}>{summary.financial.balance < 0 ? "- " : "+ "}{formatCurrency(summary.financial.balance)}</strong>
           </section>
 
-          <section className="daily-month-card">
-            <header><div><span>VISÃO DO MÊS</span><h2>Quanto ainda falta para cobrir as despesas</h2></div><strong>{formatCurrency(summary.goal.monthRemaining)}</strong></header>
+          <section className="home-summary-card home-next-expense">
+            <div><span>PRÓXIMA DESPESA</span><h2>{summary.nextExpense?.name ?? "Nenhuma despesa pendente"}</h2>
+              <p>{summary.nextExpense ? `Vence em ${formatDate(summary.nextExpense.dueDate)}` : "Você não possui outra despesa para pagar neste mês."}</p></div>
+            {summary.nextExpense && <strong>{formatCurrency(summary.nextExpense.amount)}</strong>}
           </section>
         </>}
     </div>
-    <BottomNavigation active="home" onHome={() => {}} onFinance={onFinance} onRadar={onRadar} onGoals={onGoals} onWork={() => onWork()} />
+    <BottomNavigation active="home" onHome={() => {}} onFinance={onFinance} onRadar={onRadar} onGoals={onGoals} onWork={onWork} />
   </main>;
 }
 
@@ -2332,5 +2415,5 @@ export default function Home() {
   }
 
   if (activeTab === "finance") return <Dashboard items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onHome={() => setActiveTab("home")} onRadar={() => setActiveTab("radar")} onGoals={() => setActiveTab("goals")} onWork={() => openWork()} onMonthChange={changeMonth} initialPeriod={period} error={error} isLoading={isLoading} />;
-  return <HomeDashboard onFinance={() => setActiveTab("finance")} onRadar={() => setActiveTab("radar")} onGoals={() => setActiveTab("goals")} onWork={(action) => openWork(action ?? null)} />;
+  return <HomeDashboard onFinance={() => setActiveTab("finance")} onRadar={() => setActiveTab("radar")} onGoals={() => setActiveTab("goals")} onWork={() => openWork()} />;
 }
