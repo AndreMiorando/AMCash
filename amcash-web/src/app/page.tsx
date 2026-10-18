@@ -9,6 +9,7 @@ import {
   ApiError,
   ApiForecast,
   ApiGoal,
+  ApiHome,
   ApiRecurrenceFrequency,
   ApiSeriesScope,
   ApiSubexpense,
@@ -182,9 +183,10 @@ function Icon({ name }: { name: IconName }) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-function BottomNavigation({ active, onHome, onRadar, onGoals, onWork }: {
-  active: "home" | "radar" | "goals" | "work";
+function BottomNavigation({ active, onHome, onFinance, onRadar, onGoals, onWork }: {
+  active: "home" | "finance" | "radar" | "goals" | "work";
   onHome: () => void;
+  onFinance: () => void;
   onRadar: () => void;
   onGoals: () => void;
   onWork: () => void;
@@ -193,19 +195,23 @@ function BottomNavigation({ active, onHome, onRadar, onGoals, onWork }: {
     <nav className="bottom-nav" aria-label="Navegação principal">
       <button type="button" className={`nav-item${active === "home" ? " active" : ""}`} onClick={onHome} aria-current={active === "home" ? "page" : undefined}>
         <Icon name="home" />
-        <span>Início</span>
+        <span>Home</span>
       </button>
-      <button type="button" className={`nav-item${active === "radar" ? " active" : ""}`} onClick={onRadar} aria-current={active === "radar" ? "page" : undefined}>
-        <Icon name="radar" />
-        <span>Radar</span>
+      <button type="button" className={`nav-item${active === "finance" ? " active" : ""}`} onClick={onFinance} aria-current={active === "finance" ? "page" : undefined}>
+        <Icon name="wallet" />
+        <span>Finanças</span>
+      </button>
+      <button type="button" className={`nav-item${active === "work" ? " active" : ""}`} onClick={onWork} aria-current={active === "work" ? "page" : undefined}>
+        <Icon name="work" />
+        <span>Trabalho</span>
       </button>
       <button type="button" className={`nav-item${active === "goals" ? " active" : ""}`} onClick={onGoals} aria-current={active === "goals" ? "page" : undefined}>
         <Icon name="target" />
         <span>Metas</span>
       </button>
-      <button type="button" className={`nav-item${active === "work" ? " active" : ""}`} onClick={onWork} aria-current={active === "work" ? "page" : undefined}>
-        <Icon name="work" />
-        <span>Trabalho</span>
+      <button type="button" className={`nav-item${active === "radar" ? " active" : ""}`} onClick={onRadar} aria-current={active === "radar" ? "page" : undefined}>
+        <Icon name="radar" />
+        <span>Radar</span>
       </button>
     </nav>
   );
@@ -976,6 +982,7 @@ function Dashboard({
   onCreate,
   onDelete,
   onPaid,
+  onHome,
   onRadar,
   onGoals,
   onWork,
@@ -989,6 +996,7 @@ function Dashboard({
   onCreate: (transaction: NewTransaction) => Promise<void>;
   onDelete: (transaction: Transaction, scope: ApiSeriesScope) => Promise<void>;
   onPaid: (transaction: Transaction) => Promise<void>;
+  onHome: () => void;
   onRadar: () => void;
   onGoals: () => void;
   onWork: () => void;
@@ -1171,7 +1179,7 @@ function Dashboard({
         <div><span>Saldo do mês</span><strong>{monthBalance < 0 ? "- " : ""}{formatCurrency(monthBalance)}</strong></div>
       </section>
 
-      <BottomNavigation active="home" onHome={() => {}} onRadar={onRadar} onGoals={onGoals} onWork={onWork} />
+      <BottomNavigation active="finance" onHome={onHome} onFinance={() => {}} onRadar={onRadar} onGoals={onGoals} onWork={onWork} />
 
       {isMonthPickerOpen && (
         <div className="month-picker-backdrop" role="presentation" onMouseDown={() => setIsMonthPickerOpen(false)}>
@@ -1649,7 +1657,7 @@ function DetailScreen({
   );
 }
 
-function RadarScreen({ onHome, onGoals, onWork }: { onHome: () => void; onGoals: () => void; onWork: () => void }) {
+function RadarScreen({ onHome, onFinance, onGoals, onWork }: { onHome: () => void; onFinance: () => void; onGoals: () => void; onWork: () => void }) {
   const now = new Date();
   const startYear = now.getFullYear();
   const startMonth = now.getMonth() + 1;
@@ -1781,7 +1789,7 @@ function RadarScreen({ onHome, onGoals, onWork }: { onHome: () => void; onGoals:
         )}
       </div>
 
-      <BottomNavigation active="radar" onHome={onHome} onRadar={() => {}} onGoals={onGoals} onWork={onWork} />
+      <BottomNavigation active="radar" onHome={onHome} onFinance={onFinance} onRadar={() => {}} onGoals={onGoals} onWork={onWork} />
     </main>
   );
 }
@@ -1818,7 +1826,7 @@ function remainingGoalDays(year: number, month: number, referenceDate: string) {
     .map((cell) => cell.day);
 }
 
-function GoalsScreen({ onHome, onRadar, onWork }: { onHome: () => void; onRadar: () => void; onWork: () => void }) {
+function GoalsScreen({ onHome, onFinance, onRadar, onWork }: { onHome: () => void; onFinance: () => void; onRadar: () => void; onWork: () => void }) {
   const [referenceDate, setReferenceDate] = useState(() => dateToInputValue(new Date()));
   const [goal, setGoal] = useState<ApiGoal | null>(null);
   const [nextGoal, setNextGoal] = useState<ApiGoal | null>(null);
@@ -1990,7 +1998,8 @@ function GoalsScreen({ onHome, onRadar, onWork }: { onHome: () => void; onRadar:
         </section>
 
         <section className="goal-breakdown" aria-label={`Resumo da meta de ${goalMonthLabel(targetGoal)}`}>
-          <div><span>Receitas do mês</span><strong>{formatCurrency(Number(targetGoal.income))}</strong></div>
+          <div><span>Receitas financeiras</span><strong>{formatCurrency(Number(targetGoal.income))}</strong></div>
+          <div><span>Despesas do mês</span><strong>{formatCurrency(Number(targetGoal.totalExpenses))}</strong></div>
           <div><span>Despesas ainda pendentes</span><strong>{formatCurrency(Number(targetGoal.pendingExpenses))}</strong></div>
           <div><span>Falta cobrir</span><strong>{formatCurrency(Number(targetGoal.remainingAmount))}</strong></div>
         </section>
@@ -2012,7 +2021,7 @@ function GoalsScreen({ onHome, onRadar, onWork }: { onHome: () => void; onRadar:
         <section className="goals-intro">
           <span>META DINÂMICA</span>
           <h1>Quanto falta para cobrir o mês?</h1>
-          <p>A meta acompanha suas receitas, despesas pendentes e os dias que você tem disponíveis.</p>
+          <p>A meta acompanha suas receitas, despesas pendentes e os dias disponíveis.</p>
         </section>
 
         {error && <p className="auth-error" role="alert">{error}</p>}
@@ -2024,7 +2033,7 @@ function GoalsScreen({ onHome, onRadar, onWork }: { onHome: () => void; onRadar:
               {goal.covered ? (
                 <>
                   <span className="goal-covered-icon"><Icon name="check" /></span>
-                  <div><span>{monthLabel}</span><h2>Mês coberto</h2><p>Suas receitas já são suficientes para cobrir as despesas restantes deste mês.</p></div>
+                  <div><span>{monthLabel}</span><h2>Mês coberto</h2><p>Suas receitas já cobrem as despesas pendentes deste mês.</p></div>
                 </>
               ) : (
                 <>
@@ -2074,15 +2083,88 @@ function GoalsScreen({ onHome, onRadar, onWork }: { onHome: () => void; onRadar:
         )}
       </div>
 
-      <BottomNavigation active="goals" onHome={onHome} onRadar={onRadar} onGoals={() => {}} onWork={onWork} />
+      <BottomNavigation active="goals" onHome={onHome} onFinance={onFinance} onRadar={onRadar} onGoals={() => {}} onWork={onWork} />
     </main>
   );
+}
+
+function HomeDashboard({ onFinance, onRadar, onGoals, onWork }: {
+  onFinance: () => void;
+  onRadar: () => void;
+  onGoals: () => void;
+  onWork: (action?: "work" | "cost") => void;
+}) {
+  const [summary, setSummary] = useState<ApiHome | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const today = dateToInputValue(new Date());
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      setSummary(await financeApi.home(today));
+    } catch (requestError) {
+      setError(messageFromError(requestError));
+    } finally {
+      setLoading(false);
+    }
+  }, [today]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+
+  const progress = summary?.goal.todayTarget
+    ? Math.min(100, Math.max(0, summary.goal.todayAchieved / summary.goal.todayTarget * 100))
+    : summary?.goal.covered ? 100 : 0;
+  const dateLabel = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" })
+    .format(new Date(`${today}T12:00:00`));
+
+  return <main className="daily-home-screen">
+    <header className="dashboard-header daily-home-header">
+      <div className="header-brand" aria-label="AMCash"><Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority /><span><b>AM</b>Cash</span></div>
+      <span className="daily-home-label">HOJE</span>
+    </header>
+    <div className="daily-home-content">
+      <section className="daily-home-heading"><span>SEU DIA</span><h1>Seu objetivo de hoje</h1><p>{dateLabel}</p></section>
+      {loading ? <div className="daily-home-loading"><div className="loader" /><span>Atualizando seu progresso</span></div> : error ?
+        <div className="daily-home-error"><p>{error}</p><button type="button" onClick={() => void load()}>Tentar novamente</button></div> : summary && <>
+          <section className={`daily-goal-card${summary.goal.covered ? " covered" : ""}`}>
+            <span>{summary.goal.covered ? "MÊS COBERTO" : summary.goal.todaySelected ? "META DE HOJE" : "HOJE NÃO ESTÁ SELECIONADO"}</span>
+            {summary.goal.covered ? <><strong>Você conseguiu!</strong><p>Seus recursos já cobrem as despesas pendentes deste mês.</p></> : summary.goal.todaySelected ? <>
+              <strong>{formatCurrency(summary.goal.todayRemaining)}</strong>
+              <p>{summary.goal.todayRemaining > 0 ? "ainda falta gerar hoje" : `Meta concluída${summary.goal.todaySurplus > 0 ? ` · ${formatCurrency(summary.goal.todaySurplus)} acima` : ""}`}</p>
+              <div className="daily-progress-track"><i style={{ width: `${progress}%` }} /></div>
+              <div className="daily-progress-caption"><span>{formatCurrency(summary.goal.todayAchieved)} líquido</span><span>Meta {formatCurrency(summary.goal.todayTarget)}</span></div>
+            </> : <><strong>{formatCurrency(summary.goal.monthRemaining)}</strong><p>Selecione hoje em Metas para distribuir o valor pelos seus dias de trabalho.</p></>}
+          </section>
+
+          <section className="daily-work-breakdown">
+            <header><div><span>RESULTADO DO DIA</span><h2>O que realmente ficou</h2></div><strong className={summary.todayWork.net < 0 ? "negative" : ""}>{formatCurrency(summary.todayWork.net)}</strong></header>
+            <div><span>Faturamento bruto<b>{formatCurrency(summary.todayWork.gross)}</b></span><span>Custos operacionais<b className="cost">- {formatCurrency(summary.todayWork.costs)}</b></span></div>
+          </section>
+
+          <section className="daily-home-actions" aria-label="Ações rápidas">
+            <button type="button" onClick={() => onWork("work")}><Icon name="work" /><span><b>Registrar trabalho</b><small>Faturamento e quilômetros</small></span></button>
+            <button type="button" onClick={() => onWork("cost")}><Icon name="wallet" /><span><b>Registrar custo</b><small>Combustível e outros</small></span></button>
+          </section>
+
+          <section className="daily-month-card">
+            <header><div><span>VISÃO DO MÊS</span><h2>Quanto ainda falta para cobrir as despesas</h2></div><strong>{formatCurrency(summary.goal.monthRemaining)}</strong></header>
+          </section>
+        </>}
+    </div>
+    <BottomNavigation active="home" onHome={() => {}} onFinance={onFinance} onRadar={onRadar} onGoals={onGoals} onWork={() => onWork()} />
+  </main>;
 }
 
 export default function Home() {
   const [screen, setScreen] = useState<"checking" | "auth" | "loading" | "refreshing" | "app">("checking");
   const [isLaunchSplashVisible, setIsLaunchSplashVisible] = useState(true);
-  const [activeTab, setActiveTab] = useState<"home" | "radar" | "goals" | "work">("home");
+  const [activeTab, setActiveTab] = useState<"home" | "finance" | "radar" | "goals" | "work">("home");
+  const [workInitialAction, setWorkInitialAction] = useState<"work" | "cost" | null>(null);
   const [items, setItems] = useState<Transaction[]>([]);
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -2167,10 +2249,7 @@ export default function Home() {
     let active = true;
     const minimumLoading = screen === "loading" ? 1400 : 1000;
     const startLoading = window.setTimeout(() => {
-      Promise.all([
-        loadMonth(period.year, period.month),
-        new Promise((resolve) => window.setTimeout(resolve, minimumLoading)),
-      ]).then(() => {
+      new Promise((resolve) => window.setTimeout(resolve, minimumLoading)).then(() => {
         if (active) setScreen((current) => current === "auth" ? "auth" : "app");
       });
     }, 0);
@@ -2178,7 +2257,7 @@ export default function Home() {
       active = false;
       window.clearTimeout(startLoading);
     };
-  }, [loadMonth, period.month, period.year, screen]);
+  }, [screen]);
 
   const changeMonth = useCallback((year: number, month: number) => {
     const periodKey = `${year}-${month}`;
@@ -2231,12 +2310,13 @@ export default function Home() {
 
   if (isLaunchSplashVisible || screen === "checking" || screen === "refreshing" || screen === "loading") return <LoadingScreen />;
   if (screen === "auth") return <AuthScreen onAuthenticated={() => setScreen("loading")} />;
-  if (activeTab === "radar") return <RadarScreen onHome={() => setActiveTab("home")} onGoals={() => setActiveTab("goals")} onWork={() => setActiveTab("work")} />;
-  if (activeTab === "goals") return <GoalsScreen onHome={() => setActiveTab("home")} onRadar={() => setActiveTab("radar")} onWork={() => setActiveTab("work")} />;
+  const openWork = (action: "work" | "cost" | null = null) => { setWorkInitialAction(action); setActiveTab("work"); };
+  if (activeTab === "radar") return <RadarScreen onHome={() => setActiveTab("home")} onFinance={() => setActiveTab("finance")} onGoals={() => setActiveTab("goals")} onWork={() => openWork()} />;
+  if (activeTab === "goals") return <GoalsScreen onHome={() => setActiveTab("home")} onFinance={() => setActiveTab("finance")} onRadar={() => setActiveTab("radar")} onWork={() => openWork()} />;
   if (activeTab === "work") {
     return (
-      <WorkScreen navigation={(
-        <BottomNavigation active="work" onHome={() => setActiveTab("home")} onRadar={() => setActiveTab("radar")} onGoals={() => setActiveTab("goals")} onWork={() => {}} />
+      <WorkScreen initialAction={workInitialAction} navigation={(
+        <BottomNavigation active="work" onHome={() => setActiveTab("home")} onFinance={() => setActiveTab("finance")} onRadar={() => setActiveTab("radar")} onGoals={() => setActiveTab("goals")} onWork={() => {}} />
       )} />
     );
   }
@@ -2251,5 +2331,6 @@ export default function Home() {
     );
   }
 
-  return <Dashboard items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onRadar={() => setActiveTab("radar")} onGoals={() => setActiveTab("goals")} onWork={() => setActiveTab("work")} onMonthChange={changeMonth} initialPeriod={period} error={error} isLoading={isLoading} />;
+  if (activeTab === "finance") return <Dashboard items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onHome={() => setActiveTab("home")} onRadar={() => setActiveTab("radar")} onGoals={() => setActiveTab("goals")} onWork={() => openWork()} onMonthChange={changeMonth} initialPeriod={period} error={error} isLoading={isLoading} />;
+  return <HomeDashboard onFinance={() => setActiveTab("finance")} onRadar={() => setActiveTab("radar")} onGoals={() => setActiveTab("goals")} onWork={(action) => openWork(action ?? null)} />;
 }

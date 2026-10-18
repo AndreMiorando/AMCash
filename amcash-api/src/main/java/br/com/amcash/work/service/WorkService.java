@@ -71,6 +71,21 @@ public class WorkService {
                 summarize(dayResponses, costResponses), dayResponses, costResponses);
     }
 
+    @Transactional(readOnly = true)
+    public WorkProgressSnapshot progress(UUID userId, LocalDate referenceDate, YearMonth targetMonth) {
+        LocalDate start = targetMonth.atDay(1);
+        LocalDate end = targetMonth.atEndOfMonth();
+        LocalDate aggregationDate = targetMonth.equals(YearMonth.from(referenceDate))
+                ? referenceDate : start.minusDays(1);
+        BigDecimal[] earnings = summary(workEarningRepository
+                .summarizeMonth(userId, start, end, aggregationDate));
+        BigDecimal[] costs = summary(workCostRepository
+                .summarizeMonth(userId, start, end, aggregationDate));
+        return new WorkProgressSnapshot(
+                money(earnings[0]), money(costs[0]), money(earnings[0].subtract(costs[0])),
+                money(earnings[1]), money(costs[1]), money(earnings[1].subtract(costs[1])));
+    }
+
     @Transactional
     public WorkDayResponse upsert(UUID userId, LocalDate date, UpsertWorkDayRequest request) {
         validateEarnings(request.earnings());
@@ -200,5 +215,24 @@ public class WorkService {
 
     private BigDecimal money(BigDecimal value) {
         return value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal[] summary(List<Object[]> result) {
+        if (result.isEmpty()) return new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO};
+        Object[] row = result.getFirst();
+        return new BigDecimal[]{decimal(row[0]), decimal(row[1])};
+    }
+
+    private BigDecimal decimal(Object value) {
+        return value instanceof BigDecimal decimal ? decimal : new BigDecimal(value.toString());
+    }
+
+    public record WorkProgressSnapshot(
+            BigDecimal monthGross,
+            BigDecimal monthCosts,
+            BigDecimal monthNet,
+            BigDecimal todayGross,
+            BigDecimal todayCosts,
+            BigDecimal todayNet) {
     }
 }
