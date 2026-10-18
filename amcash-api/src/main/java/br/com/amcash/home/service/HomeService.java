@@ -1,10 +1,11 @@
 package br.com.amcash.home.service;
 
+import br.com.amcash.entry.entity.EntryType;
+import br.com.amcash.entry.entity.FinancialEntry;
+import br.com.amcash.entry.repository.FinancialEntryRepository;
 import br.com.amcash.goal.dto.response.GoalResponse;
 import br.com.amcash.goal.service.GoalService;
 import br.com.amcash.home.dto.HomeResponse;
-import br.com.amcash.work.service.WorkService;
-import br.com.amcash.work.service.WorkService.WorkProgressSnapshot;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,44 +17,35 @@ import java.util.UUID;
 
 @Service
 public class HomeService {
-    private static final BigDecimal ONE_HUNDRED = new BigDecimal("100");
     private final GoalService goalService;
-    private final WorkService workService;
+    private final FinancialEntryRepository entryRepository;
 
-    public HomeService(GoalService goalService, WorkService workService) {
+    public HomeService(GoalService goalService, FinancialEntryRepository entryRepository) {
         this.goalService = goalService;
-        this.workService = workService;
+        this.entryRepository = entryRepository;
     }
 
     @Transactional(readOnly = true)
     public HomeResponse current(UUID userId, LocalDate date) {
         GoalResponse goal = goalService.current(userId, date);
-        WorkProgressSnapshot work = workService.progress(userId, date, YearMonth.from(date));
-        BigDecimal todayTarget = goal.todaySelected()
-                ? goal.dailyTarget() : money(BigDecimal.ZERO);
-        BigDecimal achieved = work.todayNet();
-        BigDecimal remaining = goal.todaySelected()
-                ? todayTarget.subtract(achieved).max(BigDecimal.ZERO) : money(BigDecimal.ZERO);
-        BigDecimal surplus = goal.todaySelected()
-                ? achieved.subtract(todayTarget).max(BigDecimal.ZERO) : money(BigDecimal.ZERO);
-        BigDecimal monthRemaining = goal.remainingAmount().subtract(work.monthNet()).max(BigDecimal.ZERO);
-        BigDecimal resources = goal.income().add(work.monthNet()).max(BigDecimal.ZERO);
-        BigDecimal progress = goal.pendingExpenses().signum() == 0 ? ONE_HUNDRED
-                : resources.multiply(ONE_HUNDRED)
-                    .divide(goal.pendingExpenses(), 2, RoundingMode.HALF_UP).min(ONE_HUNDRED);
+        YearMonth month = YearMonth.from(date);
+        HomeResponse.NextExpense nextExpense = entryRepository
+                .findFirstByUserIdAndTypeAndPaidFalseAndDueDateBetweenOrderByDueDateAscCreatedAtAsc(
+                        userId, EntryType.EXPENSE, month.atDay(1), month.atEndOfMonth())
+                .map(this::toNextExpense)
+                .orElse(null);
         return new HomeResponse(date,
-                new HomeResponse.FinancialSummary(goal.income(), goal.totalExpenses(),
-                        goal.paidExpenses(), goal.pendingExpenses()),
-                new HomeResponse.WorkSummary(work.todayGross(), work.todayCosts(), work.todayNet()),
-                new HomeResponse.WorkSummary(work.monthGross(), work.monthCosts(), work.monthNet()),
-                new HomeResponse.GoalSummary(money(monthRemaining),
-                        todayTarget, achieved, money(remaining),
-                        money(surplus), progress, goal.availableDays(), monthRemaining.signum() == 0,
-                        goal.todaySelected()));
+                new HomeResponse.FinancialSummary(
+                        goal.income(), goal.pendingExpenses(), money(goal.income().subtract(goal.pendingExpenses()))),
+                new HomeResponse.GoalSummary(goal.dailyTarget(), goal.covered(), goal.todaySelected()),
+                nextExpense);
+    }
+
+    private HomeResponse.NextExpense toNextExpense(FinancialEntry entry) {
+        return new HomeResponse.NextExpense(entry.getId(), entry.getName(), entry.getDueDate(), money(entry.getAmount()));
     }
 
     private BigDecimal money(BigDecimal value) {
         return value.setScale(2, RoundingMode.HALF_UP);
     }
-
 }

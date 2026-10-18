@@ -6,12 +6,15 @@ import { ApiWorkCost, ApiWorkCostCategory, ApiWorkDay, ApiWorkOverview, ApiWorkP
 
 type EarningDraft = { source: string; amount: string };
 type WorkDraft = { date: string; kilometers: string; uber: string; ninetyNine: string; additional: EarningDraft[] };
-type CostDraft = { id?: string; date: string; category: ApiWorkCostCategory; description: string; amount: string };
+type CostDraft = { id?: string; date: string; category: ApiWorkCostCategory; description: string; amount: string; homeManaged?: boolean };
+
+const homeCostPrefix = "HOME: ";
+const legacyHomeCostDescription = "Custo do dia — Home";
 
 const periodLabels: Record<ApiWorkPeriod, string> = { DAY: "Dia", WEEK: "Semana", MONTH: "Mês" };
 const costLabels: Record<ApiWorkCostCategory, string> = {
   FUEL: "Combustível", MAINTENANCE: "Manutenção", PARKING: "Estacionamento",
-  TOLL: "Pedágio", WASH: "Lavagem", OTHER: "Outro",
+  TOLL: "Pedágio", WASH: "Lavagem", MARKET: "Mercado", OTHER: "Outro",
 };
 
 function isoDate(date: Date) {
@@ -39,6 +42,12 @@ function numberInput(value: string) {
 function moneyForInput(value: number) { return value ? inputMoney(String(Math.round(value * 100))) : ""; }
 function emptyDraft(date: string): WorkDraft { return { date, kilometers: "", uber: "", ninetyNine: "", additional: [] }; }
 function emptyCost(date: string): CostDraft { return { date, category: "FUEL", description: "", amount: "" }; }
+function isHomeCost(cost: ApiWorkCost) { return cost.description === legacyHomeCostDescription || cost.description?.startsWith(homeCostPrefix); }
+function costDescription(cost: ApiWorkCost) {
+  if (cost.description?.startsWith(homeCostPrefix)) return cost.description.slice(homeCostPrefix.length);
+  if (cost.description === legacyHomeCostDescription) return "Custo do dia";
+  return cost.description || costLabels[cost.category];
+}
 function messageFrom(error: unknown) { return error instanceof Error ? error.message : "Não foi possível concluir a operação."; }
 function periodTitle(overview: ApiWorkOverview | null, period: ApiWorkPeriod, referenceDate: string) {
   if (!overview) return "";
@@ -97,7 +106,7 @@ export default function WorkScreen({ navigation, initialAction = null }: {
   function openCost(cost?: ApiWorkCost) {
     setNewRecordOpen(false);
     setCostDraft(cost ? { id: cost.id, date: cost.date, category: cost.category,
-      description: cost.description ?? "", amount: moneyForInput(Number(cost.amount)) } : emptyCost(referenceDate));
+      description: costDescription(cost), amount: moneyForInput(Number(cost.amount)), homeManaged: isHomeCost(cost) } : emptyCost(referenceDate));
   }
 
   async function saveDay() {
@@ -117,8 +126,10 @@ export default function WorkScreen({ navigation, initialAction = null }: {
     if (!costDraft || saving) return;
     if (numberFromInput(costDraft.amount) <= 0) { setError("Informe um valor de custo maior que zero."); return; }
     setSaving(true); setError("");
+    const description = costDraft.description.trim();
     const payload = { date: costDraft.date, category: costDraft.category,
-      description: costDraft.description.trim(), amount: numberFromInput(costDraft.amount) };
+      description: costDraft.homeManaged ? `${homeCostPrefix}${description}` : description,
+      amount: numberFromInput(costDraft.amount) };
     try {
       if (costDraft.id) await financeApi.updateWorkCost(costDraft.id, payload);
       else await financeApi.createWorkCost(payload);
@@ -170,7 +181,7 @@ export default function WorkScreen({ navigation, initialAction = null }: {
         <section className="work-days-section work-costs-section"><div className="work-section-title"><div><span>GASTOS DO TRABALHO</span><h2>Custos do período</h2></div><b>{overview?.costs.length ?? 0}</b></div>
           {!overview?.costs.length ? <div className="work-empty"><strong>Nenhum custo registrado</strong><span>Abastecimentos e outros gastos podem ser lançados na data em que acontecerem.</span></div> : overview.costs.map((cost) =>
             <button type="button" className="work-day-row work-cost-row" key={cost.id} onClick={() => openCost(cost)}><DateBadge date={cost.date} />
-              <span className="work-day-main"><strong>{cost.description || costLabels[cost.category]}</strong><small>{costLabels[cost.category]}</small></span>
+              <span className="work-day-main"><strong>{costLabels[cost.category]}</strong><small>{cost.description ? costDescription(cost) : "Sem descrição"}</small></span>
               <span className="work-day-values"><b>- {currency(Number(cost.amount))}</b></span><span aria-hidden="true">›</span></button>)}</section>
       </>}
     </div>{navigation}
@@ -191,7 +202,7 @@ export default function WorkScreen({ navigation, initialAction = null }: {
     {costDraft && <ModalBackdrop onClose={() => !saving && setCostDraft(null)}><section className="work-sheet work-cost-sheet" role="dialog" aria-modal="true" aria-labelledby="cost-sheet-title" onMouseDown={(event) => event.stopPropagation()}>
       <SheetHeader eyebrow="CUSTO DO TRABALHO" title={costDraft.id ? "Editar custo" : "Registrar custo"} id="cost-sheet-title" onClose={() => setCostDraft(null)} />
       <div className="work-form-scroll"><label className="work-field"><span>Data</span><input type="date" value={costDraft.date} onChange={(event) => setCostDraft({ ...costDraft, date: event.target.value })} /></label>
-        <label className="work-field"><span>Categoria</span><select value={costDraft.category} onChange={(event) => setCostDraft({ ...costDraft, category: event.target.value as ApiWorkCostCategory })}>{(Object.keys(costLabels) as ApiWorkCostCategory[]).map((category) => <option key={category} value={category}>{costLabels[category]}</option>)}</select></label>
+        <WorkCostCategorySelect value={costDraft.category} onChange={(category) => setCostDraft({ ...costDraft, category })} />
         <label className="work-field"><span>Descrição (opcional)</span><input maxLength={160} placeholder="Ex.: abastecimento do tanque" value={costDraft.description} onChange={(event) => setCostDraft({ ...costDraft, description: event.target.value })} /></label>
         <MoneyField label="Valor" value={costDraft.amount} onChange={(value) => setCostDraft({ ...costDraft, amount: value })} /></div>
       <footer>{costDraft.id && <button type="button" className="work-delete" disabled={saving} onClick={deleteCost}>Excluir</button>}<button type="button" className="work-save" disabled={saving || !costDraft.date || !costDraft.amount} onClick={saveCost}>{saving ? "Salvando..." : "Salvar custo"}</button></footer>
@@ -201,5 +212,32 @@ export default function WorkScreen({ navigation, initialAction = null }: {
 
 function DateBadge({ date }: { date: string }) { return <span className="work-day-date"><b>{String(parseDate(date).getDate()).padStart(2, "0")}</b><small>{new Intl.DateTimeFormat("pt-BR", { weekday: "short" }).format(parseDate(date)).replace(".", "")}</small></span>; }
 function MoneyField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="work-field"><span>{label}</span><div className="work-money-input"><b>R$</b><input inputMode="numeric" placeholder="0,00" value={value} onChange={(event) => onChange(inputMoney(event.target.value))} /></div></label>; }
+function WorkCostCategorySelect({ value, onChange }: { value: ApiWorkCostCategory; onChange: (value: ApiWorkCostCategory) => void }) {
+  const [open, setOpen] = useState(false);
+  const container = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function closeOnOutsideClick(event: PointerEvent) {
+      if (!container.current?.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
+  }, [open]);
+
+  return <div className="work-field work-category-field" ref={container}>
+    <span>Categoria</span>
+    <div className="work-category-select">
+      <button type="button" className="work-category-trigger" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+        <span>{costLabels[value]}</span><svg className="work-category-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
+      </button>
+      {open && <div className="work-category-menu" role="listbox" aria-label="Categoria do custo">
+        {(Object.keys(costLabels) as ApiWorkCostCategory[]).map((category) => <button type="button" role="option" aria-selected={category === value} className={category === value ? "selected" : ""} key={category} onClick={() => { onChange(category); setOpen(false); }}>
+          <span>{costLabels[category]}</span>{category === value && <span className="work-category-check" aria-hidden="true">✓</span>}
+        </button>)}
+      </div>}
+    </div>
+  </div>;
+}
 function ModalBackdrop({ children, onClose }: { children: ReactNode; onClose: () => void }) { return <div className="work-sheet-backdrop" role="presentation" onMouseDown={onClose}>{children}</div>; }
 function SheetHeader({ eyebrow, title, id, onClose }: { eyebrow: string; title: string; id: string; onClose: () => void }) { return <><div className="work-sheet-handle" /><header><div><span>{eyebrow}</span><h2 id={id}>{title}</h2></div><button type="button" onClick={onClose} aria-label="Fechar">×</button></header></>; }

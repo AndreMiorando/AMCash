@@ -1,5 +1,6 @@
 package br.com.amcash.entry.repository;
 
+import br.com.amcash.entry.entity.EntryType;
 import br.com.amcash.entry.entity.FinancialEntry;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -19,6 +20,9 @@ public interface FinancialEntryRepository extends JpaRepository<FinancialEntry, 
             LocalDate end);
 
     Optional<FinancialEntry> findByIdAndUserId(UUID id, UUID userId);
+
+    Optional<FinancialEntry> findFirstByUserIdAndTypeAndPaidFalseAndDueDateBetweenOrderByDueDateAscCreatedAtAsc(
+            UUID userId, EntryType type, LocalDate start, LocalDate end);
 
     List<FinancialEntry> findAllBySeriesIdAndUserIdOrderByRecurrenceIndexAsc(UUID seriesId, UUID userId);
 
