@@ -150,11 +150,47 @@ export type ApiGoal = {
   selectedDays: number[];
 };
 
+export type ApiCustomGoalPeriod = "DAILY" | "WEEKLY" | "MONTHLY";
+export type ApiPrimaryGoalType = "EXPENSES" | "CUSTOM";
+
+export type ApiCustomGoal = {
+  id: string;
+  name: string;
+  amount: number;
+  period: ApiCustomGoalPeriod;
+  referenceDate: string;
+  periodStart: string;
+  periodEnd: string;
+  grossEarnings: number;
+  costs: number;
+  netResult: number;
+  remainingAmount: number;
+  dailyTarget: number;
+  todayTarget: number;
+  todayRemaining: number;
+  availableDays: number;
+  progressPercentage: number;
+  achieved: boolean;
+  todaySelected: boolean;
+  selectedDays: number[];
+};
+
+export type CustomGoalPayload = {
+  name: string;
+  amount: number;
+  period: ApiCustomGoalPeriod;
+};
+
 export type ApiHome = {
   date: string;
+  hasFinancialEntries: boolean;
   financial: { income: number; pendingExpenses: number; balance: number };
   goal: {
+    type: ApiPrimaryGoalType;
+    name: string;
+    period: ApiCustomGoalPeriod | null;
     dailyTarget: number;
+    periodRemaining: number;
     covered: boolean;
     todaySelected: boolean;
   };
@@ -282,6 +318,39 @@ export const financeApi = {
     return apiRequest<ApiGoal>(`/api/v1/goals/preferences?date=${date}${target}`, {
       method: "PUT",
       body: JSON.stringify({ selectedDays }),
+    });
+  },
+
+  customGoal(date: string) {
+    return apiRequest<ApiCustomGoal | undefined>(`/api/v1/goals/custom?date=${date}`);
+  },
+
+  createCustomGoal(date: string, payload: CustomGoalPayload) {
+    return apiRequest<ApiCustomGoal>(`/api/v1/goals/custom?date=${date}`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateCustomGoal(date: string, payload: CustomGoalPayload) {
+    return apiRequest<ApiCustomGoal>(`/api/v1/goals/custom?date=${date}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteCustomGoal() {
+    return apiRequest<void>("/api/v1/goals/custom", { method: "DELETE" });
+  },
+
+  primaryGoal() {
+    return apiRequest<{ type: ApiPrimaryGoalType }>("/api/v1/goals/primary");
+  },
+
+  updatePrimaryGoal(type: ApiPrimaryGoalType) {
+    return apiRequest<{ type: ApiPrimaryGoalType }>("/api/v1/goals/primary", {
+      method: "PUT",
+      body: JSON.stringify({ type }),
     });
   },
 

@@ -33,4 +33,16 @@ public interface WorkEarningRepository extends JpaRepository<WorkEarning, UUID> 
             @Param("start") LocalDate start,
             @Param("end") LocalDate end,
             @Param("referenceDate") LocalDate referenceDate);
+
+    @Query("""
+            select coalesce(sum(earning.amount), 0)
+              from WorkEarning earning
+              join earning.workDay day
+             where day.user.id = :userId
+               and day.date between :start and :end
+            """)
+    BigDecimal sumByUserAndDateBetween(
+            @Param("userId") UUID userId,
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end);
 }

@@ -1,0 +1,2 @@
+ALTER TABLE custom_goals
+    ADD COLUMN tracked_on_home BOOLEAN NOT NULL DEFAULT FALSE;
