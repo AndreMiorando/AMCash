@@ -9,6 +9,8 @@ public record GoalResponse(
         int month,
         LocalDate referenceDate,
         BigDecimal income,
+        BigDecimal totalExpenses,
+        BigDecimal paidExpenses,
         BigDecimal pendingExpenses,
         BigDecimal remainingAmount,
         BigDecimal weeklyTarget,
@@ -16,6 +18,7 @@ public record GoalResponse(
         int availableDays,
         BigDecimal progressPercentage,
         boolean covered,
+        boolean todaySelected,
         List<Integer> selectedDays
 ) {
 }

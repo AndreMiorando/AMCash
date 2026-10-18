@@ -48,14 +48,17 @@ function periodTitle(overview: ApiWorkOverview | null, period: ApiWorkPeriod, re
   return new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(parseDate(referenceDate));
 }
 
-export default function WorkScreen({ navigation }: { navigation: ReactNode }) {
+export default function WorkScreen({ navigation, initialAction = null }: {
+  navigation: ReactNode;
+  initialAction?: "work" | "cost" | null;
+}) {
   const [period, setPeriod] = useState<ApiWorkPeriod>("DAY");
   const [referenceDate, setReferenceDate] = useState(() => isoDate(new Date()));
   const [overview, setOverview] = useState<ApiWorkOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [draft, setDraft] = useState<WorkDraft | null>(null);
-  const [costDraft, setCostDraft] = useState<CostDraft | null>(null);
+  const [draft, setDraft] = useState<WorkDraft | null>(() => initialAction === "work" ? emptyDraft(isoDate(new Date())) : null);
+  const [costDraft, setCostDraft] = useState<CostDraft | null>(() => initialAction === "cost" ? emptyCost(isoDate(new Date())) : null);
   const [newRecordOpen, setNewRecordOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);

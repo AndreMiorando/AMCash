@@ -137,6 +137,8 @@ export type ApiGoal = {
   month: number;
   referenceDate: string;
   income: number;
+  totalExpenses: number;
+  paidExpenses: number;
   pendingExpenses: number;
   remainingAmount: number;
   weeklyTarget: number;
@@ -144,7 +146,26 @@ export type ApiGoal = {
   availableDays: number;
   progressPercentage: number;
   covered: boolean;
+  todaySelected: boolean;
   selectedDays: number[];
+};
+
+export type ApiHome = {
+  date: string;
+  financial: { income: number; totalExpenses: number; paidExpenses: number; pendingExpenses: number };
+  todayWork: { gross: number; costs: number; net: number };
+  monthWork: { gross: number; costs: number; net: number };
+  goal: {
+    monthRemaining: number;
+    todayTarget: number;
+    todayAchieved: number;
+    todayRemaining: number;
+    todaySurplus: number;
+    progressPercentage: number;
+    availableDays: number;
+    covered: boolean;
+    todaySelected: boolean;
+  };
 };
 
 export type ApiWorkPeriod = "DAY" | "WEEK" | "MONTH";
@@ -244,6 +265,10 @@ async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const financeApi = {
+  home(date: string) {
+    return apiRequest<ApiHome>(`/api/v1/home?date=${date}`);
+  },
+
   listMonth(year: number, month: number) {
     return apiRequest<MonthlyEntries>(`/api/v1/transactions?year=${year}&month=${month}`);
   },

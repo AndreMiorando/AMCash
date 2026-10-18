@@ -485,11 +485,11 @@ a {
 
 .dashboard-header {
   display: flex;
-  height: 3.65rem;
+  height: calc(4rem + env(safe-area-inset-top));
   flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
-  padding: 0.6rem 1.1rem 0.35rem;
+  padding: calc(0.85rem + env(safe-area-inset-top)) 1.1rem 0.45rem;
 }
 
 .header-brand {
@@ -1229,6 +1229,74 @@ a {
   font-weight: 700;
   text-decoration: none;
   transform: translateY(clamp(0.25rem, calc(env(safe-area-inset-bottom) / 2), 1rem));
+}
+
+/* Daily home */
+.daily-home-screen {
+  display: flex;
+  width: min(100%, var(--app-shell-width));
+  height: 100vh;
+  height: 100dvh;
+  min-height: 36rem;
+  margin-inline: auto;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f7f9fd;
+  color: #183253;
+  font-family: var(--font-geist-sans), Arial, sans-serif;
+  animation: dashboard-in 0.42s ease-out both;
+}
+
+.daily-home-header { border-bottom: 1px solid #edf2f8; background: #fff; }
+.daily-home-label { color: #8295aa; font-size: 0.58rem; font-weight: 780; letter-spacing: 0.17em; }
+.daily-home-content { display: flex; min-height: 0; padding: 1.25rem 1rem 2rem; flex: 1; flex-direction: column; gap: 0.9rem; overflow-y: auto; }
+.daily-home-heading > span,
+.daily-work-breakdown header span,
+.daily-month-card header span { color: #8a9caf; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.14em; }
+.daily-home-heading h1 { margin: 0.2rem 0 0.12rem; font-size: 1.55rem; letter-spacing: -0.04em; }
+.daily-home-heading p { margin: 0; color: #8a9caf; font-size: 0.78rem; text-transform: capitalize; }
+
+.daily-goal-card { padding: 1.25rem; border-radius: 1.25rem; background: linear-gradient(145deg, #0875fa, #0753e6); color: #fff; box-shadow: 0 0.8rem 1.8rem rgb(7 91 239 / 18%); }
+.daily-goal-card.covered { background: linear-gradient(145deg, #12ae77, #0b9d6b); }
+.daily-goal-card > span { font-size: 0.62rem; font-weight: 800; letter-spacing: 0.13em; opacity: 0.8; }
+.daily-goal-card > strong { display: block; margin-top: 0.45rem; font-size: 2rem; letter-spacing: -0.055em; }
+.daily-goal-card > p { margin: 0.15rem 0 0; color: rgb(255 255 255 / 78%); font-size: 0.76rem; line-height: 1.45; }
+.daily-progress-track { height: 0.42rem; margin-top: 1rem; overflow: hidden; border-radius: 999px; background: rgb(255 255 255 / 22%); }
+.daily-progress-track i { display: block; height: 100%; border-radius: inherit; background: #fff; transition: width 0.35s ease; }
+.daily-progress-caption { display: flex; margin-top: 0.42rem; justify-content: space-between; color: rgb(255 255 255 / 82%); font-size: 0.66rem; }
+
+.daily-work-breakdown,
+.daily-month-card { padding: 1rem; border: 1px solid #e2e9f2; border-radius: 1rem; background: #fff; box-shadow: 0 0.4rem 1.2rem rgb(38 68 104 / 5%); }
+.daily-work-breakdown header,
+.daily-month-card header { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+.daily-work-breakdown h2,
+.daily-month-card h2 { margin: 0.18rem 0 0; font-size: 0.98rem; }
+.daily-work-breakdown header > strong,
+.daily-month-card header > strong { color: #0870ed; font-size: 1.15rem; }
+.daily-work-breakdown header > strong.negative { color: #f24f68; }
+.daily-work-breakdown > div { display: grid; margin-top: 0.85rem; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
+.daily-work-breakdown > div span,
+.daily-month-grid span { display: flex; padding: 0.72rem; flex-direction: column; gap: 0.25rem; border-radius: 0.75rem; background: #f7f9fd; color: #8293a8; font-size: 0.67rem; }
+.daily-work-breakdown b,
+.daily-month-grid b { color: #183253; font-size: 0.86rem; }
+.daily-work-breakdown b.cost { color: #f24f68; }
+
+.daily-home-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
+.daily-home-actions button { display: flex; min-height: 4rem; padding: 0.8rem; align-items: center; gap: 0.65rem; border: 0; border-radius: 0.95rem; background: #fff; color: #183253; box-shadow: 0 0.35rem 1rem rgb(40 68 104 / 8%); text-align: left; }
+.daily-home-actions svg { width: 1.35rem; color: #086cf3; }
+.daily-home-actions span { display: flex; min-width: 0; flex-direction: column; gap: 0.12rem; }
+.daily-home-actions b { font-size: 0.78rem; }
+.daily-home-actions small { color: #8a9caf; font-size: 0.61rem; }
+.daily-month-grid { display: grid; margin-top: 0.85rem; grid-template-columns: 1fr 1fr; gap: 0.55rem; }
+.daily-month-card > button { display: flex; width: 100%; margin-top: 0.85rem; padding: 0.55rem 0 0; justify-content: space-between; border: 0; border-top: 1px solid #edf1f6; background: transparent; color: #086cf3; font-size: 0.72rem; font-weight: 700; }
+.daily-home-loading,
+.daily-home-error { display: grid; min-height: 12rem; place-content: center; justify-items: center; gap: 0.75rem; color: #8798ab; font-size: 0.75rem; }
+.daily-home-error button { padding: 0.65rem 1rem; border: 0; border-radius: 0.75rem; background: #086cf3; color: #fff; font-weight: 700; }
+
+@media (max-width: 25rem) {
+  .bottom-nav { gap: 0; justify-content: space-around; }
+  .nav-item { min-width: 3.6rem; font-size: 0.58rem; }
+  .daily-home-actions { grid-template-columns: 1fr; }
 }
 
 /* Work tracking */
