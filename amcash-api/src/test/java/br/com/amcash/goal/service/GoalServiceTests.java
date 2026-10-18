@@ -79,7 +79,7 @@ class GoalServiceTests {
         var response = service.current(userId, LocalDate.of(2026, 10, 18));
 
         assertEquals(new BigDecimal("500.00"), response.dailyTarget());
-        assertEquals(new BigDecimal("700.00"), response.remainingAmount());
+        assertEquals(new BigDecimal("1000.00"), response.remainingAmount());
         assertTrue(response.todaySelected());
     }
 

@@ -9,6 +9,9 @@ import {
   ApiError,
   ApiForecast,
   ApiGoal,
+  ApiCustomGoal,
+  ApiCustomGoalPeriod,
+  ApiPrimaryGoalType,
   ApiHome,
   ApiWorkCostCategory,
   ApiWorkOverview,
@@ -155,7 +158,7 @@ type Subexpense = {
   seriesId?: string;
 };
 
-type IconName = Transaction["kind"] | "search" | "more" | "back" | "forward" | "home" | "radar" | "target" | "work" | "edit" | "trash" | "plus" | "check";
+type IconName = Transaction["kind"] | "search" | "more" | "back" | "forward" | "home" | "radar" | "target" | "work" | "edit" | "trash" | "plus" | "check" | "logout";
 
 function Icon({ name }: { name: IconName }) {
   if (name === "more") {
@@ -180,6 +183,7 @@ function Icon({ name }: { name: IconName }) {
     trash: <><path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6" /></>,
     plus: <path d="M12 5v14M5 12h14" />,
     check: <path d="m5 12 4.5 4.5L19 7" />,
+    logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>,
   };
 
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
@@ -1828,6 +1832,202 @@ function remainingGoalDays(year: number, month: number, referenceDate: string) {
     .map((cell) => cell.day);
 }
 
+const customGoalPeriodLabels: Record<ApiCustomGoalPeriod, string> = {
+  DAILY: "Diária",
+  WEEKLY: "Semanal",
+  MONTHLY: "Mensal",
+};
+
+function PrimaryGoalControl({ selected, disabled, onSelect }: {
+  selected: boolean;
+  disabled: boolean;
+  onSelect: () => void;
+}) {
+  return <section className={`goal-home-selection${selected ? " selected" : ""}`}>
+    <div><Icon name={selected ? "check" : "home"} /><span><strong>{selected ? "Acompanhando na Home" : "Acompanhar na Home"}</strong><small>{selected ? "Esta é sua meta principal" : "Usar esta modalidade no resumo diário"}</small></span></div>
+    <button type="button" disabled={disabled || selected} onClick={onSelect}>{selected ? "Selecionada" : "Selecionar"}</button>
+  </section>;
+}
+
+function CustomGoalsPanel({ referenceDate, schedule, onScheduleUpdated, primaryGoalType, isSavingPrimary, onPrimaryChange }: {
+  referenceDate: string;
+  schedule: ApiGoal | null;
+  onScheduleUpdated: (goal: ApiGoal) => void;
+  primaryGoalType: ApiPrimaryGoalType;
+  isSavingPrimary: boolean;
+  onPrimaryChange: (type: ApiPrimaryGoalType) => Promise<void>;
+}) {
+  const [customGoal, setCustomGoal] = useState<ApiCustomGoal | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSavingDays, setIsSavingDays] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [name, setName] = useState("");
+  const [amount, setAmount] = useState("");
+  const [period, setPeriod] = useState<ApiCustomGoalPeriod>("MONTHLY");
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError("");
+    try {
+      setCustomGoal((await financeApi.customGoal(referenceDate)) ?? null);
+    } catch (requestError) {
+      setError(messageFromError(requestError));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [referenceDate]);
+
+  useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
+
+  function openEditor() {
+    setName(customGoal?.name ?? "");
+    setAmount(customGoal ? maskCurrencyInput(String(Math.round(Number(customGoal.amount) * 100))) : "");
+    setPeriod(customGoal?.period ?? "MONTHLY");
+    setError("");
+    setEditorOpen(true);
+  }
+
+  async function save() {
+    const numericAmount = parseCurrencyInput(amount);
+    if (!name.trim()) { setError("Informe o nome da meta."); return; }
+    if (numericAmount <= 0) { setError("Informe um valor de meta maior que zero."); return; }
+    setIsSaving(true);
+    setError("");
+    try {
+      const payload = { name: name.trim(), amount: numericAmount, period };
+      const updated = customGoal
+        ? await financeApi.updateCustomGoal(referenceDate, payload)
+        : await financeApi.createCustomGoal(referenceDate, payload);
+      setCustomGoal(updated);
+      setEditorOpen(false);
+    } catch (requestError) {
+      setError(messageFromError(requestError));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function remove() {
+    if (isSaving) return;
+    setIsSaving(true);
+    setError("");
+    try {
+      await financeApi.deleteCustomGoal();
+      setCustomGoal(null);
+      if (primaryGoalType === "CUSTOM") await onPrimaryChange("EXPENSES");
+      setConfirmDelete(false);
+    } catch (requestError) {
+      setError(messageFromError(requestError));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function saveDays(selectedDays: number[]) {
+    if (!schedule || isSavingDays) return;
+    setIsSavingDays(true);
+    setError("");
+    try {
+      const updated = await financeApi.updateGoalPreferences(referenceDate, [...selectedDays].sort((a, b) => a - b), schedule.year, schedule.month);
+      onScheduleUpdated(updated);
+      setCustomGoal((await financeApi.customGoal(referenceDate)) ?? null);
+    } catch (requestError) {
+      setError(messageFromError(requestError));
+    } finally {
+      setIsSavingDays(false);
+    }
+  }
+
+  function toggleDay(day: number) {
+    if (!schedule || !remainingGoalDays(schedule.year, schedule.month, referenceDate).includes(day)) return;
+    const selected = schedule.selectedDays.includes(day)
+      ? schedule.selectedDays.filter((current) => current !== day)
+      : [...schedule.selectedDays, day];
+    void saveDays(selected);
+  }
+
+  const progress = Math.max(0, Math.min(100, Number(customGoal?.progressPercentage ?? 0)));
+  const periodLabel = customGoal ? customGoalPeriodLabels[customGoal.period] : "";
+  const calendarCells = schedule ? goalCalendarCells(schedule.year, schedule.month, referenceDate) : [];
+  const remainingDays = schedule ? remainingGoalDays(schedule.year, schedule.month, referenceDate) : [];
+  const remainingDaysSet = new Set(remainingDays);
+
+  if (isLoading) return <div className="goals-loading" role="status"><div className="loader" aria-hidden="true" /><span>Carregando sua meta personalizada</span></div>;
+
+  return <div className="custom-goals-panel">
+    <section className="goals-intro custom-goals-intro">
+      <div><span>META PERSONALIZADA</span><h1>Seu objetivo de faturamento</h1><p>Acompanhe o resultado líquido registrado em Trabalho, sem alterar suas despesas.</p></div>
+      {customGoal && <button type="button" onClick={openEditor}><Icon name="edit" /> Editar</button>}
+    </section>
+
+    {error && <p className="auth-error" role="alert">{error}</p>}
+
+    {!customGoal ? <section className="custom-goal-empty">
+      <span className="custom-goal-empty-icon"><Icon name="target" /></span>
+      <h2>Crie sua meta personalizada</h2>
+      <p>Defina quanto deseja gerar por dia, semana ou mês. O progresso usará seu resultado líquido em Trabalho.</p>
+      <button type="button" onClick={openEditor}><Icon name="plus" /> Adicionar meta personalizada</button>
+    </section> : <>
+      <PrimaryGoalControl selected={primaryGoalType === "CUSTOM"} disabled={isSavingPrimary} onSelect={() => void onPrimaryChange("CUSTOM")} />
+      <section className={`custom-goal-main${customGoal.achieved ? " achieved" : ""}`}>
+        <div className="custom-goal-main-heading"><div><span>{periodLabel.toUpperCase()}</span><h2>{customGoal.name}</h2></div><small>Meta original<br /><b>{formatCurrency(Number(customGoal.amount))}</b></small></div>
+        <strong>{customGoal.achieved ? "Meta atingida" : formatCurrency(Number(customGoal.remainingAmount))}</strong>
+        <p>{customGoal.achieved ? "Seu resultado líquido já alcançou este objetivo." : "ainda falta para alcançar sua meta"}</p>
+        <div className="goal-progress-heading"><span>Progresso</span><b>{progress.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%</b></div>
+        <div className="goal-progress"><span style={{ width: `${progress}%` }} /></div>
+      </section>
+
+      <section className="custom-goal-metrics">
+        <article><span>RESULTADO LÍQUIDO</span><strong className={Number(customGoal.netResult) < 0 ? "negative" : ""}>{Number(customGoal.netResult) < 0 ? "- " : ""}{formatCurrency(Number(customGoal.netResult))}</strong><small>faturamento menos custos</small></article>
+        <article><span>{customGoal.period === "DAILY" ? "FALTA HOJE" : "NECESSIDADE DIÁRIA"}</span><strong>{formatCurrency(Number(customGoal.dailyTarget))}</strong><small>{customGoal.period === "DAILY" ? "objetivo fixo do dia" : customGoal.availableDays > 0 ? `em ${customGoal.availableDays} dias selecionados` : "selecione dias disponíveis"}</small></article>
+      </section>
+
+      <section className="custom-goal-result">
+        <header><div><span>RESULTADO DO PERÍODO</span><h2>De onde vem seu progresso</h2></div><b>{periodLabel}</b></header>
+        <div><span>Faturamento bruto<strong>{formatCurrency(Number(customGoal.grossEarnings))}</strong></span><span>Custos de trabalho<strong className="negative">- {formatCurrency(Number(customGoal.costs))}</strong></span></div>
+      </section>
+
+      {customGoal.period !== "DAILY" && schedule && <section className="goal-days-card custom-goal-days">
+        <div className="goal-days-heading"><div><span>DIAS DE TRABALHO</span><h2>Distribua a meta pelos dias restantes</h2></div><strong>{customGoal.availableDays} {customGoal.availableDays === 1 ? "dia disponível" : "dias disponíveis"}</strong></div>
+        <div className="goal-calendar-weekdays" aria-hidden="true">{goalCalendarWeekdays.map((weekday) => <span key={weekday}>{weekday}</span>)}</div>
+        <div className="goal-calendar" aria-label="Dias disponíveis para a meta personalizada">{calendarCells.map((cell) => {
+          const selected = cell.inMonth && !cell.passed && schedule.selectedDays.includes(cell.day);
+          const selectable = cell.inMonth && remainingDaysSet.has(cell.day);
+          return <button type="button" key={cell.key} className={`${!cell.inMonth ? "outside" : cell.passed ? "passed" : selected ? "selected" : "available"}`} disabled={isSavingDays || !selectable} onClick={() => toggleDay(cell.day)} aria-pressed={selected}>
+            <span>{String(cell.day).padStart(2, "0")}</span>{selected && <i aria-hidden="true"><Icon name="check" /></i>}
+          </button>;
+        })}</div>
+        <div className="goal-calendar-actions">
+          <button type="button" disabled={isSavingDays || remainingDays.length === 0} onClick={() => void saveDays([...new Set([...schedule.selectedDays, ...remainingDays])])}><Icon name="check" />Selecionar restantes</button>
+          <button type="button" className="clear" disabled={isSavingDays || customGoal.availableDays === 0} onClick={() => { const rest = new Set(remainingDays); void saveDays(schedule.selectedDays.filter((day) => !rest.has(day))); }}><Icon name="trash" />Limpar restantes</button>
+        </div>
+        <p className="custom-goal-shared-days">Estes são os mesmos dias usados pela meta de despesas.</p>
+      </section>}
+
+      <button type="button" className="custom-goal-delete" onClick={() => setConfirmDelete(true)}><Icon name="trash" /> Excluir meta personalizada</button>
+    </>}
+
+    {editorOpen && <div className="sheet-backdrop custom-goal-backdrop" role="presentation" onMouseDown={() => !isSaving && setEditorOpen(false)}>
+      <section className="custom-goal-dialog" role="dialog" aria-modal="true" aria-labelledby="custom-goal-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="custom-goal-dialog-handle" /><header><div><span>META PERSONALIZADA</span><h2 id="custom-goal-title">{customGoal ? "Editar meta" : "Nova meta"}</h2></div><button type="button" onClick={() => setEditorOpen(false)} aria-label="Fechar">×</button></header>
+        <label className="field full-field"><span>Nome da meta</span><input maxLength={80} placeholder="Ex.: Meta de faturamento" value={name} onChange={(event) => setName(event.target.value)} /></label>
+        <label className="field full-field"><span>Valor da meta</span><div className="currency-input"><b>R$</b><input value={amount} inputMode="numeric" placeholder="0,00" onChange={(event) => setAmount(maskCurrencyInput(event.target.value))} onBlur={() => setAmount(completeCurrencyInput(amount))} /></div></label>
+        <fieldset className="custom-goal-period"><legend>Periodicidade</legend><div>{(Object.keys(customGoalPeriodLabels) as ApiCustomGoalPeriod[]).map((option) => <button type="button" className={period === option ? "selected" : ""} key={option} onClick={() => setPeriod(option)}>{customGoalPeriodLabels[option]}</button>)}</div></fieldset>
+        {error && <p className="auth-error" role="alert">{error}</p>}
+        <button type="button" className="primary-button" disabled={isSaving} onClick={() => void save()}>{isSaving ? "Salvando..." : customGoal ? "Salvar alterações" : "Criar meta"}</button>
+      </section>
+    </div>}
+
+    {confirmDelete && <div className="sheet-backdrop confirm-backdrop" role="presentation" onMouseDown={() => setConfirmDelete(false)}><section className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-custom-goal" onMouseDown={(event) => event.stopPropagation()}>
+      <div className="confirm-icon"><Icon name="trash" /></div><h2 id="delete-custom-goal">Excluir meta personalizada?</h2><p>Os registros de Trabalho serão preservados. Apenas esta meta será removida.</p>
+      <div><button type="button" disabled={isSaving} onClick={() => setConfirmDelete(false)}>Cancelar</button><button type="button" disabled={isSaving} onClick={() => void remove()}>{isSaving ? "Excluindo..." : "Excluir"}</button></div>
+    </section></div>}
+  </div>;
+}
+
 function GoalsScreen({ onHome, onFinance, onRadar, onWork }: { onHome: () => void; onFinance: () => void; onRadar: () => void; onWork: () => void }) {
   const [referenceDate, setReferenceDate] = useState(() => dateToInputValue(new Date()));
   const [goal, setGoal] = useState<ApiGoal | null>(null);
@@ -1838,6 +2038,9 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork }: { onHome: () => voi
   const [isSavingDays, setIsSavingDays] = useState(false);
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [goalMode, setGoalMode] = useState<"expenses" | "custom">("expenses");
+  const [primaryGoalType, setPrimaryGoalType] = useState<ApiPrimaryGoalType>("EXPENSES");
+  const [isSavingPrimary, setIsSavingPrimary] = useState(false);
 
   useEffect(() => {
     const updateDate = () => {
@@ -1861,10 +2064,11 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork }: { onHome: () => voi
 
   useEffect(() => {
     let active = true;
-    financeApi.goal(referenceDate)
-      .then(async (response) => {
+    Promise.all([financeApi.goal(referenceDate), financeApi.primaryGoal()])
+      .then(async ([response, primary]) => {
         if (!active) return;
         setGoal(response);
+        setPrimaryGoalType(primary.type);
         setNextGoal(null);
         setIsNextGoalExpanded(false);
         setIsLoading(false);
@@ -1890,6 +2094,20 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork }: { onHome: () => voi
       });
     return () => { active = false; };
   }, [referenceDate, refreshKey]);
+
+  async function selectPrimaryGoal(type: ApiPrimaryGoalType) {
+    if (isSavingPrimary || primaryGoalType === type) return;
+    setIsSavingPrimary(true);
+    setError("");
+    try {
+      const updated = await financeApi.updatePrimaryGoal(type);
+      setPrimaryGoalType(updated.type);
+    } catch (requestError) {
+      setError(messageFromError(requestError));
+    } finally {
+      setIsSavingPrimary(false);
+    }
+  }
 
   async function saveGoalDays(targetGoal: ApiGoal, selectedDays: number[]) {
     if (isSavingDays) return;
@@ -2020,13 +2238,24 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork }: { onHome: () => voi
       </header>
 
       <div className="goals-content">
+        <div className="goals-mode-tabs" role="tablist" aria-label="Tipo de meta">
+          <button type="button" role="tab" aria-selected={goalMode === "expenses"} className={goalMode === "expenses" ? "selected" : ""} onClick={() => setGoalMode("expenses")}>Despesas</button>
+          <button type="button" role="tab" aria-selected={goalMode === "custom"} className={goalMode === "custom" ? "selected" : ""} onClick={() => setGoalMode("custom")}>Personalizada</button>
+        </div>
+
+        {error && <p className="auth-error" role="alert">{error}</p>}
+
+        {goalMode === "custom" ? (
+          <CustomGoalsPanel referenceDate={referenceDate} schedule={goal} onScheduleUpdated={setGoal} primaryGoalType={primaryGoalType} isSavingPrimary={isSavingPrimary} onPrimaryChange={selectPrimaryGoal} />
+        ) : <>
         <section className="goals-intro">
           <span>META DINÂMICA</span>
           <h1>Quanto falta para cobrir o mês?</h1>
           <p>A meta acompanha suas receitas, despesas pendentes e os dias disponíveis.</p>
         </section>
 
-        {error && <p className="auth-error" role="alert">{error}</p>}
+        <PrimaryGoalControl selected={primaryGoalType === "EXPENSES"} disabled={isSavingPrimary} onSelect={() => void selectPrimaryGoal("EXPENSES")} />
+
         {isLoading ? (
           <div className="goals-loading" role="status"><div className="loader" aria-hidden="true" /><span>Calculando sua meta</span></div>
         ) : goal && (
@@ -2083,6 +2312,7 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork }: { onHome: () => voi
             )}
           </>
         )}
+        </>}
       </div>
 
       <BottomNavigation active="goals" onHome={onHome} onFinance={onFinance} onRadar={onRadar} onGoals={() => {}} onWork={onWork} />
@@ -2100,11 +2330,42 @@ const homeCostLabels: Record<ApiWorkCostCategory, string> = {
   OTHER: "Outro",
 };
 
-function HomeDashboard({ onFinance, onRadar, onGoals, onWork }: {
+function AccountMenu({ onLogout }: { onLogout: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [user, setUser] = useState<AuthenticatedUser | null>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        const saved = window.localStorage.getItem("amcash.user");
+        setUser(saved ? JSON.parse(saved) as AuthenticatedUser : null);
+      } catch {
+        setUser(null);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const initial = user?.name?.trim().charAt(0).toLocaleUpperCase("pt-BR") || "U";
+  return <div className="account-menu">
+    <button type="button" className="account-menu-trigger" aria-label="Abrir menu da conta" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((current) => !current)}>{initial}</button>
+    {open && <>
+      <button type="button" className="account-menu-dismiss" aria-label="Fechar menu da conta" onClick={() => setOpen(false)} />
+      <section className="account-menu-popover" role="menu">
+        <div className="account-menu-user"><span>{initial}</span><div><strong>{user?.name || "Sua conta"}</strong>{user?.email && <small>{user.email}</small>}</div></div>
+        <button type="button" className="account-menu-logout" role="menuitem" onClick={onLogout}><Icon name="logout" /><span><strong>Sair da conta</strong><small>Encerrar sessão</small></span></button>
+      </section>
+    </>}
+  </div>;
+}
+
+function HomeDashboard({ onFinance, onRadar, onGoals, onWork, onRegisterWork, onLogout }: {
   onFinance: () => void;
   onRadar: () => void;
   onGoals: () => void;
   onWork: () => void;
+  onRegisterWork: () => void;
+  onLogout: () => void;
 }) {
   const [summary, setSummary] = useState<ApiHome | null>(null);
   const [workOverview, setWorkOverview] = useState<ApiWorkOverview | null>(null);
@@ -2154,7 +2415,16 @@ function HomeDashboard({ onFinance, onRadar, onGoals, onWork }: {
   const ninetyNineValue = parseCurrencyInput(ninetyNine) || 0;
   const costValue = parseCurrencyInput(cost) || 0;
   const netValue = uberValue + ninetyNineValue - costValue;
-  const dailyRemaining = Math.max(0, Number(summary?.goal.dailyTarget ?? 0) - uberValue - ninetyNineValue + costValue);
+  const savedDay = workOverview?.days.find((item) => item.date === today);
+  const savedHomeEarnings = savedDay?.earnings
+    .filter((item) => item.source.toLowerCase() === "uber" || item.source === "99")
+    .reduce((total, item) => total + Number(item.amount), 0) ?? 0;
+  const savedHomeCost = workOverview?.costs.find((item) => item.description === legacyHomeCostDescription || item.description?.startsWith(homeCostPrefix));
+  const resultOutsideHomeFields = Number(workOverview?.summary.netEarnings ?? 0) - savedHomeEarnings + Number(savedHomeCost?.amount ?? 0);
+  const projectedTodayNet = resultOutsideHomeFields + netValue;
+  const dailyRemaining = Math.max(0, Number(summary?.goal.dailyTarget ?? 0)
+    - (summary?.goal.type === "CUSTOM" ? projectedTodayNet : netValue));
+  const showEmptyState = summary?.goal.type === "EXPENSES" && summary.hasFinancialEntries === false;
 
   async function saveDailyResult() {
     if (!summary || saving) return;
@@ -2194,15 +2464,25 @@ function HomeDashboard({ onFinance, onRadar, onGoals, onWork }: {
   return <main className="daily-home-screen">
     <header className="dashboard-header daily-home-header">
       <div className="header-brand" aria-label="AMCash"><Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority /><span><b>AM</b>Cash</span></div>
-      <span className="daily-home-label">RESUMO</span>
+      <div className="daily-home-account"><span className="daily-home-label">RESUMO</span><AccountMenu onLogout={onLogout} /></div>
     </header>
     <div className="daily-home-content">
-      <section className="daily-home-heading"><span>VISÃO GERAL</span><h1>Olá, este é o seu resumo</h1><p>{dateLabel}</p></section>
+      <section className="daily-home-heading"><span>{showEmptyState ? "BEM-VINDO AO AMCASH" : "VISÃO GERAL"}</span><h1>{showEmptyState ? "Seu controle começa aqui" : "Olá, este é o seu resumo"}</h1><p>{dateLabel}</p></section>
       {loading ? <div className="daily-home-loading"><div className="loader" /><span>Atualizando seu progresso</span></div> : error ?
         <div className="daily-home-error"><p>{error}</p><button type="button" onClick={() => void load()}>Tentar novamente</button></div> : summary && <>
+          {showEmptyState ? <section className="home-empty-state" aria-label="Começar a usar o AMCash">
+            <div className="home-empty-icon"><Icon name="target" /></div>
+            <span>PRIMEIROS PASSOS</span>
+            <h2>Comece organizando seu mês</h2>
+            <p>Cadastre suas despesas e receitas para o AMCash calcular suas metas e previsões.</p>
+            <div className="home-empty-actions">
+              <button type="button" className="primary" onClick={onFinance}><Icon name="plus" /><span>Cadastrar primeira despesa</span></button>
+              <button type="button" onClick={onRegisterWork}><Icon name="work" /><span>Registrar trabalho</span></button>
+            </div>
+          </section> : <>
           <section className={`daily-goal-card${summary.goal.covered ? " covered" : ""}`}>
-            <span>{summary.goal.covered ? "MÊS COBERTO" : "META DO DIA"}</span>
-            {summary.goal.covered ? <><strong>Você conseguiu!</strong><p>Suas receitas já cobrem as despesas pendentes deste mês.</p></> : summary.goal.todaySelected ? <>
+            <span>{summary.goal.type === "CUSTOM" ? `META PERSONALIZADA · ${summary.goal.name}` : summary.goal.covered ? "MÊS COBERTO" : "META DO DIA"}</span>
+            {summary.goal.covered ? <><strong>Você conseguiu!</strong><p>{summary.goal.type === "CUSTOM" ? "Seu resultado líquido já atingiu esta meta." : "Suas receitas já cobrem as despesas pendentes deste mês."}</p></> : summary.goal.todaySelected ? <>
               <strong>{formatCurrency(dailyRemaining)}</strong>
               <p>falta atingir hoje · meta base {formatCurrency(summary.goal.dailyTarget)}</p>
             </> : <><strong>{formatCurrency(summary.goal.dailyTarget)}</strong><p>Hoje não está selecionado como dia disponível.</p></>}
@@ -2227,16 +2507,20 @@ function HomeDashboard({ onFinance, onRadar, onGoals, onWork }: {
             <button type="button" disabled={saving} onClick={() => void saveDailyResult()}>{saving ? "Salvando..." : "Salvar resultado de hoje"}</button>
           </section>
 
-          <section className="home-summary-card home-balance-card">
-            <div><span>SALDO DO MÊS</span><h2>Receitas menos despesas pendentes</h2></div>
+          {summary.goal.type === "CUSTOM" && summary.goal.period !== "DAILY" ? <section className="home-summary-card home-goal-period-card">
+            <div><span>{summary.goal.period === "WEEKLY" ? "META SEMANAL" : "META MENSAL"}</span><h2>Quanto ainda falta no período</h2></div>
+            <strong>{formatCurrency(summary.goal.periodRemaining)}</strong>
+          </section> : <section className="home-summary-card home-balance-card">
+            <div><span>SALDO DO MÊS</span><h2>Despesas pendentes</h2></div>
             <strong className={summary.financial.balance < 0 ? "negative" : "positive"}>{summary.financial.balance < 0 ? "- " : "+ "}{formatCurrency(summary.financial.balance)}</strong>
-          </section>
+          </section>}
 
           <section className="home-summary-card home-next-expense">
             <div><span>PRÓXIMA DESPESA</span><h2>{summary.nextExpense?.name ?? "Nenhuma despesa pendente"}</h2>
               <p>{summary.nextExpense ? `Vence em ${formatDate(summary.nextExpense.dueDate)}` : "Você não possui outra despesa para pagar neste mês."}</p></div>
             {summary.nextExpense && <strong>{formatCurrency(summary.nextExpense.amount)}</strong>}
           </section>
+          </>}
         </>}
     </div>
     <BottomNavigation active="home" onHome={() => {}} onFinance={onFinance} onRadar={onRadar} onGoals={onGoals} onWork={onWork} />
@@ -2266,6 +2550,8 @@ export default function Home() {
     setItems([]);
     setSelected(null);
     setError("");
+    setActiveTab("home");
+    setWorkInitialAction(null);
     lastLoadedPeriod.current = "";
     requestedPeriod.current = "";
     setScreen("auth");
@@ -2415,5 +2701,5 @@ export default function Home() {
   }
 
   if (activeTab === "finance") return <Dashboard items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onHome={() => setActiveTab("home")} onRadar={() => setActiveTab("radar")} onGoals={() => setActiveTab("goals")} onWork={() => openWork()} onMonthChange={changeMonth} initialPeriod={period} error={error} isLoading={isLoading} />;
-  return <HomeDashboard onFinance={() => setActiveTab("finance")} onRadar={() => setActiveTab("radar")} onGoals={() => setActiveTab("goals")} onWork={() => openWork()} />;
+  return <HomeDashboard onFinance={() => setActiveTab("finance")} onRadar={() => setActiveTab("radar")} onGoals={() => setActiveTab("goals")} onWork={() => openWork()} onRegisterWork={() => openWork("work")} onLogout={logout} />;
 }

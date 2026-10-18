@@ -86,6 +86,23 @@ public class WorkService {
                 money(earnings[1]), money(costs[1]), money(earnings[1].subtract(costs[1])));
     }
 
+    @Transactional(readOnly = true)
+    public WorkResultSnapshot result(UUID userId, LocalDate start, LocalDate end) {
+        BigDecimal gross = workEarningRepository.sumByUserAndDateBetween(userId, start, end);
+        BigDecimal costs = workCostRepository.sumByUserAndDateBetween(userId, start, end);
+        return new WorkResultSnapshot(money(gross), money(costs), money(gross.subtract(costs)));
+    }
+
+    @Transactional(readOnly = true)
+    public WorkResultProgressSnapshot resultProgress(UUID userId, LocalDate start, LocalDate end,
+                                                     LocalDate referenceDate) {
+        BigDecimal[] earnings = summary(workEarningRepository.summarizeMonth(userId, start, end, referenceDate));
+        BigDecimal[] costs = summary(workCostRepository.summarizeMonth(userId, start, end, referenceDate));
+        return new WorkResultProgressSnapshot(
+                money(earnings[0]), money(costs[0]), money(earnings[0].subtract(costs[0])),
+                money(earnings[1]), money(costs[1]), money(earnings[1].subtract(costs[1])));
+    }
+
     @Transactional
     public WorkDayResponse upsert(UUID userId, LocalDate date, UpsertWorkDayRequest request) {
         validateEarnings(request.earnings());
@@ -234,5 +251,13 @@ public class WorkService {
             BigDecimal todayGross,
             BigDecimal todayCosts,
             BigDecimal todayNet) {
+    }
+
+    public record WorkResultSnapshot(BigDecimal gross, BigDecimal costs, BigDecimal net) {
+    }
+
+    public record WorkResultProgressSnapshot(
+            BigDecimal gross, BigDecimal costs, BigDecimal net,
+            BigDecimal todayGross, BigDecimal todayCosts, BigDecimal todayNet) {
     }
 }
