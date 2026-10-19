@@ -22,8 +22,8 @@ const legacyHomeCostDescription = "Custo do dia — Home";
 
 const periodLabels: Record<ApiWorkPeriod, string> = { DAY: "Dia", WEEK: "Semana", MONTH: "Mês" };
 const costLabels: Record<ApiWorkCostCategory, string> = {
-  FUEL: "Combustível", MAINTENANCE: "Manutenção", PARKING: "Estacionamento",
-  TOLL: "Pedágio", WASH: "Lavagem", MARKET: "Mercado", FOOD: "Alimentação", OTHER: "Outro",
+  FUEL: "Combustível", MAINTENANCE: "Manutenção", TOLL: "Pedágio",
+  WASH: "Lavagem", FOOD: "Alimentação", OTHER: "Outro",
 };
 
 function isoDate(date: Date) {
@@ -53,7 +53,10 @@ function numberInput(value: string) {
 function moneyForInput(value: number) { return value ? inputMoney(String(Math.round(value * 100))) : ""; }
 function isHomeCost(cost: ApiWorkCost) { return cost.description === legacyHomeCostDescription || cost.description?.startsWith(homeCostPrefix); }
 function costDescription(cost: ApiWorkCost) {
-  if (cost.description?.startsWith(homeCostPrefix)) return cost.description.slice(homeCostPrefix.length);
+  if (cost.description?.startsWith(homeCostPrefix)) {
+    const description = cost.description.slice(homeCostPrefix.length);
+    return description === costLabels[cost.category] ? "Custo do dia" : description;
+  }
   if (cost.description === legacyHomeCostDescription) return "Custo do dia";
   return cost.description || costLabels[cost.category];
 }
@@ -234,12 +237,12 @@ export default function WorkScreen({ navigation }: {
         <div className="work-record-section-title"><h3>Custos do dia</h3></div>
         <div className="work-record-costs">{draft.costs.map((cost, index) => <div className={`work-record-cost-item${editingCostKey === cost.key ? " expanded" : ""}`} key={cost.key}>
           <button type="button" className="work-record-cost-summary" aria-expanded={editingCostKey === cost.key} onClick={() => setEditingCostKey((current) => current === cost.key ? null : cost.key)}>
-            <span className="work-record-cost-icon"><CostIcon category={cost.category} /></span><span className="work-record-cost-copy"><strong>{costLabels[cost.category]}</strong><small>{cost.description.trim() || "Toque para adicionar detalhes"}</small></span><b>{currency(numberFromInput(cost.amount))}</b><span className="work-record-cost-chevron" aria-hidden="true">›</span>
+            <span className="work-record-cost-icon"><CostCategoryIcon category={cost.category} /></span><span className="work-record-cost-copy"><strong>{costLabels[cost.category]}</strong><small>{cost.description.trim() || "Custo do dia"}</small></span><b>{currency(numberFromInput(cost.amount))}</b><span className="work-record-cost-chevron" aria-hidden="true">›</span>
           </button>
-          {editingCostKey === cost.key && <div className="work-record-cost-fields"><div className="work-record-cost-grid"><WorkCostCategorySelect value={cost.category} onChange={(category) => setDraft({ ...draft, costs: draft.costs.map((current, i) => i === index ? { ...current, category } : current) })} />
-            <MoneyField label="Valor" value={cost.amount} onChange={(amount) => setDraft({ ...draft, costs: draft.costs.map((current, i) => i === index ? { ...current, amount } : current) })} /></div>
-            <div className="work-record-cost-description"><label className="work-field"><span>Descrição (opcional)</span><input maxLength={160} placeholder="Ex.: 25 litros" value={cost.description} onChange={(event) => setDraft({ ...draft, costs: draft.costs.map((current, i) => i === index ? { ...current, description: event.target.value } : current) })} /></label>
-              <button type="button" aria-label={`Remover custo ${index + 1}`} onClick={() => { setDraft({ ...draft, costs: draft.costs.filter((_, i) => i !== index) }); setEditingCostKey(null); }}>×</button></div></div>}
+          {editingCostKey === cost.key && <div className="work-record-cost-fields"><CostCategoryGrid value={cost.category} onChange={(category) => setDraft({ ...draft, costs: draft.costs.map((current, i) => i === index ? { ...current, category } : current) })} />
+            <MoneyField label="Valor" value={cost.amount} onChange={(amount) => setDraft({ ...draft, costs: draft.costs.map((current, i) => i === index ? { ...current, amount } : current) })} />
+            <label className="work-field"><span>Descrição (opcional)</span><input maxLength={160} placeholder="Ex.: Abastecimento no posto" value={cost.description} onChange={(event) => setDraft({ ...draft, costs: draft.costs.map((current, i) => i === index ? { ...current, description: event.target.value } : current) })} /></label>
+            <button type="button" className="work-record-cost-remove" onClick={() => { setDraft({ ...draft, costs: draft.costs.filter((_, i) => i !== index) }); setEditingCostKey(null); }}>× <span>Remover custo</span></button></div>}
         </div>)}</div>
         <button type="button" className="work-add-source work-add-cost" onClick={() => { const key = `new-${nextCostKey.current++}`; setDraft({ ...draft, costs: [...draft.costs, { key, category: "FUEL", description: "", amount: "" }] }); setEditingCostKey(key); }}>+ Adicionar custo</button>
 
@@ -253,32 +256,16 @@ export default function WorkScreen({ navigation }: {
 function DateBadge({ date }: { date: string }) { return <span className="work-day-date"><b>{String(parseDate(date).getDate()).padStart(2, "0")}</b><small>{new Intl.DateTimeFormat("pt-BR", { weekday: "short" }).format(parseDate(date)).replace(".", "")}</small></span>; }
 function MoneyField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="work-field"><span>{label}</span><div className="work-money-input"><b>R$</b><input inputMode="numeric" placeholder="0,00" value={value} onChange={(event) => onChange(inputMoney(event.target.value))} /></div></label>; }
 function BrandedMoneyField({ label, logo, value, onChange }: { label: string; logo: string; value: string; onChange: (value: string) => void }) { return <label className="work-branded-money"><span>{label}</span><div><span className="work-branded-logo"><Image src={logo} alt="" width={96} height={96} /></span><span className="work-branded-input"><b>R$</b><input inputMode="numeric" placeholder="0,00" value={value} onChange={(event) => onChange(inputMoney(event.target.value))} /></span></div></label>; }
-function CostIcon({ category }: { category: ApiWorkCostCategory }) { return category === "FUEL" ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16" /><path d="M3 21h13M7 7h5v4H7zM15 8h2l2 2v7a1.5 1.5 0 0 0 3 0v-5l-2-2" /></svg> : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18M7 14h5" /></svg>; }
-function WorkCostCategorySelect({ value, onChange }: { value: ApiWorkCostCategory; onChange: (value: ApiWorkCostCategory) => void }) {
-  const [open, setOpen] = useState(false);
-  const container = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function closeOnOutsideClick(event: PointerEvent) {
-      if (!container.current?.contains(event.target as Node)) setOpen(false);
-    }
-    document.addEventListener("pointerdown", closeOnOutsideClick);
-    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
-  }, [open]);
-
-  return <div className="work-field work-category-field" ref={container}>
-    <span>Categoria</span>
-    <div className="work-category-select">
-      <button type="button" className="work-category-trigger" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
-        <span>{costLabels[value]}</span><svg className="work-category-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
-      </button>
-      {open && <div className="work-category-menu" role="listbox" aria-label="Categoria do custo">
-        {(Object.keys(costLabels) as ApiWorkCostCategory[]).map((category) => <button type="button" role="option" aria-selected={category === value} className={category === value ? "selected" : ""} key={category} onClick={() => { onChange(category); setOpen(false); }}>
-          <span>{costLabels[category]}</span>{category === value && <span className="work-category-check" aria-hidden="true">✓</span>}
-        </button>)}
-      </div>}
-    </div>
-  </div>;
+function CostCategoryIcon({ category }: { category: ApiWorkCostCategory }) {
+  const paths: Record<ApiWorkCostCategory, ReactNode> = {
+    FUEL: <><path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16" /><path d="M3 21h13M7 7h5v4H7zM15 8h2l2 2v7a1.5 1.5 0 0 0 3 0v-5l-2-2" /></>,
+    MAINTENANCE: <><path d="M14.5 6.5a4 4 0 0 0-5-5L7 4l3 3 2.5-2.5a4 4 0 0 0 2 5L6 18l-1 3 3-1 8.5-8.5a4 4 0 0 0 5-5L19 9l-3-3 2.5-2.5" /></>,
+    TOLL: <><circle cx="7" cy="16" r="3" /><circle cx="12" cy="11" r="3" /><circle cx="17" cy="6" r="3" /></>,
+    WASH: <><path d="M12 2C9 7 6 10 6 14a6 6 0 0 0 12 0c0-4-3-7-6-12Z" /><path d="M9.5 16.5c.8 1.2 2 1.7 3.5 1.4" /></>,
+    FOOD: <><path d="M6 3v7M9 3v7M6 7h3M7.5 10v11" /><path d="M15.5 3v18M15.5 3c3 2 3.2 7 0 9" /></>,
+    OTHER: <><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none" /></>,
+  };
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[category]}</svg>;
 }
+function CostCategoryGrid({ value, onChange }: { value: ApiWorkCostCategory; onChange: (value: ApiWorkCostCategory) => void }) { return <div className="work-cost-category"><span>Categoria</span><div className="cost-category-grid" role="listbox" aria-label="Categoria do custo">{(Object.keys(costLabels) as ApiWorkCostCategory[]).map((category) => <button type="button" role="option" aria-selected={category === value} className={category === value ? "selected" : ""} key={category} onClick={() => onChange(category)}><CostCategoryIcon category={category} /><span>{costLabels[category]}</span></button>)}</div></div>; }
 function ModalBackdrop({ children, onClose }: { children: ReactNode; onClose: () => void }) { return <div className="work-sheet-backdrop" role="presentation" onMouseDown={onClose}>{children}</div>; }
