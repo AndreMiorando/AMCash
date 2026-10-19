@@ -8,6 +8,7 @@ import br.com.amcash.work.dto.request.UpsertWorkDayRequest;
 import br.com.amcash.work.dto.request.WorkCostRequest;
 import br.com.amcash.work.dto.request.WorkEarningRequest;
 import br.com.amcash.work.dto.response.WorkCostResponse;
+import br.com.amcash.work.dto.response.WorkComparisonResponse;
 import br.com.amcash.work.dto.response.WorkDayResponse;
 import br.com.amcash.work.dto.response.WorkEarningResponse;
 import br.com.amcash.work.dto.response.WorkOverviewResponse;
@@ -67,8 +68,9 @@ public class WorkService {
         List<WorkCostResponse> costResponses = workCostRepository
                 .findAllByUserIdAndDateBetweenOrderByDateDescCreatedAtDesc(userId, start, end)
                 .stream().map(this::toResponse).toList();
+        WorkSummaryResponse summary = summarize(dayResponses, costResponses);
         return new WorkOverviewResponse(period.name(), referenceDate, start, end,
-                summarize(dayResponses, costResponses), dayResponses, costResponses);
+                summary, comparison(userId, referenceDate, period, summary), dayResponses, costResponses);
     }
 
     @Transactional(readOnly = true)
@@ -192,6 +194,26 @@ public class WorkService {
         return new WorkSummaryResponse(money(gross), money(fuel), money(other), money(costs),
                 money(gross.subtract(costs)), kilometers.setScale(2, RoundingMode.HALF_UP),
                 perKilometer, days.size());
+    }
+
+    private WorkComparisonResponse comparison(UUID userId, LocalDate referenceDate, WorkPeriod period,
+                                              WorkSummaryResponse currentSummary) {
+        LocalDate previousReference = switch (period) {
+            case DAY -> referenceDate.minusDays(1);
+            case WEEK -> rangeStart(referenceDate, period).minusWeeks(1);
+            case MONTH -> YearMonth.from(referenceDate).minusMonths(1).atDay(1);
+        };
+        LocalDate previousStart = rangeStart(previousReference, period);
+        LocalDate previousEnd = rangeEnd(previousReference, period);
+        BigDecimal previousGross = workEarningRepository.sumByUserAndDateBetween(userId, previousStart, previousEnd);
+        BigDecimal previousCosts = workCostRepository.sumByUserAndDateBetween(userId, previousStart, previousEnd);
+        BigDecimal previousNet = money(previousGross.subtract(previousCosts));
+        BigDecimal changeAmount = money(currentSummary.netEarnings().subtract(previousNet));
+        BigDecimal changePercentage = previousNet.signum() == 0 ? null : changeAmount
+                .divide(previousNet.abs(), 4, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100))
+                .setScale(1, RoundingMode.HALF_UP);
+        return new WorkComparisonResponse(previousStart, previousEnd, previousNet, changeAmount, changePercentage);
     }
 
     private BigDecimal sum(List<WorkDayResponse> days,

@@ -24,6 +24,9 @@ public interface FinancialEntryRepository extends JpaRepository<FinancialEntry, 
     Optional<FinancialEntry> findFirstByUserIdAndTypeAndPaidFalseAndDueDateBetweenOrderByDueDateAscCreatedAtAsc(
             UUID userId, EntryType type, LocalDate start, LocalDate end);
 
+    long countByUserIdAndTypeAndPaidFalseAndDueDateBetween(
+            UUID userId, EntryType type, LocalDate start, LocalDate end);
+
     List<FinancialEntry> findAllBySeriesIdAndUserIdOrderByRecurrenceIndexAsc(UUID seriesId, UUID userId);
 
     @Query("""

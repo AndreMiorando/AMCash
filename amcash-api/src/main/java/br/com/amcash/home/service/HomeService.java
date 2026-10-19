@@ -43,6 +43,8 @@ public class HomeService {
                         userId, EntryType.EXPENSE, monthStart, monthEnd)
                 .map(this::toNextExpense)
                 .orElse(null);
+        long pendingExpenseCount = entryRepository.countByUserIdAndTypeAndPaidFalseAndDueDateBetween(
+                userId, EntryType.EXPENSE, monthStart, monthEnd);
         HomeResponse.GoalSummary goalSummary = customGoalService.currentForHome(userId, date)
                 .map(this::toGoalSummary)
                 .orElseGet(() -> new HomeResponse.GoalSummary(
@@ -50,7 +52,8 @@ public class HomeService {
                         goal.dailyTarget(), goal.remainingAmount(), goal.covered(), goal.todaySelected()));
         return new HomeResponse(date, hasFinancialEntries,
                 new HomeResponse.FinancialSummary(
-                        goal.income(), goal.pendingExpenses(), money(goal.income().subtract(goal.pendingExpenses()))),
+                        goal.income(), goal.pendingExpenses(), pendingExpenseCount,
+                        money(goal.income().subtract(goal.pendingExpenses()))),
                 goalSummary,
                 nextExpense);
     }
