@@ -18,6 +18,7 @@ import {
   ApiRecurrenceFrequency,
   ApiSeriesScope,
   ApiSubexpense,
+  ApiUsageProfile,
   financeApi,
 } from "@/lib/api";
 import WorkScreen from "@/app/components/WorkScreen";
@@ -31,6 +32,7 @@ type AuthenticatedUser = {
   name: string;
   email: string;
   pictureUrl: string | null;
+  usageProfile: ApiUsageProfile | null;
 };
 
 type GoogleLoginResponse = {
@@ -189,13 +191,14 @@ function Icon({ name }: { name: IconName }) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-function BottomNavigation({ active, onHome, onFinance, onRadar, onGoals, onWork }: {
+function BottomNavigation({ active, onHome, onFinance, onRadar, onGoals, onWork, showWorkFeatures = true }: {
   active: "home" | "finance" | "radar" | "goals" | "work";
   onHome: () => void;
   onFinance: () => void;
   onRadar: () => void;
   onGoals: () => void;
   onWork: () => void;
+  showWorkFeatures?: boolean;
 }) {
   return (
     <nav className="bottom-nav" aria-label="Navegação principal">
@@ -207,14 +210,14 @@ function BottomNavigation({ active, onHome, onFinance, onRadar, onGoals, onWork 
         <Icon name="wallet" />
         <span>Finanças</span>
       </button>
-      <button type="button" className={`nav-item${active === "work" ? " active" : ""}`} onClick={onWork} aria-current={active === "work" ? "page" : undefined}>
+      {showWorkFeatures && <button type="button" className={`nav-item${active === "work" ? " active" : ""}`} onClick={onWork} aria-current={active === "work" ? "page" : undefined}>
         <Icon name="work" />
         <span>Trabalho</span>
-      </button>
-      <button type="button" className={`nav-item${active === "goals" ? " active" : ""}`} onClick={onGoals} aria-current={active === "goals" ? "page" : undefined}>
+      </button>}
+      {showWorkFeatures && <button type="button" className={`nav-item${active === "goals" ? " active" : ""}`} onClick={onGoals} aria-current={active === "goals" ? "page" : undefined}>
         <Icon name="target" />
         <span>Metas</span>
-      </button>
+      </button>}
       <button type="button" className={`nav-item${active === "radar" ? " active" : ""}`} onClick={onRadar} aria-current={active === "radar" ? "page" : undefined}>
         <Icon name="radar" />
         <span>Radar</span>
@@ -265,6 +268,17 @@ function completeCurrencyInput(value: string) {
 
 function parseCurrencyInput(value: string) {
   return Number(value.replace(/\./g, "").replace(",", "."));
+}
+
+function maskDecimalInput(value: string) {
+  const cleaned = value.replace(/[^\d,.]/g, "").replace(".", ",");
+  const [integer = "", ...decimalParts] = cleaned.split(",");
+  const decimals = decimalParts.join("").slice(0, 2);
+  return decimalParts.length ? `${integer},${decimals}` : integer;
+}
+
+function parseDecimalInput(value: string) {
+  return Number(value.replace(",", ".")) || 0;
 }
 
 const recurrenceToApi: Record<RecurrenceFrequency, ApiRecurrenceFrequency> = {
@@ -992,8 +1006,11 @@ function Dashboard({
   onRadar,
   onGoals,
   onWork,
+  showWorkFeatures = true,
   onMonthChange,
   initialPeriod,
+  initialCreateOpen = false,
+  onInitialCreateHandled,
   error = "",
   isLoading = false,
 }: {
@@ -1006,8 +1023,11 @@ function Dashboard({
   onRadar: () => void;
   onGoals: () => void;
   onWork: () => void;
+  showWorkFeatures?: boolean;
   onMonthChange: (year: number, month: number) => void;
   initialPeriod: { year: number; month: number };
+  initialCreateOpen?: boolean;
+  onInitialCreateHandled?: () => void;
   error?: string;
   isLoading?: boolean;
 }) {
@@ -1015,12 +1035,16 @@ function Dashboard({
     return new Date(initialPeriod.year, initialPeriod.month - 1, 1);
   });
   const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(initialCreateOpen);
   const [pickerYear, setPickerYear] = useState(selectedMonth.getFullYear());
   const [pendingDelete, setPendingDelete] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [actionError, setActionError] = useState("");
   const [transactionFilter, setTransactionFilter] = useState<TransactionFilter>("pending");
+
+  useEffect(() => {
+    if (initialCreateOpen) onInitialCreateHandled?.();
+  }, [initialCreateOpen, onInitialCreateHandled]);
   const periodFormatter = new Intl.DateTimeFormat("pt-BR", {
     month: "long",
     year: "numeric",
@@ -1185,7 +1209,7 @@ function Dashboard({
         <div><span>Saldo do mês</span><strong>{monthBalance < 0 ? "- " : ""}{formatCurrency(monthBalance)}</strong></div>
       </section>
 
-      <BottomNavigation active="finance" onHome={onHome} onFinance={() => {}} onRadar={onRadar} onGoals={onGoals} onWork={onWork} />
+      <BottomNavigation active="finance" onHome={onHome} onFinance={() => {}} onRadar={onRadar} onGoals={onGoals} onWork={onWork} showWorkFeatures={showWorkFeatures} />
 
       {isMonthPickerOpen && (
         <div className="month-picker-backdrop" role="presentation" onMouseDown={() => setIsMonthPickerOpen(false)}>
@@ -1663,7 +1687,7 @@ function DetailScreen({
   );
 }
 
-function RadarScreen({ onHome, onFinance, onGoals, onWork }: { onHome: () => void; onFinance: () => void; onGoals: () => void; onWork: () => void }) {
+function RadarScreen({ onHome, onFinance, onGoals, onWork, showWorkFeatures = true }: { onHome: () => void; onFinance: () => void; onGoals: () => void; onWork: () => void; showWorkFeatures?: boolean }) {
   const now = new Date();
   const startYear = now.getFullYear();
   const startMonth = now.getMonth() + 1;
@@ -1723,7 +1747,7 @@ function RadarScreen({ onHome, onFinance, onGoals, onWork }: { onHome: () => voi
           <div>
             <span>PREVISÃO</span>
             <h1>Seu dinheiro nos próximos meses</h1>
-            <p>Antecipe meses apertados e veja quando seu orçamento ganha espaço.</p>
+            <p>Consulte seus saldos futuros e acompanhe a evolução do seu orçamento.</p>
           </div>
           <div className="radar-horizon" aria-label="Horizonte da previsão">
             <button type="button" className={horizon === 6 ? "active" : ""} onClick={() => changeHorizon(6)}>6 meses</button>
@@ -1766,7 +1790,7 @@ function RadarScreen({ onHome, onFinance, onGoals, onWork }: { onHome: () => voi
                       <span className="forecast-month-position">{index === 0 ? "AGORA" : `+${index}`}</span>
                       <span className="forecast-month-name"><strong>{monthName(period.year, period.month)}</strong><small>{balanceStatus(freeBalance)}</small></span>
                       <span className="forecast-free"><small>Saldo previsto</small><strong className={freeBalance < 0 ? "negative" : ""}>{freeBalance < 0 ? "- " : ""}{formatCurrency(freeBalance)}</strong></span>
-                      <span className="forecast-chevron" aria-hidden="true">⌄</span>
+                      <span className="forecast-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m8 10 4 4 4-4" /></svg></span>
                     </button>
                     <div className="forecast-core-values">
                       <div><span>Receitas previstas</span><strong>{formatCurrency(income)}</strong></div>
@@ -1795,7 +1819,7 @@ function RadarScreen({ onHome, onFinance, onGoals, onWork }: { onHome: () => voi
         )}
       </div>
 
-      <BottomNavigation active="radar" onHome={onHome} onFinance={onFinance} onRadar={() => {}} onGoals={onGoals} onWork={onWork} />
+      <BottomNavigation active="radar" onHome={onHome} onFinance={onFinance} onRadar={() => {}} onGoals={onGoals} onWork={onWork} showWorkFeatures={showWorkFeatures} />
     </main>
   );
 }
@@ -2028,7 +2052,7 @@ function CustomGoalsPanel({ referenceDate, schedule, onScheduleUpdated, primaryG
   </div>;
 }
 
-function GoalsScreen({ onHome, onFinance, onRadar, onWork }: { onHome: () => void; onFinance: () => void; onRadar: () => void; onWork: () => void }) {
+function GoalsScreen({ onHome, onFinance, onRadar, onWork, initialMode = "expenses" }: { onHome: () => void; onFinance: () => void; onRadar: () => void; onWork: () => void; initialMode?: "expenses" | "custom" }) {
   const [referenceDate, setReferenceDate] = useState(() => dateToInputValue(new Date()));
   const [goal, setGoal] = useState<ApiGoal | null>(null);
   const [nextGoal, setNextGoal] = useState<ApiGoal | null>(null);
@@ -2038,7 +2062,7 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork }: { onHome: () => voi
   const [isSavingDays, setIsSavingDays] = useState(false);
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
-  const [goalMode, setGoalMode] = useState<"expenses" | "custom">("expenses");
+  const [goalMode, setGoalMode] = useState<"expenses" | "custom">(initialMode);
   const [primaryGoalType, setPrimaryGoalType] = useState<ApiPrimaryGoalType>("EXPENSES");
   const [isSavingPrimary, setIsSavingPrimary] = useState(false);
 
@@ -2072,7 +2096,7 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork }: { onHome: () => voi
         setNextGoal(null);
         setIsNextGoalExpanded(false);
         setIsLoading(false);
-        if (!response.covered) return;
+        if (!response.covered || (Number(response.income) === 0 && Number(response.totalExpenses) === 0)) return;
 
         const nextMonthDate = new Date(response.year, response.month, 1);
         setIsLoadingNextGoal(true);
@@ -2154,6 +2178,7 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork }: { onHome: () => voi
   );
   const monthLabel = goal ? goalMonthLabel(goal) : "mês atual";
   const progress = Math.max(0, Math.min(100, Number(goal?.progressPercentage ?? 0)));
+  const hasGoalFinancialData = Boolean(goal && (Number(goal.income) !== 0 || Number(goal.totalExpenses) !== 0));
 
   function renderGoalDetails(targetGoal: ApiGoal) {
     const calendarCells = goalCalendarCells(targetGoal.year, targetGoal.month, referenceDate);
@@ -2254,10 +2279,18 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork }: { onHome: () => voi
           <p>A meta acompanha suas receitas, despesas pendentes e os dias disponíveis.</p>
         </section>
 
-        <PrimaryGoalControl selected={primaryGoalType === "EXPENSES"} disabled={isSavingPrimary} onSelect={() => void selectPrimaryGoal("EXPENSES")} />
+        {!isLoading && hasGoalFinancialData && <PrimaryGoalControl selected={primaryGoalType === "EXPENSES"} disabled={isSavingPrimary} onSelect={() => void selectPrimaryGoal("EXPENSES")} />}
 
         {isLoading ? (
           <div className="goals-loading" role="status"><div className="loader" aria-hidden="true" /><span>Calculando sua meta</span></div>
+        ) : goal && !hasGoalFinancialData ? (
+          <section className="goal-setup-empty">
+            <span className="goal-setup-empty-icon"><Icon name="wallet" /></span>
+            <span>PRIMEIRO PASSO</span>
+            <h2>Cadastre suas contas do mês</h2>
+            <p>Quando você adicionar suas despesas e receitas, o AMCash calcula automaticamente quanto falta e distribui o valor pelos dias escolhidos.</p>
+            <button type="button" onClick={onFinance}><Icon name="plus" /> Ir para Finanças</button>
+          </section>
         ) : goal && (
           <>
             <section className={`goal-main-card${goal.covered ? " covered" : ""}`}>
@@ -2327,10 +2360,64 @@ const homeCostLabels: Record<ApiWorkCostCategory, string> = {
   TOLL: "Pedágio",
   WASH: "Lavagem",
   MARKET: "Mercado",
+  FOOD: "Alimentação",
   OTHER: "Outro",
 };
 
-function AccountMenu({ onLogout }: { onLogout: () => void }) {
+type HomeCostDraft = {
+  key: string;
+  id?: string;
+  category: ApiWorkCostCategory;
+  amount: string;
+};
+
+const usageProfileLabels: Record<ApiUsageProfile, string> = {
+  PERSONAL: "Uso pessoal",
+  RIDE_DRIVER: "Motorista de aplicativo",
+  DELIVERY: "Entregador",
+};
+
+function UsageProfileScreen({ onSelect, onCancel }: { onSelect: (profile: ApiUsageProfile) => Promise<void>; onCancel?: () => void }) {
+  const [savingProfile, setSavingProfile] = useState<ApiUsageProfile | null>(null);
+  const [profileError, setProfileError] = useState("");
+  const options: { profile: ApiUsageProfile; title: string; description: string; icon: IconName }[] = [
+    { profile: "PERSONAL", title: "Uso pessoal", description: "Acompanhar receitas, despesas, saldo e próximos pagamentos.", icon: "wallet" },
+    { profile: "RIDE_DRIVER", title: "Motorista de aplicativo", description: "Controlar faturamento, custos, quilômetros e metas diárias.", icon: "work" },
+    { profile: "DELIVERY", title: "Entregador", description: "Usar o controle de trabalho e metas com a configuração atual de motoristas.", icon: "radar" },
+  ];
+
+  async function choose(profile: ApiUsageProfile) {
+    if (savingProfile) return;
+    setSavingProfile(profile);
+    setProfileError("");
+    try {
+      await onSelect(profile);
+    } catch (requestError) {
+      setProfileError(messageFromError(requestError));
+      setSavingProfile(null);
+    }
+  }
+
+  return <main className="usage-profile-screen">
+    <header className="dashboard-header"><div className="header-brand" aria-label="AMCash"><Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority /><span><b>AM</b>Cash</span></div>{onCancel && <button type="button" className="usage-profile-close" onClick={onCancel} aria-label="Fechar">×</button>}</header>
+    <section className="usage-profile-content">
+      <span>PERSONALIZE SUA EXPERIÊNCIA</span>
+      <h1>Como você usa o AMCash?</h1>
+      <p>Isso ajusta sua Home e a navegação. Você poderá alterar essa escolha depois sem perder nenhum dado.</p>
+      <div className="usage-profile-options">
+        {options.map((option) => <button type="button" key={option.profile} disabled={savingProfile !== null} onClick={() => void choose(option.profile)}>
+          <span className="usage-profile-icon"><Icon name={option.icon} /></span>
+          <span><strong>{option.title}</strong><small>{option.description}</small></span>
+          <Icon name="forward" />
+        </button>)}
+      </div>
+      {profileError && <p className="usage-profile-error" role="alert">{profileError}</p>}
+      {savingProfile && <small className="usage-profile-saving">Salvando {usageProfileLabels[savingProfile]}...</small>}
+    </section>
+  </main>;
+}
+
+function AccountMenu({ onLogout, usageProfile, onChangeProfile }: { onLogout: () => void; usageProfile: ApiUsageProfile; onChangeProfile: () => void }) {
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
 
@@ -2353,30 +2440,37 @@ function AccountMenu({ onLogout }: { onLogout: () => void }) {
       <button type="button" className="account-menu-dismiss" aria-label="Fechar menu da conta" onClick={() => setOpen(false)} />
       <section className="account-menu-popover" role="menu">
         <div className="account-menu-user"><span>{initial}</span><div><strong>{user?.name || "Sua conta"}</strong>{user?.email && <small>{user.email}</small>}</div></div>
+        <button type="button" className="account-menu-profile" role="menuitem" onClick={() => { setOpen(false); onChangeProfile(); }}><Icon name="target" /><span><strong>Modo de uso</strong><small>{usageProfileLabels[usageProfile]}</small></span></button>
         <button type="button" className="account-menu-logout" role="menuitem" onClick={onLogout}><Icon name="logout" /><span><strong>Sair da conta</strong><small>Encerrar sessão</small></span></button>
       </section>
     </>}
   </div>;
 }
 
-function HomeDashboard({ onFinance, onRadar, onGoals, onWork, onRegisterWork, onLogout }: {
+function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, onCreateCustomGoal, onLogout, usageProfile, onChangeProfile }: {
   onFinance: () => void;
+  onCreateExpense: () => void;
   onRadar: () => void;
   onGoals: () => void;
   onWork: () => void;
-  onRegisterWork: () => void;
+  onCreateCustomGoal: () => void;
   onLogout: () => void;
+  usageProfile: ApiUsageProfile;
+  onChangeProfile: () => void;
 }) {
   const [summary, setSummary] = useState<ApiHome | null>(null);
   const [workOverview, setWorkOverview] = useState<ApiWorkOverview | null>(null);
   const [uber, setUber] = useState("");
   const [ninetyNine, setNinetyNine] = useState("");
-  const [costCategory, setCostCategory] = useState<ApiWorkCostCategory>("FUEL");
-  const [costCategoryOpen, setCostCategoryOpen] = useState(false);
-  const [cost, setCost] = useState("");
+  const [kilometers, setKilometers] = useState("");
+  const [homeCosts, setHomeCosts] = useState<HomeCostDraft[]>([
+    { key: "new-0", category: "FUEL", amount: "" },
+  ]);
+  const [openCostKey, setOpenCostKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const nextCostKey = useRef(1);
   const today = dateToInputValue(new Date());
   const homeCostPrefix = "HOME: ";
   const legacyHomeCostDescription = "Custo do dia — Home";
@@ -2387,22 +2481,29 @@ function HomeDashboard({ onFinance, onRadar, onGoals, onWork, onRegisterWork, on
     try {
       const [home, work] = await Promise.all([
         financeApi.home(today),
-        financeApi.workOverview(today, "DAY"),
+        usageProfile === "PERSONAL" ? Promise.resolve(null) : financeApi.workOverview(today, "DAY"),
       ]);
-      const day = work.days.find((item) => item.date === today);
-      const homeCost = work.costs.find((item) => item.description === legacyHomeCostDescription || item.description?.startsWith(homeCostPrefix));
       setSummary(home);
       setWorkOverview(work);
+      if (!work) return;
+      const day = work.days.find((item) => item.date === today);
+      const savedHomeCosts = work.costs.filter((item) => item.description === legacyHomeCostDescription || item.description?.startsWith(homeCostPrefix));
       setUber(maskCurrencyInput(String(Math.round(Number(day?.earnings.find((item) => item.source.toLowerCase() === "uber")?.amount ?? 0) * 100))));
       setNinetyNine(maskCurrencyInput(String(Math.round(Number(day?.earnings.find((item) => item.source === "99")?.amount ?? 0) * 100))));
-      setCostCategory(homeCost?.category ?? "FUEL");
-      setCost(maskCurrencyInput(String(Math.round(Number(homeCost?.amount ?? 0) * 100))));
+      setKilometers(Number(day?.kilometers ?? 0) > 0 ? String(Number(day?.kilometers)).replace(".", ",") : "");
+      setHomeCosts(savedHomeCosts.length ? savedHomeCosts.map((item) => ({
+        key: item.id,
+        id: item.id,
+        category: item.category,
+        amount: maskCurrencyInput(String(Math.round(Number(item.amount) * 100))),
+      })) : [{ key: `new-${nextCostKey.current++}`, category: "FUEL", amount: "" }]);
+      setOpenCostKey(null);
     } catch (requestError) {
       setError(messageFromError(requestError));
     } finally {
       setLoading(false);
     }
-  }, [today]);
+  }, [today, usageProfile]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -2413,18 +2514,39 @@ function HomeDashboard({ onFinance, onRadar, onGoals, onWork, onRegisterWork, on
     .format(new Date(`${today}T12:00:00`));
   const uberValue = parseCurrencyInput(uber) || 0;
   const ninetyNineValue = parseCurrencyInput(ninetyNine) || 0;
-  const costValue = parseCurrencyInput(cost) || 0;
+  const kilometersValue = parseDecimalInput(kilometers);
+  const costValue = homeCosts.reduce((total, item) => total + (parseCurrencyInput(item.amount) || 0), 0);
   const netValue = uberValue + ninetyNineValue - costValue;
   const savedDay = workOverview?.days.find((item) => item.date === today);
   const savedHomeEarnings = savedDay?.earnings
     .filter((item) => item.source.toLowerCase() === "uber" || item.source === "99")
     .reduce((total, item) => total + Number(item.amount), 0) ?? 0;
-  const savedHomeCost = workOverview?.costs.find((item) => item.description === legacyHomeCostDescription || item.description?.startsWith(homeCostPrefix));
-  const resultOutsideHomeFields = Number(workOverview?.summary.netEarnings ?? 0) - savedHomeEarnings + Number(savedHomeCost?.amount ?? 0);
+  const earningsOutsideHomeFields = Math.max(0, Number(savedDay?.grossEarnings ?? 0) - savedHomeEarnings);
+  const projectedGrossEarnings = earningsOutsideHomeFields + uberValue + ninetyNineValue;
+  const earningsPerKilometer = kilometersValue > 0 ? projectedGrossEarnings / kilometersValue : 0;
+  const savedHomeCosts = workOverview?.costs.filter((item) => item.description === legacyHomeCostDescription || item.description?.startsWith(homeCostPrefix)) ?? [];
+  const savedHomeCostTotal = savedHomeCosts.reduce((total, item) => total + Number(item.amount), 0);
+  const resultOutsideHomeFields = Number(workOverview?.summary.netEarnings ?? 0) - savedHomeEarnings + savedHomeCostTotal;
   const projectedTodayNet = resultOutsideHomeFields + netValue;
   const dailyRemaining = Math.max(0, Number(summary?.goal.dailyTarget ?? 0)
     - (summary?.goal.type === "CUSTOM" ? projectedTodayNet : netValue));
   const showEmptyState = summary?.goal.type === "EXPENSES" && summary.hasFinancialEntries === false;
+
+  function updateHomeCost(key: string, changes: Partial<Pick<HomeCostDraft, "category" | "amount">>) {
+    setHomeCosts((current) => current.map((item) => item.key === key ? { ...item, ...changes } : item));
+  }
+
+  function addHomeCost() {
+    setHomeCosts((current) => [...current, { key: `new-${nextCostKey.current++}`, category: "FUEL", amount: "" }]);
+  }
+
+  function removeHomeCost(key: string) {
+    setOpenCostKey((current) => current === key ? null : current);
+    setHomeCosts((current) => {
+      const remaining = current.filter((item) => item.key !== key);
+      return remaining.length ? remaining : [{ key: `new-${nextCostKey.current++}`, category: "FUEL", amount: "" }];
+    });
+  }
 
   async function saveDailyResult() {
     if (!summary || saving) return;
@@ -2437,7 +2559,7 @@ function HomeDashboard({ onFinance, onRadar, onGoals, onWork, onRegisterWork, on
         return source !== "uber" && item.source !== "99";
       }).map((item) => ({ source: item.source, amount: Number(item.amount) })) ?? [];
       await financeApi.saveWorkDay(today, {
-        kilometers: Number(day?.kilometers ?? 0),
+        kilometers: kilometersValue,
         earnings: [
           { source: "Uber", amount: uberValue },
           { source: "99", amount: ninetyNineValue },
@@ -2445,14 +2567,17 @@ function HomeDashboard({ onFinance, onRadar, onGoals, onWork, onRegisterWork, on
         ],
       });
 
-      const existingCost = workOverview?.costs.find((item) => item.description === legacyHomeCostDescription || item.description?.startsWith(homeCostPrefix));
-      if (costValue > 0) {
-        const payload = { date: today, category: costCategory, description: `${homeCostPrefix}${homeCostLabels[costCategory]}`, amount: costValue };
-        if (existingCost) await financeApi.updateWorkCost(existingCost.id, payload);
-        else await financeApi.createWorkCost(payload);
-      } else if (existingCost) {
-        await financeApi.deleteWorkCost(existingCost.id);
-      }
+      const validCosts = homeCosts
+        .map((item) => ({ ...item, parsedAmount: parseCurrencyInput(item.amount) || 0 }))
+        .filter((item) => item.parsedAmount > 0);
+      const retainedCostIds = new Set(validCosts.flatMap((item) => item.id ? [item.id] : []));
+      await Promise.all([
+        ...validCosts.map((item) => {
+          const payload = { date: today, category: item.category, description: `${homeCostPrefix}${homeCostLabels[item.category]}`, amount: item.parsedAmount };
+          return item.id ? financeApi.updateWorkCost(item.id, payload) : financeApi.createWorkCost(payload);
+        }),
+        ...savedHomeCosts.filter((item) => !retainedCostIds.has(item.id)).map((item) => financeApi.deleteWorkCost(item.id)),
+      ]);
       await load();
     } catch (requestError) {
       setError(messageFromError(requestError));
@@ -2464,7 +2589,7 @@ function HomeDashboard({ onFinance, onRadar, onGoals, onWork, onRegisterWork, on
   return <main className="daily-home-screen">
     <header className="dashboard-header daily-home-header">
       <div className="header-brand" aria-label="AMCash"><Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority /><span><b>AM</b>Cash</span></div>
-      <div className="daily-home-account"><span className="daily-home-label">RESUMO</span><AccountMenu onLogout={onLogout} /></div>
+      <div className="daily-home-account"><span className="daily-home-label">RESUMO</span><AccountMenu onLogout={onLogout} usageProfile={usageProfile} onChangeProfile={onChangeProfile} /></div>
     </header>
     <div className="daily-home-content">
       <section className="daily-home-heading"><span>{showEmptyState ? "BEM-VINDO AO AMCASH" : "VISÃO GERAL"}</span><h1>{showEmptyState ? "Seu controle começa aqui" : "Olá, este é o seu resumo"}</h1><p>{dateLabel}</p></section>
@@ -2473,13 +2598,14 @@ function HomeDashboard({ onFinance, onRadar, onGoals, onWork, onRegisterWork, on
           {showEmptyState ? <section className="home-empty-state" aria-label="Começar a usar o AMCash">
             <div className="home-empty-icon"><Icon name="target" /></div>
             <span>PRIMEIROS PASSOS</span>
-            <h2>Comece organizando seu mês</h2>
-            <p>Cadastre suas despesas e receitas para o AMCash calcular suas metas e previsões.</p>
+            <h2>Comece pelas contas do mês</h2>
+            <p>{usageProfile === "PERSONAL" ? "Cadastre suas receitas e despesas para acompanhar o saldo do mês e seus próximos pagamentos." : "Cadastre o que precisa pagar para o AMCash calcular sua meta diária. Se preferir outro objetivo, crie uma meta personalizada."}</p>
             <div className="home-empty-actions">
-              <button type="button" className="primary" onClick={onFinance}><Icon name="plus" /><span>Cadastrar primeira despesa</span></button>
-              <button type="button" onClick={onRegisterWork}><Icon name="work" /><span>Registrar trabalho</span></button>
+              <button type="button" className="primary" onClick={onCreateExpense}><Icon name="plus" /><span>Cadastrar primeira despesa</span></button>
+              {usageProfile !== "PERSONAL" && <button type="button" onClick={onCreateCustomGoal}><Icon name="target" /><span>Criar meta personalizada</span></button>}
             </div>
           </section> : <>
+          {usageProfile !== "PERSONAL" && <>
           <section className={`daily-goal-card${summary.goal.covered ? " covered" : ""}`}>
             <span>{summary.goal.type === "CUSTOM" ? `META PERSONALIZADA · ${summary.goal.name}` : summary.goal.covered ? "MÊS COBERTO" : "META DO DIA"}</span>
             {summary.goal.covered ? <><strong>Você conseguiu!</strong><p>{summary.goal.type === "CUSTOM" ? "Seu resultado líquido já atingiu esta meta." : "Suas receitas já cobrem as despesas pendentes deste mês."}</p></> : summary.goal.todaySelected ? <>
@@ -2489,25 +2615,39 @@ function HomeDashboard({ onFinance, onRadar, onGoals, onWork, onRegisterWork, on
           </section>
 
           <section className="home-quick-entry" aria-label="Resultado de hoje">
-            <div className="home-quick-entry-heading"><div><span>RESULTADO DE HOJE</span><h2>Informe quanto você faturou</h2></div><small>O custo aumenta o valor que falta.</small></div>
+            <div className="home-quick-entry-heading"><div><span>RESULTADO DE HOJE</span><h2>Informe quanto você faturou</h2></div><small>Os custos aumentam o valor que falta.</small></div>
             <div className="home-quick-entry-fields">
               <label><span>Uber</span><div><b>R$</b><input value={uber} onChange={(event) => setUber(maskCurrencyInput(event.target.value))} placeholder="0,00" inputMode="numeric" /></div></label>
               <label><span>99</span><div><b>R$</b><input value={ninetyNine} onChange={(event) => setNinetyNine(maskCurrencyInput(event.target.value))} placeholder="0,00" inputMode="numeric" /></div></label>
-              <div className="home-cost-field"><span>Categoria do custo</span><div className="home-cost-select">
-                <button type="button" className="home-cost-select-trigger" aria-haspopup="listbox" aria-expanded={costCategoryOpen} onClick={() => setCostCategoryOpen((open) => !open)}>
-                  <span>{homeCostLabels[costCategory]}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
-                </button>
-                {costCategoryOpen && <><button type="button" className="home-cost-select-dismiss" aria-label="Fechar categorias" onClick={() => setCostCategoryOpen(false)} /><div className="home-cost-select-menu" role="listbox" aria-label="Categoria do custo">
-                  {(Object.keys(homeCostLabels) as ApiWorkCostCategory[]).map((category) => <button type="button" role="option" aria-selected={category === costCategory} className={category === costCategory ? "selected" : ""} key={category} onClick={() => { setCostCategory(category); setCostCategoryOpen(false); }}><span>{homeCostLabels[category]}</span>{category === costCategory && <Icon name="check" />}</button>)}
-                </div></>}
-              </div></div>
-              <label><span>Custo</span><div><b>R$</b><input value={cost} onChange={(event) => setCost(maskCurrencyInput(event.target.value))} placeholder="0,00" inputMode="numeric" /></div></label>
+            </div>
+            <div className="home-distance-row">
+              <label><span>Quilômetros rodados</span><div><input value={kilometers} onChange={(event) => setKilometers(maskDecimalInput(event.target.value))} placeholder="0" inputMode="decimal" /><b>km</b></div></label>
+              <div className="home-per-kilometer"><span>Faturamento por km</span><strong>{kilometersValue > 0 ? formatCurrency(earningsPerKilometer) : "—"}</strong><small>{kilometersValue > 0 ? "atualizado agora" : "informe os quilômetros"}</small></div>
+            </div>
+            <div className="home-costs-block">
+              <div className="home-costs-heading"><div><span>CUSTOS DE HOJE</span><small>Adicione combustível, alimentação e outros gastos.</small></div>
+                <button type="button" onClick={addHomeCost}><Icon name="plus" />Adicionar custo</button></div>
+              <div className="home-costs-list">
+                {homeCosts.map((item, index) => <div className="home-cost-row" key={item.key}>
+                  <div className="home-cost-field"><span>Categoria {index + 1}</span><div className="home-cost-select">
+                    <button type="button" className="home-cost-select-trigger" aria-haspopup="listbox" aria-expanded={openCostKey === item.key} onClick={() => setOpenCostKey((current) => current === item.key ? null : item.key)}>
+                      <span>{homeCostLabels[item.category]}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
+                    </button>
+                    {openCostKey === item.key && <><button type="button" className="home-cost-select-dismiss" aria-label="Fechar categorias" onClick={() => setOpenCostKey(null)} /><div className="home-cost-select-menu" role="listbox" aria-label={`Categoria do custo ${index + 1}`}>
+                      {(Object.keys(homeCostLabels) as ApiWorkCostCategory[]).map((category) => <button type="button" role="option" aria-selected={category === item.category} className={category === item.category ? "selected" : ""} key={category} onClick={() => { updateHomeCost(item.key, { category }); setOpenCostKey(null); }}><span>{homeCostLabels[category]}</span>{category === item.category && <Icon name="check" />}</button>)}
+                    </div></>}
+                  </div></div>
+                  <label><span>Valor</span><div><b>R$</b><input value={item.amount} onChange={(event) => updateHomeCost(item.key, { amount: maskCurrencyInput(event.target.value) })} placeholder="0,00" inputMode="numeric" /></div></label>
+                  <button type="button" className="home-cost-remove" aria-label={`Remover custo ${index + 1}`} onClick={() => removeHomeCost(item.key)}><Icon name="trash" /></button>
+                </div>)}
+              </div>
             </div>
             <div className="home-quick-entry-result"><span>Resultado líquido informado</span><strong className={netValue < 0 ? "negative" : ""}>{netValue < 0 ? "- " : ""}{formatCurrency(netValue)}</strong></div>
             <button type="button" disabled={saving} onClick={() => void saveDailyResult()}>{saving ? "Salvando..." : "Salvar resultado de hoje"}</button>
           </section>
+          </>}
 
-          {summary.goal.type === "CUSTOM" && summary.goal.period !== "DAILY" ? <section className="home-summary-card home-goal-period-card">
+          {usageProfile !== "PERSONAL" && summary.goal.type === "CUSTOM" && summary.goal.period !== "DAILY" ? <section className="home-summary-card home-goal-period-card">
             <div><span>{summary.goal.period === "WEEKLY" ? "META SEMANAL" : "META MENSAL"}</span><h2>Quanto ainda falta no período</h2></div>
             <strong>{formatCurrency(summary.goal.periodRemaining)}</strong>
           </section> : <section className="home-summary-card home-balance-card">
@@ -2523,7 +2663,7 @@ function HomeDashboard({ onFinance, onRadar, onGoals, onWork, onRegisterWork, on
           </>}
         </>}
     </div>
-    <BottomNavigation active="home" onHome={() => {}} onFinance={onFinance} onRadar={onRadar} onGoals={onGoals} onWork={onWork} />
+    <BottomNavigation active="home" onHome={() => {}} onFinance={onFinance} onRadar={onRadar} onGoals={onGoals} onWork={onWork} showWorkFeatures={usageProfile !== "PERSONAL"} />
   </main>;
 }
 
@@ -2531,7 +2671,11 @@ export default function Home() {
   const [screen, setScreen] = useState<"checking" | "auth" | "loading" | "refreshing" | "app">("checking");
   const [isLaunchSplashVisible, setIsLaunchSplashVisible] = useState(true);
   const [activeTab, setActiveTab] = useState<"home" | "finance" | "radar" | "goals" | "work">("home");
+  const [usageProfile, setUsageProfile] = useState<ApiUsageProfile | null | undefined>(undefined);
+  const [profilePickerOpen, setProfilePickerOpen] = useState(false);
   const [workInitialAction, setWorkInitialAction] = useState<"work" | "cost" | null>(null);
+  const [goalInitialMode, setGoalInitialMode] = useState<"expenses" | "custom">("expenses");
+  const [financeCreateRequested, setFinanceCreateRequested] = useState(false);
   const [items, setItems] = useState<Transaction[]>([]);
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -2552,6 +2696,10 @@ export default function Home() {
     setError("");
     setActiveTab("home");
     setWorkInitialAction(null);
+    setGoalInitialMode("expenses");
+    setUsageProfile(undefined);
+    setProfilePickerOpen(false);
+    setFinanceCreateRequested(false);
     lastLoadedPeriod.current = "";
     requestedPeriod.current = "";
     setScreen("auth");
@@ -2589,10 +2737,32 @@ export default function Home() {
 
   useEffect(() => {
     const savedToken = window.localStorage.getItem("amcash.accessToken");
+    let active = true;
     const sessionCheck = window.setTimeout(() => {
-      setScreen(savedToken ? "refreshing" : "auth");
+      if (!savedToken) {
+        setScreen("auth");
+        return;
+      }
+      let savedUser: AuthenticatedUser | null = null;
+      try {
+        const stored = window.localStorage.getItem("amcash.user");
+        savedUser = stored ? JSON.parse(stored) as AuthenticatedUser : null;
+      } catch {
+        savedUser = null;
+      }
+      setUsageProfile(savedUser?.usageProfile ?? null);
+      financeApi.userProfile().then((profile) => {
+        if (!active) return;
+        const refreshedUser: AuthenticatedUser = profile;
+        window.localStorage.setItem("amcash.user", JSON.stringify(refreshedUser));
+        setUsageProfile(profile.usageProfile);
+        setScreen("refreshing");
+      }).catch((requestError) => {
+        if (!active || requestError instanceof ApiError && requestError.status === 401) return;
+        setScreen("refreshing");
+      });
     }, savedToken ? 0 : 1000);
-    return () => window.clearTimeout(sessionCheck);
+    return () => { active = false; window.clearTimeout(sessionCheck); };
   }, []);
 
   useEffect(() => {
@@ -2677,11 +2847,25 @@ export default function Home() {
     await loadMonth(period.year, period.month);
   }
 
+  async function chooseUsageProfile(profile: ApiUsageProfile) {
+    const updatedUser = await financeApi.updateUsageProfile(profile);
+    window.localStorage.setItem("amcash.user", JSON.stringify(updatedUser));
+    setUsageProfile(updatedUser.usageProfile);
+    setProfilePickerOpen(false);
+    setActiveTab("home");
+    setWorkInitialAction(null);
+    setGoalInitialMode("expenses");
+  }
+
   if (isLaunchSplashVisible || screen === "checking" || screen === "refreshing" || screen === "loading") return <LoadingScreen />;
-  if (screen === "auth") return <AuthScreen onAuthenticated={() => setScreen("loading")} />;
+  if (screen === "auth") return <AuthScreen onAuthenticated={(user) => { setUsageProfile(user.usageProfile); setScreen("loading"); }} />;
+  if (usageProfile === undefined) return <LoadingScreen />;
+  if (usageProfile === null || profilePickerOpen) return <UsageProfileScreen onSelect={chooseUsageProfile} onCancel={usageProfile ? () => setProfilePickerOpen(false) : undefined} />;
+  const showWorkFeatures = usageProfile !== "PERSONAL";
   const openWork = (action: "work" | "cost" | null = null) => { setWorkInitialAction(action); setActiveTab("work"); };
-  if (activeTab === "radar") return <RadarScreen onHome={() => setActiveTab("home")} onFinance={() => setActiveTab("finance")} onGoals={() => setActiveTab("goals")} onWork={() => openWork()} />;
-  if (activeTab === "goals") return <GoalsScreen onHome={() => setActiveTab("home")} onFinance={() => setActiveTab("finance")} onRadar={() => setActiveTab("radar")} onWork={() => openWork()} />;
+  const openGoals = (mode: "expenses" | "custom" = "expenses") => { setGoalInitialMode(mode); setActiveTab("goals"); };
+  if (activeTab === "radar") return <RadarScreen onHome={() => setActiveTab("home")} onFinance={() => setActiveTab("finance")} onGoals={() => setActiveTab("goals")} onWork={() => openWork()} showWorkFeatures={showWorkFeatures} />;
+  if (activeTab === "goals") return <GoalsScreen initialMode={goalInitialMode} onHome={() => setActiveTab("home")} onFinance={() => setActiveTab("finance")} onRadar={() => setActiveTab("radar")} onWork={() => openWork()} />;
   if (activeTab === "work") {
     return (
       <WorkScreen initialAction={workInitialAction} navigation={(
@@ -2700,6 +2884,6 @@ export default function Home() {
     );
   }
 
-  if (activeTab === "finance") return <Dashboard items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onHome={() => setActiveTab("home")} onRadar={() => setActiveTab("radar")} onGoals={() => setActiveTab("goals")} onWork={() => openWork()} onMonthChange={changeMonth} initialPeriod={period} error={error} isLoading={isLoading} />;
-  return <HomeDashboard onFinance={() => setActiveTab("finance")} onRadar={() => setActiveTab("radar")} onGoals={() => setActiveTab("goals")} onWork={() => openWork()} onRegisterWork={() => openWork("work")} onLogout={logout} />;
+  if (activeTab === "finance") return <Dashboard items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onHome={() => setActiveTab("home")} onRadar={() => setActiveTab("radar")} onGoals={() => setActiveTab("goals")} onWork={() => openWork()} showWorkFeatures={showWorkFeatures} onMonthChange={changeMonth} initialPeriod={period} initialCreateOpen={financeCreateRequested} onInitialCreateHandled={() => setFinanceCreateRequested(false)} error={error} isLoading={isLoading} />;
+  return <HomeDashboard onFinance={() => setActiveTab("finance")} onCreateExpense={() => { setFinanceCreateRequested(true); setActiveTab("finance"); }} onRadar={() => setActiveTab("radar")} onGoals={() => openGoals()} onWork={() => openWork()} onCreateCustomGoal={() => openGoals("custom")} onLogout={logout} usageProfile={usageProfile} onChangeProfile={() => setProfilePickerOpen(true)} />;
 }

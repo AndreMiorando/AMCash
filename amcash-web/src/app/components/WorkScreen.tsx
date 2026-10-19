@@ -14,7 +14,7 @@ const legacyHomeCostDescription = "Custo do dia — Home";
 const periodLabels: Record<ApiWorkPeriod, string> = { DAY: "Dia", WEEK: "Semana", MONTH: "Mês" };
 const costLabels: Record<ApiWorkCostCategory, string> = {
   FUEL: "Combustível", MAINTENANCE: "Manutenção", PARKING: "Estacionamento",
-  TOLL: "Pedágio", WASH: "Lavagem", MARKET: "Mercado", OTHER: "Outro",
+  TOLL: "Pedágio", WASH: "Lavagem", MARKET: "Mercado", FOOD: "Alimentação", OTHER: "Outro",
 };
 
 function isoDate(date: Date) {

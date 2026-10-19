@@ -5,6 +5,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 
 import java.time.OffsetDateTime;
@@ -42,6 +44,10 @@ public class User {
 
     @Column(name = "goal_weekdays_mask", nullable = false)
     private int goalWeekdaysMask = 31;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "usage_profile", length = 32)
+    private UsageProfile usageProfile;
 
     protected User() {
     }
@@ -107,6 +113,15 @@ public class User {
 
     public void updateGoalWeekdaysMask(int goalWeekdaysMask) {
         this.goalWeekdaysMask = goalWeekdaysMask;
+        this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
+    }
+
+    public UsageProfile getUsageProfile() {
+        return usageProfile;
+    }
+
+    public void updateUsageProfile(UsageProfile usageProfile) {
+        this.usageProfile = usageProfile;
         this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 }
