@@ -1,6 +1,14 @@
 export type ApiEntryType = "EXPENSE" | "INCOME";
 export type ApiRecurrenceFrequency = "NONE" | "DAILY" | "WEEKLY" | "MONTHLY";
 export type ApiSeriesScope = "CURRENT" | "CURRENT_AND_FUTURE" | "ALL";
+export type ApiUsageProfile = "PERSONAL" | "RIDE_DRIVER" | "DELIVERY";
+export type ApiUserProfile = {
+  id: string;
+  name: string;
+  email: string;
+  pictureUrl: string | null;
+  usageProfile: ApiUsageProfile | null;
+};
 export type ApiEntryCategory =
   | "FOOD"
   | "HOUSING"
@@ -214,7 +222,7 @@ export type ApiWorkDay = {
   earnings: ApiWorkEarning[];
 };
 
-export type ApiWorkCostCategory = "FUEL" | "MAINTENANCE" | "PARKING" | "TOLL" | "WASH" | "MARKET" | "OTHER";
+export type ApiWorkCostCategory = "FUEL" | "MAINTENANCE" | "PARKING" | "TOLL" | "WASH" | "MARKET" | "FOOD" | "OTHER";
 
 export type ApiWorkCost = {
   id: string;
@@ -294,6 +302,17 @@ async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const financeApi = {
+  userProfile() {
+    return apiRequest<ApiUserProfile>("/api/v1/users/me");
+  },
+
+  updateUsageProfile(usageProfile: ApiUsageProfile) {
+    return apiRequest<ApiUserProfile>("/api/v1/users/me/usage-profile", {
+      method: "PUT",
+      body: JSON.stringify({ usageProfile }),
+    });
+  },
+
   home(date: string) {
     return apiRequest<ApiHome>(`/api/v1/home?date=${date}`);
   },

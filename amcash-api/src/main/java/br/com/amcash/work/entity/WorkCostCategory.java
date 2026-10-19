@@ -7,5 +7,6 @@ public enum WorkCostCategory {
     TOLL,
     WASH,
     MARKET,
+    FOOD,
     OTHER
 }
