@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Script from "next/script";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
   ApiEntry,
   ApiEntryCategory,
@@ -2366,19 +2366,30 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, initialMode = "expens
 const homeCostLabels: Record<ApiWorkCostCategory, string> = {
   FUEL: "Combustível",
   MAINTENANCE: "Manutenção",
-  PARKING: "Estacionamento",
   TOLL: "Pedágio",
   WASH: "Lavagem",
-  MARKET: "Mercado",
   FOOD: "Alimentação",
   OTHER: "Outro",
 };
+
+function HomeCostCategoryIcon({ category }: { category: ApiWorkCostCategory }) {
+  const paths: Record<ApiWorkCostCategory, ReactNode> = {
+    FUEL: <><path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16" /><path d="M3 21h13M7 7h5v4H7zM15 8h2l2 2v7a1.5 1.5 0 0 0 3 0v-5l-2-2" /></>,
+    MAINTENANCE: <><path d="M14.5 6.5a4 4 0 0 0-5-5L7 4l3 3 2.5-2.5a4 4 0 0 0 2 5L6 18l-1 3 3-1 8.5-8.5a4 4 0 0 0 5-5L19 9l-3-3 2.5-2.5" /></>,
+    TOLL: <><circle cx="7" cy="16" r="3" /><circle cx="12" cy="11" r="3" /><circle cx="17" cy="6" r="3" /></>,
+    WASH: <><path d="M12 2C9 7 6 10 6 14a6 6 0 0 0 12 0c0-4-3-7-6-12Z" /><path d="M9.5 16.5c.8 1.2 2 1.7 3.5 1.4" /></>,
+    FOOD: <><path d="M6 3v7M9 3v7M6 7h3M7.5 10v11" /><path d="M15.5 3v18M15.5 3c3 2 3.2 7 0 9" /></>,
+    OTHER: <><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none" /></>,
+  };
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[category]}</svg>;
+}
 
 type HomeCostDraft = {
   key: string;
   id?: string;
   category: ApiWorkCostCategory;
   amount: string;
+  description: string;
 };
 
 const usageProfileLabels: Record<ApiUsageProfile, string> = {
@@ -2499,12 +2510,16 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
       setUber(maskCurrencyInput(String(Math.round(Number(day?.earnings.find((item) => item.source.toLowerCase() === "uber")?.amount ?? 0) * 100))));
       setNinetyNine(maskCurrencyInput(String(Math.round(Number(day?.earnings.find((item) => item.source === "99")?.amount ?? 0) * 100))));
       setKilometers(Number(day?.kilometers ?? 0) > 0 ? String(Number(day?.kilometers)).replace(".", ",") : "");
-      setHomeCosts(savedHomeCosts.length ? savedHomeCosts.map((item) => ({
-        key: item.id,
-        id: item.id,
-        category: item.category,
-        amount: maskCurrencyInput(String(Math.round(Number(item.amount) * 100))),
-      })) : []);
+      setHomeCosts(savedHomeCosts.length ? savedHomeCosts.map((item) => {
+        const storedDescription = item.description?.startsWith(homeCostPrefix) ? item.description.slice(homeCostPrefix.length) : "";
+        return {
+          key: item.id,
+          id: item.id,
+          category: item.category,
+          amount: maskCurrencyInput(String(Math.round(Number(item.amount) * 100))),
+          description: storedDescription === homeCostLabels[item.category] ? "" : storedDescription,
+        };
+      }) : []);
       setOpenCostKey(null);
     } catch (requestError) {
       setError(messageFromError(requestError));
@@ -2547,12 +2562,14 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
     : 0;
   const showEmptyState = summary?.goal.type === "EXPENSES" && summary.hasFinancialEntries === false;
 
-  function updateHomeCost(key: string, changes: Partial<Pick<HomeCostDraft, "category" | "amount">>) {
+  function updateHomeCost(key: string, changes: Partial<Pick<HomeCostDraft, "category" | "amount" | "description">>) {
     setHomeCosts((current) => current.map((item) => item.key === key ? { ...item, ...changes } : item));
   }
 
   function addHomeCost() {
-    setHomeCosts((current) => [...current, { key: `new-${nextCostKey.current++}`, category: "FUEL", amount: "" }]);
+    const key = `new-${nextCostKey.current++}`;
+    setHomeCosts((current) => [...current, { key, category: "FUEL", amount: "", description: "" }]);
+    setOpenCostKey(key);
   }
 
   function removeHomeCost(key: string) {
@@ -2585,7 +2602,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
       const retainedCostIds = new Set(validCosts.flatMap((item) => item.id ? [item.id] : []));
       await Promise.all([
         ...validCosts.map((item) => {
-          const payload = { date: today, category: item.category, description: `${homeCostPrefix}${homeCostLabels[item.category]}`, amount: item.parsedAmount };
+          const payload = { date: today, category: item.category, description: `${homeCostPrefix}${item.description.trim() || homeCostLabels[item.category]}`, amount: item.parsedAmount };
           return item.id ? financeApi.updateWorkCost(item.id, payload) : financeApi.createWorkCost(payload);
         }),
         ...savedHomeCosts.filter((item) => !retainedCostIds.has(item.id)).map((item) => financeApi.deleteWorkCost(item.id)),
@@ -2651,17 +2668,18 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
             <div className="home-costs-block">
               <div className="home-costs-heading"><div><span>CUSTOS DE HOJE</span><small>Combustível, alimentação e outros gastos</small></div></div>
               <div className="home-costs-list">
-                {homeCosts.map((item, index) => <div className="home-cost-row" key={item.key}>
-                  <div className="home-cost-field"><span>Categoria {index + 1}</span><div className="home-cost-select">
-                    <button type="button" className="home-cost-select-trigger" aria-haspopup="listbox" aria-expanded={openCostKey === item.key} onClick={() => setOpenCostKey((current) => current === item.key ? null : item.key)}>
-                      <span>{homeCostLabels[item.category]}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
-                    </button>
-                    {openCostKey === item.key && <><button type="button" className="home-cost-select-dismiss" aria-label="Fechar categorias" onClick={() => setOpenCostKey(null)} /><div className="home-cost-select-menu" role="listbox" aria-label={`Categoria do custo ${index + 1}`}>
-                      {(Object.keys(homeCostLabels) as ApiWorkCostCategory[]).map((category) => <button type="button" role="option" aria-selected={category === item.category} className={category === item.category ? "selected" : ""} key={category} onClick={() => { updateHomeCost(item.key, { category }); setOpenCostKey(null); }}><span>{homeCostLabels[category]}</span>{category === item.category && <Icon name="check" />}</button>)}
-                    </div></>}
-                  </div></div>
-                  <label><span>Valor</span><div><b>R$</b><input value={item.amount} onChange={(event) => updateHomeCost(item.key, { amount: maskCurrencyInput(event.target.value) })} placeholder="0,00" inputMode="numeric" /></div></label>
-                  <button type="button" className="home-cost-remove" aria-label={`Remover custo ${index + 1}`} onClick={() => removeHomeCost(item.key)}><Icon name="trash" /></button>
+                {homeCosts.map((item, index) => <div className={`home-cost-row${openCostKey === item.key ? " expanded" : ""}`} key={item.key}>
+                  <button type="button" className="home-cost-summary" aria-expanded={openCostKey === item.key} onClick={() => setOpenCostKey((current) => current === item.key ? null : item.key)}>
+                    <span className="home-cost-summary-icon"><HomeCostCategoryIcon category={item.category} /></span><span className="home-cost-summary-copy"><strong>{homeCostLabels[item.category]}</strong><small>{item.description.trim() || "Custo do dia"}</small></span><b>{formatCurrency(parseCurrencyInput(item.amount) || 0)}</b><svg className="home-cost-summary-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
+                  </button>
+                  {openCostKey === item.key && <div className="home-cost-editor">
+                    <span className="home-cost-category-label">Categoria</span><div className="cost-category-grid" role="listbox" aria-label={`Categoria do custo ${index + 1}`}>
+                      {(Object.keys(homeCostLabels) as ApiWorkCostCategory[]).map((category) => <button type="button" role="option" aria-selected={category === item.category} className={category === item.category ? "selected" : ""} key={category} onClick={() => updateHomeCost(item.key, { category })}><HomeCostCategoryIcon category={category} /><span>{homeCostLabels[category]}</span></button>)}
+                    </div>
+                    <label><span>Valor</span><div><b>R$</b><input value={item.amount} onChange={(event) => updateHomeCost(item.key, { amount: maskCurrencyInput(event.target.value) })} placeholder="0,00" inputMode="numeric" /></div></label>
+                    <label><span>Descrição (opcional)</span><div><input maxLength={160} value={item.description} onChange={(event) => updateHomeCost(item.key, { description: event.target.value })} placeholder="Ex.: Abastecimento no posto" /></div></label>
+                    <button type="button" className="home-cost-remove" onClick={() => removeHomeCost(item.key)}><Icon name="trash" />Remover custo</button>
+                  </div>}
                 </div>)}
               </div>
               <button type="button" className="home-add-cost" onClick={addHomeCost}><Icon name="plus" />Adicionar custo</button>
@@ -2676,7 +2694,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
             <strong>{formatCurrency(summary.goal.periodRemaining)}</strong>
           </section> : <button type="button" className="home-month-expenses" onClick={onFinance} aria-label="Ver despesas pendentes do mês">
             <span className="home-month-expenses-icon"><Icon name="wallet" /></span>
-            <span className="home-next-expense-main"><small>Despesas do mês</small><strong>{Number(summary.financial.pendingExpenseCount)}</strong><span>{Number(summary.financial.pendingExpenseCount) === 1 ? "despesa pendente" : "despesas pendentes"}</span></span>
+            <span className="home-next-expense-main"><small>Despesas do mês</small><strong>{Number(summary.financial.pendingExpenseCount)}</strong><span>Pendentes</span></span>
             <strong className="home-next-expense-value expense">- {formatCurrency(summary.financial.pendingExpenses)}</strong>
             <span className="home-card-forward"><Icon name="forward" /></span>
           </button>}

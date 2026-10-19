@@ -222,7 +222,7 @@ export type ApiWorkDay = {
   earnings: ApiWorkEarning[];
 };
 
-export type ApiWorkCostCategory = "FUEL" | "MAINTENANCE" | "PARKING" | "TOLL" | "WASH" | "MARKET" | "FOOD" | "OTHER";
+export type ApiWorkCostCategory = "FUEL" | "MAINTENANCE" | "TOLL" | "WASH" | "FOOD" | "OTHER";
 
 export type ApiWorkCost = {
   id: string;
