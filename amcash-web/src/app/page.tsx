@@ -160,7 +160,7 @@ type Subexpense = {
   seriesId?: string;
 };
 
-type IconName = Transaction["kind"] | "search" | "more" | "back" | "forward" | "home" | "radar" | "target" | "work" | "edit" | "trash" | "plus" | "check" | "logout";
+type IconName = Transaction["kind"] | "search" | "more" | "back" | "forward" | "home" | "radar" | "target" | "work" | "edit" | "trash" | "plus" | "check" | "logout" | "clock" | "calendar";
 
 function Icon({ name }: { name: IconName }) {
   if (name === "more") {
@@ -186,6 +186,8 @@ function Icon({ name }: { name: IconName }) {
     plus: <path d="M12 5v14M5 12h14" />,
     check: <path d="m5 12 4.5 4.5L19 7" />,
     logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>,
+    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+    calendar: <><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M8 3v4M16 3v4M3.5 9.5h17" /></>,
   };
 
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
@@ -235,6 +237,17 @@ function formatCurrency(value: number) {
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat("pt-BR").format(new Date(`${date}T12:00:00`));
+}
+
+function formatDueSummary(dueDate: string, referenceDate: string) {
+  const due = new Date(`${dueDate}T12:00:00`);
+  const reference = new Date(`${referenceDate}T12:00:00`);
+  const days = Math.round((due.getTime() - reference.getTime()) / 86_400_000);
+  if (days === 0) return `Vence hoje · ${formatDate(dueDate)}`;
+  if (days === 1) return `Vencimento amanhã · ${formatDate(dueDate)}`;
+  if (days > 1) return `Vencimento em ${days} dias · ${formatDate(dueDate)}`;
+  const overdueDays = Math.abs(days);
+  return `Vencida há ${overdueDays} ${overdueDays === 1 ? "dia" : "dias"} · ${formatDate(dueDate)}`;
 }
 
 function formatTransactionGroupDate(date: string) {
@@ -1744,11 +1757,8 @@ function RadarScreen({ onHome, onFinance, onGoals, onWork, showWorkFeatures = tr
 
       <div className="radar-content">
         <section className="radar-intro">
-          <div>
-            <span>PREVISÃO</span>
-            <h1>Seu dinheiro nos próximos meses</h1>
-            <p>Consulte seus saldos futuros e acompanhe a evolução do seu orçamento.</p>
-          </div>
+          <h1>Seu dinheiro nos próximos meses</h1>
+          <p>Consulte seus saldos futuros e acompanhe a evolução do seu orçamento.</p>
           <div className="radar-horizon" aria-label="Horizonte da previsão">
             <button type="button" className={horizon === 6 ? "active" : ""} onClick={() => changeHorizon(6)}>6 meses</button>
             <button type="button" className={horizon === 12 ? "active" : ""} onClick={() => changeHorizon(12)}>12 meses</button>
@@ -2463,9 +2473,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   const [uber, setUber] = useState("");
   const [ninetyNine, setNinetyNine] = useState("");
   const [kilometers, setKilometers] = useState("");
-  const [homeCosts, setHomeCosts] = useState<HomeCostDraft[]>([
-    { key: "new-0", category: "FUEL", amount: "" },
-  ]);
+  const [homeCosts, setHomeCosts] = useState<HomeCostDraft[]>([]);
   const [openCostKey, setOpenCostKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -2496,7 +2504,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
         id: item.id,
         category: item.category,
         amount: maskCurrencyInput(String(Math.round(Number(item.amount) * 100))),
-      })) : [{ key: `new-${nextCostKey.current++}`, category: "FUEL", amount: "" }]);
+      })) : []);
       setOpenCostKey(null);
     } catch (requestError) {
       setError(messageFromError(requestError));
@@ -2510,8 +2518,10 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  const dateLabel = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" })
-    .format(new Date(`${today}T12:00:00`));
+  const rawDateLabel = new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "2-digit", month: "short" })
+    .format(new Date(`${today}T12:00:00`))
+    .replace(/\./g, "");
+  const dateLabel = rawDateLabel.charAt(0).toLocaleUpperCase("pt-BR") + rawDateLabel.slice(1);
   const uberValue = parseCurrencyInput(uber) || 0;
   const ninetyNineValue = parseCurrencyInput(ninetyNine) || 0;
   const kilometersValue = parseDecimalInput(kilometers);
@@ -2528,8 +2538,13 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   const savedHomeCostTotal = savedHomeCosts.reduce((total, item) => total + Number(item.amount), 0);
   const resultOutsideHomeFields = Number(workOverview?.summary.netEarnings ?? 0) - savedHomeEarnings + savedHomeCostTotal;
   const projectedTodayNet = resultOutsideHomeFields + netValue;
+  const todayResult = summary?.goal.type === "CUSTOM" ? projectedTodayNet : netValue;
   const dailyRemaining = Math.max(0, Number(summary?.goal.dailyTarget ?? 0)
-    - (summary?.goal.type === "CUSTOM" ? projectedTodayNet : netValue));
+    - todayResult);
+  const dailyTarget = Number(summary?.goal.dailyTarget ?? 0);
+  const dailyProgress = dailyTarget > 0
+    ? Math.min(100, Math.max(0, Math.round((Math.max(0, todayResult) / dailyTarget) * 100)))
+    : 0;
   const showEmptyState = summary?.goal.type === "EXPENSES" && summary.hasFinancialEntries === false;
 
   function updateHomeCost(key: string, changes: Partial<Pick<HomeCostDraft, "category" | "amount">>) {
@@ -2542,10 +2557,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
 
   function removeHomeCost(key: string) {
     setOpenCostKey((current) => current === key ? null : current);
-    setHomeCosts((current) => {
-      const remaining = current.filter((item) => item.key !== key);
-      return remaining.length ? remaining : [{ key: `new-${nextCostKey.current++}`, category: "FUEL", amount: "" }];
-    });
+    setHomeCosts((current) => current.filter((item) => item.key !== key));
   }
 
   async function saveDailyResult() {
@@ -2589,10 +2601,9 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   return <main className="daily-home-screen">
     <header className="dashboard-header daily-home-header">
       <div className="header-brand" aria-label="AMCash"><Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority /><span><b>AM</b>Cash</span></div>
-      <div className="daily-home-account"><span className="daily-home-label">RESUMO</span><AccountMenu onLogout={onLogout} usageProfile={usageProfile} onChangeProfile={onChangeProfile} /></div>
+      <div className="daily-home-account"><time className="daily-home-date" dateTime={today}>{dateLabel}</time><AccountMenu onLogout={onLogout} usageProfile={usageProfile} onChangeProfile={onChangeProfile} /></div>
     </header>
     <div className="daily-home-content">
-      <section className="daily-home-heading"><span>{showEmptyState ? "BEM-VINDO AO AMCASH" : "VISÃO GERAL"}</span><h1>{showEmptyState ? "Seu controle começa aqui" : "Olá, este é o seu resumo"}</h1><p>{dateLabel}</p></section>
       {loading ? <div className="daily-home-loading"><div className="loader" /><span>Atualizando seu progresso</span></div> : error ?
         <div className="daily-home-error"><p>{error}</p><button type="button" onClick={() => void load()}>Tentar novamente</button></div> : summary && <>
           {showEmptyState ? <section className="home-empty-state" aria-label="Começar a usar o AMCash">
@@ -2606,27 +2617,39 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
             </div>
           </section> : <>
           {usageProfile !== "PERSONAL" && <>
-          <section className={`daily-goal-card${summary.goal.covered ? " covered" : ""}`}>
-            <span>{summary.goal.type === "CUSTOM" ? `META PERSONALIZADA · ${summary.goal.name}` : summary.goal.covered ? "MÊS COBERTO" : "META DO DIA"}</span>
-            {summary.goal.covered ? <><strong>Você conseguiu!</strong><p>{summary.goal.type === "CUSTOM" ? "Seu resultado líquido já atingiu esta meta." : "Suas receitas já cobrem as despesas pendentes deste mês."}</p></> : summary.goal.todaySelected ? <>
-              <strong>{formatCurrency(dailyRemaining)}</strong>
-              <p>falta atingir hoje · meta base {formatCurrency(summary.goal.dailyTarget)}</p>
-            </> : <><strong>{formatCurrency(summary.goal.dailyTarget)}</strong><p>Hoje não está selecionado como dia disponível.</p></>}
+          <section className={`daily-goal-card${!summary.goal.todaySelected ? " day-off" : summary.goal.covered ? " covered" : ""}`}>
+            {!summary.goal.todaySelected ? <div className="daily-goal-day-off">
+              <span>DIA DE FOLGA</span>
+              <strong>Hoje você não planejou trabalhar</strong>
+              <p>Aproveite o descanso. Se os planos mudarem, inclua o dia de hoje no seu planejamento.</p>
+              <button type="button" onClick={onGoals}>Alterar dias em Metas <Icon name="forward" /></button>
+            </div> : summary.goal.covered ? <>
+              <span>{summary.goal.type === "CUSTOM" ? `META PERSONALIZADA · ${summary.goal.name}` : "MÊS COBERTO"}</span>
+              <strong>Você conseguiu!</strong><p>{summary.goal.type === "CUSTOM" ? "Seu resultado líquido já atingiu esta meta." : "Suas receitas já cobrem as despesas pendentes deste mês."}</p>
+            </> : <>
+              <div className="daily-goal-title"><span><Icon name="target" />META DE HOJE</span>{summary.goal.type === "CUSTOM" && <small>{summary.goal.name}</small>}</div>
+              <div className="daily-goal-values"><strong>{formatCurrency(dailyTarget)}</strong><div><Icon name="clock" /><span><small>Faltam</small><b>{formatCurrency(dailyRemaining)}</b></span></div></div>
+              <div className="daily-goal-progress-label"><span>Resultado líquido: <b className={todayResult < 0 ? "negative" : ""}>{todayResult < 0 ? "- " : ""}{formatCurrency(todayResult)}</b></span><strong>{dailyProgress}%</strong></div>
+              <div className="daily-progress-track" aria-label={`${dailyProgress}% da meta de hoje`}><i style={{ width: `${dailyProgress}%` }} /></div>
+              <p>{dailyProgress >= 100 ? "Meta de hoje alcançada. Excelente trabalho!" : dailyProgress > 0 ? `Continue assim: você já alcançou ${dailyProgress}% da meta de hoje.` : "Registre seu faturamento para acompanhar o progresso de hoje."}</p>
+            </>}
           </section>
 
-          <section className="home-quick-entry" aria-label="Resultado de hoje">
-            <div className="home-quick-entry-heading"><div><span>RESULTADO DE HOJE</span><h2>Informe quanto você faturou</h2></div><small>Os custos aumentam o valor que falta.</small></div>
-            <div className="home-quick-entry-fields">
-              <label><span>Uber</span><div><b>R$</b><input value={uber} onChange={(event) => setUber(maskCurrencyInput(event.target.value))} placeholder="0,00" inputMode="numeric" /></div></label>
-              <label><span>99</span><div><b>R$</b><input value={ninetyNine} onChange={(event) => setNinetyNine(maskCurrencyInput(event.target.value))} placeholder="0,00" inputMode="numeric" /></div></label>
-            </div>
-            <div className="home-distance-row">
-              <label><span>Quilômetros rodados</span><div><input value={kilometers} onChange={(event) => setKilometers(maskDecimalInput(event.target.value))} placeholder="0" inputMode="decimal" /><b>km</b></div></label>
-              <div className="home-per-kilometer"><span>Faturamento por km</span><strong>{kilometersValue > 0 ? formatCurrency(earningsPerKilometer) : "—"}</strong><small>{kilometersValue > 0 ? "atualizado agora" : "informe os quilômetros"}</small></div>
+          {summary.goal.todaySelected && <>
+          <section className="home-today-summary" aria-label="Resumo do trabalho de hoje">
+            <article><span>FATURAMENTO HOJE</span><strong>{formatCurrency(projectedGrossEarnings)}</strong></article>
+            <article><span>RESULTADO LÍQUIDO</span><strong className={projectedTodayNet < 0 ? "negative" : ""}>{projectedTodayNet < 0 ? "- " : ""}{formatCurrency(projectedTodayNet)}</strong></article>
+          </section>
+          <section className="home-quick-entry" aria-label="Meu trabalho hoje">
+            <div className="home-work-card-heading"><div><span>TRABALHO DE HOJE</span><h2>Meu trabalho hoje</h2></div><small>Edite os valores diretamente</small></div>
+            <div className="home-work-fields">
+              <label><span className="home-work-source uber logo"><Image src="/uber-logo.jpeg" alt="" width={768} height={512} /></span><span>Uber</span><div><b>R$</b><input aria-label="Faturamento Uber" value={uber} onChange={(event) => setUber(maskCurrencyInput(event.target.value))} placeholder="0,00" inputMode="numeric" /></div></label>
+              <label><span className="home-work-source ninety-nine logo"><Image src="/99-logo.png" alt="" width={1600} height={1600} /></span><span>99</span><div><b>R$</b><input aria-label="Faturamento 99" value={ninetyNine} onChange={(event) => setNinetyNine(maskCurrencyInput(event.target.value))} placeholder="0,00" inputMode="numeric" /></div></label>
+              <label><span className="home-work-source logo metric-logo"><Image src="/road-icon.png" alt="" width={1254} height={1254} /></span><span>Quilômetros rodados</span><div><input aria-label="Quilômetros rodados" value={kilometers} onChange={(event) => setKilometers(maskDecimalInput(event.target.value))} placeholder="0" inputMode="decimal" /><b>km</b></div></label>
+              <div className="home-work-per-km"><span className="home-work-source logo metric-logo"><Image src="/earnings-per-km-icon.png" alt="" width={1254} height={1254} /></span><span>Faturamento por km</span><strong>{kilometersValue > 0 ? formatCurrency(earningsPerKilometer) : "—"}</strong></div>
             </div>
             <div className="home-costs-block">
-              <div className="home-costs-heading"><div><span>CUSTOS DE HOJE</span><small>Adicione combustível, alimentação e outros gastos.</small></div>
-                <button type="button" onClick={addHomeCost}><Icon name="plus" />Adicionar custo</button></div>
+              <div className="home-costs-heading"><div><span>CUSTOS DE HOJE</span><small>Combustível, alimentação e outros gastos</small></div></div>
               <div className="home-costs-list">
                 {homeCosts.map((item, index) => <div className="home-cost-row" key={item.key}>
                   <div className="home-cost-field"><span>Categoria {index + 1}</span><div className="home-cost-select">
@@ -2641,25 +2664,30 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
                   <button type="button" className="home-cost-remove" aria-label={`Remover custo ${index + 1}`} onClick={() => removeHomeCost(item.key)}><Icon name="trash" /></button>
                 </div>)}
               </div>
+              <button type="button" className="home-add-cost" onClick={addHomeCost}><Icon name="plus" />Adicionar custo</button>
             </div>
-            <div className="home-quick-entry-result"><span>Resultado líquido informado</span><strong className={netValue < 0 ? "negative" : ""}>{netValue < 0 ? "- " : ""}{formatCurrency(netValue)}</strong></div>
-            <button type="button" disabled={saving} onClick={() => void saveDailyResult()}>{saving ? "Salvando..." : "Salvar resultado de hoje"}</button>
+            <button type="button" disabled={saving} onClick={() => void saveDailyResult()}>{saving ? "Atualizando..." : "Atualizar trabalho de hoje"}</button>
           </section>
+          </>}
           </>}
 
           {usageProfile !== "PERSONAL" && summary.goal.type === "CUSTOM" && summary.goal.period !== "DAILY" ? <section className="home-summary-card home-goal-period-card">
             <div><span>{summary.goal.period === "WEEKLY" ? "META SEMANAL" : "META MENSAL"}</span><h2>Quanto ainda falta no período</h2></div>
             <strong>{formatCurrency(summary.goal.periodRemaining)}</strong>
-          </section> : <section className="home-summary-card home-balance-card">
-            <div><span>SALDO DO MÊS</span><h2>Despesas pendentes</h2></div>
-            <strong className={summary.financial.balance < 0 ? "negative" : "positive"}>{summary.financial.balance < 0 ? "- " : "+ "}{formatCurrency(summary.financial.balance)}</strong>
-          </section>}
+          </section> : <button type="button" className="home-month-expenses" onClick={onFinance} aria-label="Ver despesas pendentes do mês">
+            <span className="home-month-expenses-icon"><Icon name="wallet" /></span>
+            <span className="home-next-expense-main"><small>Despesas do mês</small><strong>{Number(summary.financial.pendingExpenseCount)}</strong><span>{Number(summary.financial.pendingExpenseCount) === 1 ? "despesa pendente" : "despesas pendentes"}</span></span>
+            <strong className="home-next-expense-value expense">- {formatCurrency(summary.financial.pendingExpenses)}</strong>
+            <span className="home-card-forward"><Icon name="forward" /></span>
+          </button>}
 
-          <section className="home-summary-card home-next-expense">
-            <div><span>PRÓXIMA DESPESA</span><h2>{summary.nextExpense?.name ?? "Nenhuma despesa pendente"}</h2>
-              <p>{summary.nextExpense ? `Vence em ${formatDate(summary.nextExpense.dueDate)}` : "Você não possui outra despesa para pagar neste mês."}</p></div>
-            {summary.nextExpense && <strong>{formatCurrency(summary.nextExpense.amount)}</strong>}
-          </section>
+          <button type="button" className="home-next-expense" onClick={onFinance} aria-label={summary.nextExpense ? `Ver próxima despesa: ${summary.nextExpense.name}` : "Ver finanças"}>
+            <span className="home-next-expense-icon"><Icon name="calendar" /></span>
+            <span className="home-next-expense-main"><small>Próxima despesa</small><strong>{summary.nextExpense?.name ?? "Nenhuma despesa pendente"}</strong>
+              <span>{summary.nextExpense ? formatDueSummary(summary.nextExpense.dueDate, today) : "Você não possui outra despesa para pagar neste mês."}</span></span>
+            {summary.nextExpense && <strong className="home-next-expense-value">{formatCurrency(summary.nextExpense.amount)}</strong>}
+            <span className="home-card-forward"><Icon name="forward" /></span>
+          </button>
           </>}
         </>}
     </div>
@@ -2673,7 +2701,6 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"home" | "finance" | "radar" | "goals" | "work">("home");
   const [usageProfile, setUsageProfile] = useState<ApiUsageProfile | null | undefined>(undefined);
   const [profilePickerOpen, setProfilePickerOpen] = useState(false);
-  const [workInitialAction, setWorkInitialAction] = useState<"work" | "cost" | null>(null);
   const [goalInitialMode, setGoalInitialMode] = useState<"expenses" | "custom">("expenses");
   const [financeCreateRequested, setFinanceCreateRequested] = useState(false);
   const [items, setItems] = useState<Transaction[]>([]);
@@ -2695,7 +2722,6 @@ export default function Home() {
     setSelected(null);
     setError("");
     setActiveTab("home");
-    setWorkInitialAction(null);
     setGoalInitialMode("expenses");
     setUsageProfile(undefined);
     setProfilePickerOpen(false);
@@ -2853,7 +2879,6 @@ export default function Home() {
     setUsageProfile(updatedUser.usageProfile);
     setProfilePickerOpen(false);
     setActiveTab("home");
-    setWorkInitialAction(null);
     setGoalInitialMode("expenses");
   }
 
@@ -2862,13 +2887,13 @@ export default function Home() {
   if (usageProfile === undefined) return <LoadingScreen />;
   if (usageProfile === null || profilePickerOpen) return <UsageProfileScreen onSelect={chooseUsageProfile} onCancel={usageProfile ? () => setProfilePickerOpen(false) : undefined} />;
   const showWorkFeatures = usageProfile !== "PERSONAL";
-  const openWork = (action: "work" | "cost" | null = null) => { setWorkInitialAction(action); setActiveTab("work"); };
+  const openWork = () => setActiveTab("work");
   const openGoals = (mode: "expenses" | "custom" = "expenses") => { setGoalInitialMode(mode); setActiveTab("goals"); };
   if (activeTab === "radar") return <RadarScreen onHome={() => setActiveTab("home")} onFinance={() => setActiveTab("finance")} onGoals={() => setActiveTab("goals")} onWork={() => openWork()} showWorkFeatures={showWorkFeatures} />;
   if (activeTab === "goals") return <GoalsScreen initialMode={goalInitialMode} onHome={() => setActiveTab("home")} onFinance={() => setActiveTab("finance")} onRadar={() => setActiveTab("radar")} onWork={() => openWork()} />;
   if (activeTab === "work") {
     return (
-      <WorkScreen initialAction={workInitialAction} navigation={(
+      <WorkScreen navigation={(
         <BottomNavigation active="work" onHome={() => setActiveTab("home")} onFinance={() => setActiveTab("finance")} onRadar={() => setActiveTab("radar")} onGoals={() => setActiveTab("goals")} onWork={() => {}} />
       )} />
     );

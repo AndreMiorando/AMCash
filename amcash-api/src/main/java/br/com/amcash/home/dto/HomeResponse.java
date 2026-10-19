@@ -14,7 +14,8 @@ public record HomeResponse(
         GoalSummary goal,
         NextExpense nextExpense) {
 
-    public record FinancialSummary(BigDecimal income, BigDecimal pendingExpenses, BigDecimal balance) {
+    public record FinancialSummary(BigDecimal income, BigDecimal pendingExpenses,
+                                   long pendingExpenseCount, BigDecimal balance) {
     }
 
     public record GoalSummary(PrimaryGoalType type, String name, CustomGoalPeriod period,

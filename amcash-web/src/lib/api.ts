@@ -192,7 +192,7 @@ export type CustomGoalPayload = {
 export type ApiHome = {
   date: string;
   hasFinancialEntries: boolean;
-  financial: { income: number; pendingExpenses: number; balance: number };
+  financial: { income: number; pendingExpenses: number; pendingExpenseCount: number; balance: number };
   goal: {
     type: ApiPrimaryGoalType;
     name: string;
@@ -246,6 +246,13 @@ export type ApiWorkOverview = {
     kilometers: number;
     earningsPerKilometer: number;
     workedDays: number;
+  };
+  comparison: {
+    rangeStart: string;
+    rangeEnd: string;
+    netEarnings: number;
+    changeAmount: number;
+    changePercentage: number | null;
   };
   days: ApiWorkDay[];
   costs: ApiWorkCost[];

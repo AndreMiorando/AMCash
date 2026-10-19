@@ -49,6 +49,9 @@ class HomeServiceTests {
         when(entryRepository.findFirstByUserIdAndTypeAndPaidFalseAndDueDateBetweenOrderByDueDateAscCreatedAtAsc(
                 userId, EntryType.EXPENSE, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31)))
                 .thenReturn(Optional.of(nextExpense));
+        when(entryRepository.countByUserIdAndTypeAndPaidFalseAndDueDateBetween(
+                userId, EntryType.EXPENSE, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31)))
+                .thenReturn(12L);
 
         var response = service.current(userId, date);
 
@@ -56,6 +59,7 @@ class HomeServiceTests {
         assertTrue(response.hasFinancialEntries());
         assertEquals(PrimaryGoalType.EXPENSES, response.goal().type());
         assertEquals(money("-1558.60"), response.financial().balance());
+        assertEquals(12L, response.financial().pendingExpenseCount());
         assertEquals(expenseId, response.nextExpense().id());
         assertEquals(money("329.00"), response.nextExpense().amount());
     }
