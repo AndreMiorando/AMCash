@@ -287,6 +287,8 @@ Não existe hoje um componente React genérico de botão. As variações são cl
 - Meta personalizada: `custom-goal-backdrop` + `custom-goal-dialog`; largura máxima `27rem`.
 - Finanças: família `sheet-backdrop`, pickers e diálogos próprios.
 
+No fluxo de Finanças, despesa e receita abrem telas próprias em vez de modais, preservando a mesma estrutura visual e retornando pelo cabeçalho. Os atalhos usam somente os ícones tonalizados de despesa e receita. A seleção de categoria abre uma etapa própria, com busca de borda única, lista completa, ícones e retorno imediato após a escolha. A forma de pagamento/recebimento aparece logo abaixo da categoria e usa o seletor próprio do AMCash, com a mesma superfície dos campos e lista de opções estilizada. O detalhamento também aparece antes de valor e data e funciona como botão seletor centralizado, sem checkbox; os campos editáveis usam superfície branca para se diferenciarem das áreas informativas. O tipo de lançamento é apresentado como escolha entre Única e Recorrente; frequência e quantidade aparecem progressivamente, com as três frequências na mesma linha. A forma de pagamento/recebimento e as observações são opcionais e servem apenas para consulta e auditoria; não alteram as regras de detalhamento da despesa.
+
 **Props de `ModalBackdrop`:** `children`, `onClose`.
 
 **Acessibilidade atual:** `role="dialog"`, `aria-modal`, `aria-labelledby` e botões com `aria-label` aparecem no modal de Trabalho.
@@ -315,10 +317,14 @@ Não existe hoje um componente React genérico de botão. As variações são cl
 - Chevron indica navegação ou expansão; chevron rotacionado indica conteúdo aberto.
 - Seletores usam `aria-pressed`, `aria-selected` ou `aria-expanded` conforme o contexto.
 - Valores monetários são formatados em `pt-BR` e os campos aplicam máscara enquanto o usuário digita.
+- Campos textuais respeitam os limites do domínio também no frontend: lançamentos e itens `40`, observações `120`, metas `40`, fontes adicionais `30` e descrições de custo `60`. Observações exibem contador discreto abaixo do campo.
+- A edição de lançamentos e subdespesas reutiliza os seletores `Única`/`Recorrente` e a frequência da criação, sem oferecer conversão posterior para despesa detalhada.
+- O detalhamento de despesas é uma escolha independente da categoria e da forma de pagamento.
 - A Home edita dados do dia diretamente; Trabalho consulta períodos e edita registros em modal.
 - Ações destrutivas usam confirmação nativa antes da exclusão no fluxo de Trabalho.
 - Overlays fecham ao clicar fora; o conteúdo interrompe a propagação do clique.
 - Navegação inferior usa `aria-current="page"` no item ativo.
+- As barras visuais dos contêineres de tela e modal ficam ocultas; rolagem por toque, roda do mouse e teclado permanece habilitada.
 
 ## 6. Responsividade
 

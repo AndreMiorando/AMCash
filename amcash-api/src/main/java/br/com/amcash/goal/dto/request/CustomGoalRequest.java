@@ -10,7 +10,7 @@ import java.math.BigDecimal;
 
 public record CustomGoalRequest(
         @NotBlank(message = "Informe o nome da meta")
-        @Size(max = 80, message = "O nome deve ter no máximo 80 caracteres") String name,
+        @Size(max = 40, message = "O nome deve ter no máximo 40 caracteres") String name,
         @NotNull(message = "Informe o valor da meta")
         @DecimalMin(value = "0.01", message = "O valor da meta deve ser maior que zero") BigDecimal amount,
         @NotNull(message = "Informe a periodicidade") CustomGoalPeriod period) {

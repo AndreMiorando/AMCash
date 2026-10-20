@@ -1,4 +1,5 @@
 export type ApiEntryType = "EXPENSE" | "INCOME";
+export type ApiPaymentMethod = "CASH" | "PIX" | "DEBIT_CARD" | "CREDIT_CARD" | "BANK_TRANSFER" | "OTHER";
 export type ApiRecurrenceFrequency = "NONE" | "DAILY" | "WEEKLY" | "MONTHLY";
 export type ApiSeriesScope = "CURRENT" | "CURRENT_AND_FUTURE" | "ALL";
 export type ApiUsageProfile = "PERSONAL" | "RIDE_DRIVER" | "DELIVERY";
@@ -74,6 +75,8 @@ export type ApiEntry = {
   completedSubexpenses: number;
   totalSubexpenses: number;
   subexpenses: ApiSubexpense[];
+  paymentMethod: ApiPaymentMethod | null;
+  notes: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -88,6 +91,8 @@ export type EntryPayload = {
   recurrenceCount: number;
   hasSubexpenses: boolean;
   subexpenses?: SubexpensePayload[];
+  paymentMethod?: ApiPaymentMethod | null;
+  notes?: string | null;
 };
 
 export type SubexpensePayload = {
