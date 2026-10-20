@@ -189,7 +189,7 @@ Não existe uma escala nomeada. Os valores dominantes encontrados são:
 
 ### 4.4 Grupo de KPIs
 
-**Finalidade:** comparar dois ou quatro indicadores relacionados.
+**Finalidade:** comparar de dois a quatro indicadores relacionados.
 
 **Quando usar:** métricas curtas que pertencem ao mesmo contexto.
 
@@ -246,7 +246,7 @@ Não existe hoje um componente React genérico de botão. As variações são cl
 
 **Padrão:** altura `3rem–3.55rem`, borda `#dce5f0`, raio `0.8rem–0.95rem`, fundo `#f9fbfe`/`#fbfcff`, label `0.61rem–0.72rem`.
 
-**Variações:** prefixo `R$`, sufixo `km`, logo de fonte, descrição opcional.
+**Variações:** prefixos `R$` e `km`, logo de fonte, descrição opcional. A Home e a edição de Trabalho permitem fontes de faturamento adicionais.
 
 **Componentes existentes em Trabalho:**
 
