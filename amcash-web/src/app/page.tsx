@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Script from "next/script";
-import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ApiEntry,
   ApiEntryCategory,
@@ -22,6 +22,8 @@ import {
   financeApi,
 } from "@/lib/api";
 import WorkScreen from "@/app/components/WorkScreen";
+import AppHeader from "@/app/components/AppHeader";
+import { CostCategoryGrid, CostCategoryIcon, workCostCategoryLabels } from "@/app/components/CostCategoryGrid";
 
 type GoogleCredentialResponse = {
   credential?: string;
@@ -222,7 +224,7 @@ function BottomNavigation({ active, onHome, onFinance, onRadar, onGoals, onWork,
       </button>}
       <button type="button" className={`nav-item${active === "radar" ? " active" : ""}`} onClick={onRadar} aria-current={active === "radar" ? "page" : undefined}>
         <Icon name="radar" />
-        <span>Radar</span>
+        <span>Projeção</span>
       </button>
     </nav>
   );
@@ -1156,13 +1158,9 @@ function Dashboard({
 
   return (
     <main className="dashboard-screen">
-      <header className="dashboard-header">
-        <div className="header-brand" aria-label="AMCash">
-          <Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority />
-          <span><b>AM</b>Cash</span>
-        </div>
+      <AppHeader>
         <button type="button" className="header-add-button" disabled={isLoading} onClick={() => setIsCreateOpen(true)} aria-label="Adicionar receita ou despesa"><Icon name="plus" /><span>Nova despesa</span></button>
-      </header>
+      </AppHeader>
 
       <section className="month-selector" aria-label="Período selecionado">
         <button type="button" className="month-arrow" onClick={() => changeMonth(-1)} aria-label={`Ir para ${periodFormatter.format(previousMonth)}`}><Icon name="back" /></button>
@@ -1747,13 +1745,9 @@ function RadarScreen({ onHome, onFinance, onGoals, onWork, showWorkFeatures = tr
 
   return (
     <main className="dashboard-screen radar-screen">
-      <header className="dashboard-header radar-header">
-        <div className="header-brand" aria-label="AMCash">
-          <Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority />
-          <span><b>AM</b>Cash</span>
-        </div>
-        <span className="radar-header-label">RADAR FINANCEIRO</span>
-      </header>
+      <AppHeader className="radar-header">
+        <span className="radar-header-label">PROJEÇÃO</span>
+      </AppHeader>
 
       <div className="radar-content">
         <section className="radar-intro">
@@ -2264,13 +2258,9 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, initialMode = "expens
 
   return (
     <main className="dashboard-screen goals-screen">
-      <header className="dashboard-header goals-header">
-        <div className="header-brand" aria-label="AMCash">
-          <Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority />
-          <span><b>AM</b>Cash</span>
-        </div>
+      <AppHeader className="goals-header">
         <span className="goals-header-label">METAS</span>
-      </header>
+      </AppHeader>
 
       <div className="goals-content">
         <div className="goals-mode-tabs" role="tablist" aria-label="Tipo de meta">
@@ -2363,27 +2353,6 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, initialMode = "expens
   );
 }
 
-const homeCostLabels: Record<ApiWorkCostCategory, string> = {
-  FUEL: "Combustível",
-  MAINTENANCE: "Manutenção",
-  TOLL: "Pedágio",
-  WASH: "Lavagem",
-  FOOD: "Alimentação",
-  OTHER: "Outro",
-};
-
-function HomeCostCategoryIcon({ category }: { category: ApiWorkCostCategory }) {
-  const paths: Record<ApiWorkCostCategory, ReactNode> = {
-    FUEL: <><path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16" /><path d="M3 21h13M7 7h5v4H7zM15 8h2l2 2v7a1.5 1.5 0 0 0 3 0v-5l-2-2" /></>,
-    MAINTENANCE: <><path d="M14.5 6.5a4 4 0 0 0-5-5L7 4l3 3 2.5-2.5a4 4 0 0 0 2 5L6 18l-1 3 3-1 8.5-8.5a4 4 0 0 0 5-5L19 9l-3-3 2.5-2.5" /></>,
-    TOLL: <><circle cx="7" cy="16" r="3" /><circle cx="12" cy="11" r="3" /><circle cx="17" cy="6" r="3" /></>,
-    WASH: <><path d="M12 2C9 7 6 10 6 14a6 6 0 0 0 12 0c0-4-3-7-6-12Z" /><path d="M9.5 16.5c.8 1.2 2 1.7 3.5 1.4" /></>,
-    FOOD: <><path d="M6 3v7M9 3v7M6 7h3M7.5 10v11" /><path d="M15.5 3v18M15.5 3c3 2 3.2 7 0 9" /></>,
-    OTHER: <><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none" /></>,
-  };
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[category]}</svg>;
-}
-
 type HomeCostDraft = {
   key: string;
   id?: string;
@@ -2420,7 +2389,7 @@ function UsageProfileScreen({ onSelect, onCancel }: { onSelect: (profile: ApiUsa
   }
 
   return <main className="usage-profile-screen">
-    <header className="dashboard-header"><div className="header-brand" aria-label="AMCash"><Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority /><span><b>AM</b>Cash</span></div>{onCancel && <button type="button" className="usage-profile-close" onClick={onCancel} aria-label="Fechar">×</button>}</header>
+    <AppHeader>{onCancel && <button type="button" className="usage-profile-close" onClick={onCancel} aria-label="Fechar">×</button>}</AppHeader>
     <section className="usage-profile-content">
       <span>PERSONALIZE SUA EXPERIÊNCIA</span>
       <h1>Como você usa o AMCash?</h1>
@@ -2517,7 +2486,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
           id: item.id,
           category: item.category,
           amount: maskCurrencyInput(String(Math.round(Number(item.amount) * 100))),
-          description: storedDescription === homeCostLabels[item.category] ? "" : storedDescription,
+          description: storedDescription === workCostCategoryLabels[item.category] ? "" : storedDescription,
         };
       }) : []);
       setOpenCostKey(null);
@@ -2602,7 +2571,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
       const retainedCostIds = new Set(validCosts.flatMap((item) => item.id ? [item.id] : []));
       await Promise.all([
         ...validCosts.map((item) => {
-          const payload = { date: today, category: item.category, description: `${homeCostPrefix}${item.description.trim() || homeCostLabels[item.category]}`, amount: item.parsedAmount };
+          const payload = { date: today, category: item.category, description: `${homeCostPrefix}${item.description.trim() || workCostCategoryLabels[item.category]}`, amount: item.parsedAmount };
           return item.id ? financeApi.updateWorkCost(item.id, payload) : financeApi.createWorkCost(payload);
         }),
         ...savedHomeCosts.filter((item) => !retainedCostIds.has(item.id)).map((item) => financeApi.deleteWorkCost(item.id)),
@@ -2616,10 +2585,9 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   }
 
   return <main className="daily-home-screen">
-    <header className="dashboard-header daily-home-header">
-      <div className="header-brand" aria-label="AMCash"><Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority /><span><b>AM</b>Cash</span></div>
+    <AppHeader className="daily-home-header">
       <div className="daily-home-account"><time className="daily-home-date" dateTime={today}>{dateLabel}</time><AccountMenu onLogout={onLogout} usageProfile={usageProfile} onChangeProfile={onChangeProfile} /></div>
-    </header>
+    </AppHeader>
     <div className="daily-home-content">
       {loading ? <div className="daily-home-loading"><div className="loader" /><span>Atualizando seu progresso</span></div> : error ?
         <div className="daily-home-error"><p>{error}</p><button type="button" onClick={() => void load()}>Tentar novamente</button></div> : summary && <>
@@ -2670,12 +2638,10 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
               <div className="home-costs-list">
                 {homeCosts.map((item, index) => <div className={`home-cost-row${openCostKey === item.key ? " expanded" : ""}`} key={item.key}>
                   <button type="button" className="home-cost-summary" aria-expanded={openCostKey === item.key} onClick={() => setOpenCostKey((current) => current === item.key ? null : item.key)}>
-                    <span className="home-cost-summary-icon"><HomeCostCategoryIcon category={item.category} /></span><span className="home-cost-summary-copy"><strong>{homeCostLabels[item.category]}</strong><small>{item.description.trim() || "Custo do dia"}</small></span><b>{formatCurrency(parseCurrencyInput(item.amount) || 0)}</b><svg className="home-cost-summary-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
+                    <span className="home-cost-summary-icon"><CostCategoryIcon category={item.category} /></span><span className="home-cost-summary-copy"><strong>{workCostCategoryLabels[item.category]}</strong><small>{item.description.trim() || "Custo do dia"}</small></span><b>{formatCurrency(parseCurrencyInput(item.amount) || 0)}</b><svg className="home-cost-summary-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
                   </button>
                   {openCostKey === item.key && <div className="home-cost-editor">
-                    <span className="home-cost-category-label">Categoria</span><div className="cost-category-grid" role="listbox" aria-label={`Categoria do custo ${index + 1}`}>
-                      {(Object.keys(homeCostLabels) as ApiWorkCostCategory[]).map((category) => <button type="button" role="option" aria-selected={category === item.category} className={category === item.category ? "selected" : ""} key={category} onClick={() => updateHomeCost(item.key, { category })}><HomeCostCategoryIcon category={category} /><span>{homeCostLabels[category]}</span></button>)}
-                    </div>
+                    <span className="home-cost-category-label">Categoria</span><CostCategoryGrid value={item.category} ariaLabel={`Categoria do custo ${index + 1}`} onChange={(category) => updateHomeCost(item.key, { category })} />
                     <label><span>Valor</span><div><b>R$</b><input value={item.amount} onChange={(event) => updateHomeCost(item.key, { amount: maskCurrencyInput(event.target.value) })} placeholder="0,00" inputMode="numeric" /></div></label>
                     <label><span>Descrição (opcional)</span><div><input maxLength={160} value={item.description} onChange={(event) => updateHomeCost(item.key, { description: event.target.value })} placeholder="Ex.: Abastecimento no posto" /></div></label>
                     <button type="button" className="home-cost-remove" onClick={() => removeHomeCost(item.key)}><Icon name="trash" />Remover custo</button>

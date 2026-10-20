@@ -3,6 +3,8 @@
 import Image from "next/image";
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { ApiWorkCost, ApiWorkCostCategory, ApiWorkDay, ApiWorkOverview, ApiWorkPeriod, financeApi } from "@/lib/api";
+import AppHeader from "@/app/components/AppHeader";
+import { CostCategoryGrid, CostCategoryIcon, workCostCategoryLabels } from "@/app/components/CostCategoryGrid";
 
 type EarningDraft = { source: string; amount: string };
 type CostDraft = { key: string; id?: string; category: ApiWorkCostCategory; description: string; amount: string; homeManaged?: boolean };
@@ -21,11 +23,6 @@ const homeCostPrefix = "HOME: ";
 const legacyHomeCostDescription = "Custo do dia — Home";
 
 const periodLabels: Record<ApiWorkPeriod, string> = { DAY: "Dia", WEEK: "Semana", MONTH: "Mês" };
-const costLabels: Record<ApiWorkCostCategory, string> = {
-  FUEL: "Combustível", MAINTENANCE: "Manutenção", TOLL: "Pedágio",
-  WASH: "Lavagem", FOOD: "Alimentação", OTHER: "Outro",
-};
-
 function isoDate(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -55,10 +52,10 @@ function isHomeCost(cost: ApiWorkCost) { return cost.description === legacyHomeC
 function costDescription(cost: ApiWorkCost) {
   if (cost.description?.startsWith(homeCostPrefix)) {
     const description = cost.description.slice(homeCostPrefix.length);
-    return description === costLabels[cost.category] ? "Custo do dia" : description;
+    return description === workCostCategoryLabels[cost.category] ? "Custo do dia" : description;
   }
   if (cost.description === legacyHomeCostDescription) return "Custo do dia";
-  return cost.description || costLabels[cost.category];
+  return cost.description || workCostCategoryLabels[cost.category];
 }
 function messageFrom(error: unknown) { return error instanceof Error ? error.message : "Não foi possível concluir a operação."; }
 function periodTitle(overview: ApiWorkOverview | null, period: ApiWorkPeriod, referenceDate: string) {
@@ -180,9 +177,7 @@ export default function WorkScreen({ navigation }: {
   const draftCosts = draft?.costs.reduce((total, cost) => total + numberFromInput(cost.amount), 0) ?? 0;
   const draftNet = draftGross - draftCosts;
   return <main className="work-screen">
-    <header className="dashboard-header work-header"><div className="header-brand" aria-label="AMCash">
-      <Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority /><span><b>AM</b>Cash</span>
-    </div><span className="work-header-label">TRABALHO</span></header>
+    <AppHeader className="work-header"><span className="work-header-label">TRABALHO</span></AppHeader>
     <div className="work-content">
       <section className="work-heading"><div><h1>Seu trabalho</h1><p>Acompanhe seus resultados e edite registros.</p></div></section>
       {error && <p className="work-error" role="alert">{error}</p>}
@@ -237,9 +232,9 @@ export default function WorkScreen({ navigation }: {
         <div className="work-record-section-title"><h3>Custos do dia</h3></div>
         <div className="work-record-costs">{draft.costs.map((cost, index) => <div className={`work-record-cost-item${editingCostKey === cost.key ? " expanded" : ""}`} key={cost.key}>
           <button type="button" className="work-record-cost-summary" aria-expanded={editingCostKey === cost.key} onClick={() => setEditingCostKey((current) => current === cost.key ? null : cost.key)}>
-            <span className="work-record-cost-icon"><CostCategoryIcon category={cost.category} /></span><span className="work-record-cost-copy"><strong>{costLabels[cost.category]}</strong><small>{cost.description.trim() || "Custo do dia"}</small></span><b>{currency(numberFromInput(cost.amount))}</b><span className="work-record-cost-chevron" aria-hidden="true">›</span>
+            <span className="work-record-cost-icon"><CostCategoryIcon category={cost.category} /></span><span className="work-record-cost-copy"><strong>{workCostCategoryLabels[cost.category]}</strong><small>{cost.description.trim() || "Custo do dia"}</small></span><b>{currency(numberFromInput(cost.amount))}</b><span className="work-record-cost-chevron" aria-hidden="true">›</span>
           </button>
-          {editingCostKey === cost.key && <div className="work-record-cost-fields"><CostCategoryGrid value={cost.category} onChange={(category) => setDraft({ ...draft, costs: draft.costs.map((current, i) => i === index ? { ...current, category } : current) })} />
+          {editingCostKey === cost.key && <div className="work-record-cost-fields"><div className="work-cost-category"><span>Categoria</span><CostCategoryGrid value={cost.category} ariaLabel="Categoria do custo" onChange={(category) => setDraft({ ...draft, costs: draft.costs.map((current, i) => i === index ? { ...current, category } : current) })} /></div>
             <MoneyField label="Valor" value={cost.amount} onChange={(amount) => setDraft({ ...draft, costs: draft.costs.map((current, i) => i === index ? { ...current, amount } : current) })} />
             <label className="work-field"><span>Descrição (opcional)</span><input maxLength={160} placeholder="Ex.: Abastecimento no posto" value={cost.description} onChange={(event) => setDraft({ ...draft, costs: draft.costs.map((current, i) => i === index ? { ...current, description: event.target.value } : current) })} /></label>
             <button type="button" className="work-record-cost-remove" onClick={() => { setDraft({ ...draft, costs: draft.costs.filter((_, i) => i !== index) }); setEditingCostKey(null); }}>× <span>Remover custo</span></button></div>}
@@ -256,16 +251,4 @@ export default function WorkScreen({ navigation }: {
 function DateBadge({ date }: { date: string }) { return <span className="work-day-date"><b>{String(parseDate(date).getDate()).padStart(2, "0")}</b><small>{new Intl.DateTimeFormat("pt-BR", { weekday: "short" }).format(parseDate(date)).replace(".", "")}</small></span>; }
 function MoneyField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="work-field"><span>{label}</span><div className="work-money-input"><b>R$</b><input inputMode="numeric" placeholder="0,00" value={value} onChange={(event) => onChange(inputMoney(event.target.value))} /></div></label>; }
 function BrandedMoneyField({ label, logo, value, onChange }: { label: string; logo: string; value: string; onChange: (value: string) => void }) { return <label className="work-branded-money"><span>{label}</span><div><span className="work-branded-logo"><Image src={logo} alt="" width={96} height={96} /></span><span className="work-branded-input"><b>R$</b><input inputMode="numeric" placeholder="0,00" value={value} onChange={(event) => onChange(inputMoney(event.target.value))} /></span></div></label>; }
-function CostCategoryIcon({ category }: { category: ApiWorkCostCategory }) {
-  const paths: Record<ApiWorkCostCategory, ReactNode> = {
-    FUEL: <><path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16" /><path d="M3 21h13M7 7h5v4H7zM15 8h2l2 2v7a1.5 1.5 0 0 0 3 0v-5l-2-2" /></>,
-    MAINTENANCE: <><path d="M14.5 6.5a4 4 0 0 0-5-5L7 4l3 3 2.5-2.5a4 4 0 0 0 2 5L6 18l-1 3 3-1 8.5-8.5a4 4 0 0 0 5-5L19 9l-3-3 2.5-2.5" /></>,
-    TOLL: <><circle cx="7" cy="16" r="3" /><circle cx="12" cy="11" r="3" /><circle cx="17" cy="6" r="3" /></>,
-    WASH: <><path d="M12 2C9 7 6 10 6 14a6 6 0 0 0 12 0c0-4-3-7-6-12Z" /><path d="M9.5 16.5c.8 1.2 2 1.7 3.5 1.4" /></>,
-    FOOD: <><path d="M6 3v7M9 3v7M6 7h3M7.5 10v11" /><path d="M15.5 3v18M15.5 3c3 2 3.2 7 0 9" /></>,
-    OTHER: <><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none" /></>,
-  };
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[category]}</svg>;
-}
-function CostCategoryGrid({ value, onChange }: { value: ApiWorkCostCategory; onChange: (value: ApiWorkCostCategory) => void }) { return <div className="work-cost-category"><span>Categoria</span><div className="cost-category-grid" role="listbox" aria-label="Categoria do custo">{(Object.keys(costLabels) as ApiWorkCostCategory[]).map((category) => <button type="button" role="option" aria-selected={category === value} className={category === value ? "selected" : ""} key={category} onClick={() => onChange(category)}><CostCategoryIcon category={category} /><span>{costLabels[category]}</span></button>)}</div></div>; }
 function ModalBackdrop({ children, onClose }: { children: ReactNode; onClose: () => void }) { return <div className="work-sheet-backdrop" role="presentation" onMouseDown={onClose}>{children}</div>; }
