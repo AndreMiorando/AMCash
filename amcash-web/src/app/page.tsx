@@ -2453,6 +2453,36 @@ type HomeCostDraft = {
   description: string;
 };
 
+type HomeEarningDraft = {
+  key: string;
+  source: string;
+  amount: string;
+};
+
+function homeWorkSignature({
+  uber,
+  ninetyNine,
+  kilometers,
+  additionalEarnings,
+  costs,
+}: {
+  uber: string;
+  ninetyNine: string;
+  kilometers: string;
+  additionalEarnings: HomeEarningDraft[];
+  costs: HomeCostDraft[];
+}) {
+  return JSON.stringify({
+    uber,
+    ninetyNine,
+    kilometers,
+    additionalEarnings: additionalEarnings.map(({ source, amount }) => ({ source, amount })),
+    costs: costs
+      .filter((item) => item.id || (parseCurrencyInput(item.amount) || 0) > 0)
+      .map(({ id, category, amount, description }) => ({ id: id ?? null, category, amount, description })),
+  });
+}
+
 const usageProfileLabels: Record<ApiUsageProfile, string> = {
   PERSONAL: "Uso pessoal",
   RIDE_DRIVER: "Motorista de aplicativo",
@@ -2544,8 +2574,10 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   const [workOverview, setWorkOverview] = useState<ApiWorkOverview | null>(null);
   const [uber, setUber] = useState("");
   const [ninetyNine, setNinetyNine] = useState("");
+  const [additionalEarnings, setAdditionalEarnings] = useState<HomeEarningDraft[]>([]);
   const [kilometers, setKilometers] = useState("");
   const [homeCosts, setHomeCosts] = useState<HomeCostDraft[]>([]);
+  const [initialWorkSignature, setInitialWorkSignature] = useState("");
   const [openCostKey, setOpenCostKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -2567,11 +2599,15 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
       setWorkOverview(work);
       if (!work) return;
       const day = work.days.find((item) => item.date === today);
+      const uberEarning = day?.earnings.find((item) => item.source.toLowerCase() === "uber");
+      const ninetyNineEarning = day?.earnings.find((item) => item.source === "99");
       const savedHomeCosts = work.costs.filter((item) => item.description === legacyHomeCostDescription || item.description?.startsWith(homeCostPrefix));
-      setUber(maskCurrencyInput(String(Math.round(Number(day?.earnings.find((item) => item.source.toLowerCase() === "uber")?.amount ?? 0) * 100))));
-      setNinetyNine(maskCurrencyInput(String(Math.round(Number(day?.earnings.find((item) => item.source === "99")?.amount ?? 0) * 100))));
-      setKilometers(Number(day?.kilometers ?? 0) > 0 ? String(Number(day?.kilometers)).replace(".", ",") : "");
-      setHomeCosts(savedHomeCosts.length ? savedHomeCosts.map((item) => {
+      const nextUber = maskCurrencyInput(String(Math.round(Number(uberEarning?.amount ?? 0) * 100)));
+      const nextNinetyNine = maskCurrencyInput(String(Math.round(Number(ninetyNineEarning?.amount ?? 0) * 100)));
+      const nextAdditionalEarnings = day?.earnings.filter((item) => item !== uberEarning && item !== ninetyNineEarning)
+        .map((item) => ({ key: crypto.randomUUID(), source: item.source, amount: maskCurrencyInput(String(Math.round(Number(item.amount) * 100))) })) ?? [];
+      const nextKilometers = Number(day?.kilometers ?? 0) > 0 ? String(Number(day?.kilometers)).replace(".", ",") : "";
+      const nextHomeCosts = savedHomeCosts.length ? savedHomeCosts.map((item) => {
         const storedDescription = item.description?.startsWith(homeCostPrefix) ? item.description.slice(homeCostPrefix.length) : "";
         return {
           key: item.id,
@@ -2580,7 +2616,13 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
           amount: maskCurrencyInput(String(Math.round(Number(item.amount) * 100))),
           description: storedDescription === workCostCategoryLabels[item.category] ? "" : storedDescription,
         };
-      }) : []);
+      }) : [];
+      setUber(nextUber);
+      setNinetyNine(nextNinetyNine);
+      setAdditionalEarnings(nextAdditionalEarnings);
+      setKilometers(nextKilometers);
+      setHomeCosts(nextHomeCosts);
+      setInitialWorkSignature(homeWorkSignature({ uber: nextUber, ninetyNine: nextNinetyNine, kilometers: nextKilometers, additionalEarnings: nextAdditionalEarnings, costs: nextHomeCosts }));
       setOpenCostKey(null);
     } catch (requestError) {
       setError(messageFromError(requestError));
@@ -2600,19 +2642,17 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   const dateLabel = rawDateLabel.charAt(0).toLocaleUpperCase("pt-BR") + rawDateLabel.slice(1);
   const uberValue = parseCurrencyInput(uber) || 0;
   const ninetyNineValue = parseCurrencyInput(ninetyNine) || 0;
+  const additionalEarningsValue = additionalEarnings.reduce((total, item) => total + (parseCurrencyInput(item.amount) || 0), 0);
   const kilometersValue = parseDecimalInput(kilometers);
   const costValue = homeCosts.reduce((total, item) => total + (parseCurrencyInput(item.amount) || 0), 0);
-  const netValue = uberValue + ninetyNineValue - costValue;
+  const projectedGrossEarnings = uberValue + ninetyNineValue + additionalEarningsValue;
+  const netValue = projectedGrossEarnings - costValue;
   const savedDay = workOverview?.days.find((item) => item.date === today);
-  const savedHomeEarnings = savedDay?.earnings
-    .filter((item) => item.source.toLowerCase() === "uber" || item.source === "99")
-    .reduce((total, item) => total + Number(item.amount), 0) ?? 0;
-  const earningsOutsideHomeFields = Math.max(0, Number(savedDay?.grossEarnings ?? 0) - savedHomeEarnings);
-  const projectedGrossEarnings = earningsOutsideHomeFields + uberValue + ninetyNineValue;
+  const savedEditableEarnings = savedDay?.earnings.reduce((total, item) => total + Number(item.amount), 0) ?? 0;
   const earningsPerKilometer = kilometersValue > 0 ? projectedGrossEarnings / kilometersValue : 0;
   const savedHomeCosts = workOverview?.costs.filter((item) => item.description === legacyHomeCostDescription || item.description?.startsWith(homeCostPrefix)) ?? [];
   const savedHomeCostTotal = savedHomeCosts.reduce((total, item) => total + Number(item.amount), 0);
-  const resultOutsideHomeFields = Number(workOverview?.summary.netEarnings ?? 0) - savedHomeEarnings + savedHomeCostTotal;
+  const resultOutsideHomeFields = Number(workOverview?.summary.netEarnings ?? 0) - savedEditableEarnings + savedHomeCostTotal;
   const projectedTodayNet = resultOutsideHomeFields + netValue;
   const todayResult = summary?.goal.type === "CUSTOM" ? projectedTodayNet : netValue;
   const dailyRemaining = Math.max(0, Number(summary?.goal.dailyTarget ?? 0)
@@ -2622,6 +2662,8 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
     ? Math.min(100, Math.max(0, Math.round((Math.max(0, todayResult) / dailyTarget) * 100)))
     : 0;
   const showEmptyState = summary?.goal.type === "EXPENSES" && summary.hasFinancialEntries === false;
+  const additionalEarningsAreValid = additionalEarnings.every((item) => item.source.trim().length > 0 && (parseCurrencyInput(item.amount) || 0) > 0);
+  const hasWorkChanges = initialWorkSignature !== "" && initialWorkSignature !== homeWorkSignature({ uber, ninetyNine, kilometers, additionalEarnings, costs: homeCosts });
 
   function updateHomeCost(key: string, changes: Partial<Pick<HomeCostDraft, "category" | "amount" | "description">>) {
     setHomeCosts((current) => current.map((item) => item.key === key ? { ...item, ...changes } : item));
@@ -2638,22 +2680,26 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
     setHomeCosts((current) => current.filter((item) => item.key !== key));
   }
 
+  function updateAdditionalEarning(index: number, changes: Partial<HomeEarningDraft>) {
+    setAdditionalEarnings((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...changes } : item));
+  }
+
   async function saveDailyResult() {
-    if (!summary || saving) return;
+    if (!summary || saving || !hasWorkChanges || !additionalEarningsAreValid) return;
+    const additional = additionalEarnings.filter((item) => item.source.trim() || item.amount);
+    if (additional.some((item) => !item.source.trim())) {
+      setError("Informe o nome de cada fonte adicional.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
-      const day = workOverview?.days.find((item) => item.date === today);
-      const preservedEarnings = day?.earnings.filter((item) => {
-        const source = item.source.toLowerCase();
-        return source !== "uber" && item.source !== "99";
-      }).map((item) => ({ source: item.source, amount: Number(item.amount) })) ?? [];
       await financeApi.saveWorkDay(today, {
         kilometers: kilometersValue,
         earnings: [
           { source: "Uber", amount: uberValue },
           { source: "99", amount: ninetyNineValue },
-          ...preservedEarnings,
+          ...additional.map((item) => ({ source: item.source.trim(), amount: parseCurrencyInput(item.amount) || 0 })),
         ],
       });
 
@@ -2706,9 +2752,8 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
             </> : <>
               <div className="daily-goal-title"><span><Icon name="target" />META DE HOJE</span>{summary.goal.type === "CUSTOM" && <small>{summary.goal.name}</small>}</div>
               <div className="daily-goal-values"><strong>{formatCurrency(dailyTarget)}</strong><div><Icon name="clock" /><span><small>Faltam</small><b>{formatCurrency(dailyRemaining)}</b></span></div></div>
-              <div className="daily-goal-progress-label"><span>Resultado líquido: <b className={todayResult < 0 ? "negative" : ""}>{todayResult < 0 ? "- " : ""}{formatCurrency(todayResult)}</b></span><strong>{dailyProgress}%</strong></div>
+              <div className="daily-goal-progress-label"><strong>{dailyProgress}%</strong></div>
               <div className="daily-progress-track" aria-label={`${dailyProgress}% da meta de hoje`}><i style={{ width: `${dailyProgress}%` }} /></div>
-              <p>{dailyProgress >= 100 ? "Meta de hoje alcançada. Excelente trabalho!" : dailyProgress > 0 ? `Continue assim: você já alcançou ${dailyProgress}% da meta de hoje.` : "Registre seu faturamento para acompanhar o progresso de hoje."}</p>
             </>}
           </section>
 
@@ -2716,14 +2761,16 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
           <section className="home-today-summary" aria-label="Resumo do trabalho de hoje">
             <article><span>FATURAMENTO HOJE</span><strong>{formatCurrency(projectedGrossEarnings)}</strong></article>
             <article><span>RESULTADO LÍQUIDO</span><strong className={projectedTodayNet < 0 ? "negative" : ""}>{projectedTodayNet < 0 ? "- " : ""}{formatCurrency(projectedTodayNet)}</strong></article>
+            <article><span>FATURAMENTO POR KM</span><strong>{kilometersValue > 0 ? formatCurrency(earningsPerKilometer) : "—"}</strong></article>
           </section>
           <section className="home-quick-entry" aria-label="Meu trabalho hoje">
             <div className="home-work-card-heading"><div><span>TRABALHO DE HOJE</span><h2>Meu trabalho hoje</h2></div><small>Edite os valores diretamente</small></div>
             <div className="home-work-fields">
+              <label><span className="home-work-source logo metric-logo"><Image src="/road-icon.png" alt="" width={1254} height={1254} /></span><span>Quilômetros rodados</span><div><b>km</b><input aria-label="Quilômetros rodados" value={kilometers} onChange={(event) => setKilometers(maskDecimalInput(event.target.value))} placeholder="0" inputMode="decimal" /></div></label>
               <label><span className="home-work-source uber logo"><Image src="/uber-logo.jpeg" alt="" width={768} height={512} /></span><span>Uber</span><div><b>R$</b><input aria-label="Faturamento Uber" value={uber} onChange={(event) => setUber(maskCurrencyInput(event.target.value))} placeholder="0,00" inputMode="numeric" /></div></label>
               <label><span className="home-work-source ninety-nine logo"><Image src="/99-logo.png" alt="" width={1600} height={1600} /></span><span>99</span><div><b>R$</b><input aria-label="Faturamento 99" value={ninetyNine} onChange={(event) => setNinetyNine(maskCurrencyInput(event.target.value))} placeholder="0,00" inputMode="numeric" /></div></label>
-              <label><span className="home-work-source logo metric-logo"><Image src="/road-icon.png" alt="" width={1254} height={1254} /></span><span>Quilômetros rodados</span><div><input aria-label="Quilômetros rodados" value={kilometers} onChange={(event) => setKilometers(maskDecimalInput(event.target.value))} placeholder="0" inputMode="decimal" /><b>km</b></div></label>
-              <div className="home-work-per-km"><span className="home-work-source logo metric-logo"><Image src="/earnings-per-km-icon.png" alt="" width={1254} height={1254} /></span><span>Faturamento por km</span><strong>{kilometersValue > 0 ? formatCurrency(earningsPerKilometer) : "—"}</strong></div>
+              {additionalEarnings.map((item, index) => <div className="home-additional-source-row" key={item.key}><span className="home-work-source additional"><Icon name="wallet" /></span><span className="home-additional-source-copy"><input className="home-additional-source-name" maxLength={30} aria-label={`Nome da fonte adicional ${index + 1}`} value={item.source} onChange={(event) => updateAdditionalEarning(index, { source: event.target.value })} placeholder="Fonte adicional" /><button type="button" aria-label={`Remover fonte adicional ${index + 1}`} onClick={() => setAdditionalEarnings((current) => current.filter((_, itemIndex) => itemIndex !== index))}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 10v6M14 10v6" /></svg></button></span><div><b>R$</b><input aria-label={`Valor da fonte adicional ${index + 1}`} value={item.amount} onChange={(event) => updateAdditionalEarning(index, { amount: maskCurrencyInput(event.target.value) })} placeholder="0,00" inputMode="numeric" /></div></div>)}
+              <button type="button" className="home-add-source" onClick={() => setAdditionalEarnings((current) => [...current, { key: crypto.randomUUID(), source: "", amount: "" }])}><Icon name="plus" />Adicionar outra fonte</button>
             </div>
             <div className="home-costs-block">
               <div className="home-costs-heading"><div><span>CUSTOS DE HOJE</span><small>Combustível, alimentação e outros gastos</small></div></div>
@@ -2742,7 +2789,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
               </div>
               <button type="button" className="home-add-cost" onClick={addHomeCost}><Icon name="plus" />Adicionar custo</button>
             </div>
-            <button type="button" disabled={saving} onClick={() => void saveDailyResult()}>{saving ? "Atualizando..." : "Atualizar trabalho de hoje"}</button>
+            <button type="button" disabled={saving || !hasWorkChanges || !additionalEarningsAreValid} onClick={() => void saveDailyResult()}>{saving ? "Atualizando..." : "Atualizar trabalho de hoje"}</button>
           </section>
           </>}
           </>}
