@@ -95,7 +95,7 @@ public class EntryService {
                             .map(SubexpenseRequest::amount)
                             .reduce(BigDecimal.ZERO, BigDecimal::add)
                     : request.amount();
-            entries.add(new FinancialEntry(
+            FinancialEntry entry = new FinancialEntry(
                     user,
                     detailedExpense
                             ? request.name().trim()
@@ -111,7 +111,11 @@ public class EntryService {
                     index,
                     seriesId,
                     detailedExpense
-            ));
+            );
+            entry.updatePaymentDetails(
+                    request.paymentMethod(),
+                    request.notes());
+            entries.add(entry);
         }
 
         List<FinancialEntry> savedEntries = entryRepository.saveAll(entries);
@@ -366,6 +370,8 @@ public class EntryService {
                     selectedEntry.getRecurrenceIndex(),
                     selectedEntry.getSeriesId(),
                     false);
+            selectedEntry.updatePaymentDetails(
+                    request.paymentMethod(), request.notes());
             return toResponse(entryRepository.save(selectedEntry));
         }
 
@@ -395,6 +401,8 @@ public class EntryService {
                     0,
                     null,
                     request.type() == EntryType.EXPENSE && request.hasSubexpenses());
+            selectedEntry.updatePaymentDetails(
+                    request.paymentMethod(), request.notes());
             return toResponse(entryRepository.save(selectedEntry));
         }
 
@@ -443,6 +451,8 @@ public class EntryService {
                         index,
                         seriesId,
                         request.type() == EntryType.EXPENSE && request.hasSubexpenses());
+                occurrence.updatePaymentDetails(
+                        request.paymentMethod(), request.notes());
                 changed.add(occurrence);
             } else {
                 FinancialEntry created = new FinancialEntry(
@@ -457,6 +467,8 @@ public class EntryService {
                         index,
                         seriesId,
                         request.type() == EntryType.EXPENSE && request.hasSubexpenses());
+                created.updatePaymentDetails(
+                        request.paymentMethod(), request.notes());
                 series.add(created);
                 changed.add(created);
             }
@@ -497,6 +509,8 @@ public class EntryService {
                     entry.getRecurrenceIndex(),
                     entry.getSeriesId(),
                     true);
+            entry.updatePaymentDetails(
+                    request.paymentMethod(), request.notes());
         }
 
         entryRepository.saveAll(affected);
@@ -765,7 +779,7 @@ public class EntryService {
         for (LocalDate occurrenceDate : occurrenceDates) {
             boolean exists = series.stream().anyMatch(entry -> entry.getDueDate().equals(occurrenceDate));
             if (!exists) {
-                series.add(new FinancialEntry(
+                FinancialEntry created = new FinancialEntry(
                         selectedEntry.getUser(),
                         name,
                         selectedEntry.getCategory(),
@@ -776,7 +790,11 @@ public class EntryService {
                         selectedEntry.getRecurrenceCount(),
                         0,
                         seriesId,
-                        true));
+                        true);
+                created.updatePaymentDetails(
+                        selectedEntry.getPaymentMethod(),
+                        selectedEntry.getNotes());
+                series.add(created);
             }
         }
 
@@ -794,6 +812,9 @@ public class EntryService {
                     index,
                     seriesId,
                     true);
+            parent.updatePaymentDetails(
+                    selectedEntry.getPaymentMethod(),
+                    selectedEntry.getNotes());
         }
         entryRepository.saveAll(series);
 
@@ -922,6 +943,8 @@ public class EntryService {
                 completed,
                 subexpenses.size(),
                 subexpenses,
+                entry.getPaymentMethod(),
+                entry.getNotes(),
                 entry.getCreatedAt(),
                 entry.getUpdatedAt()
         );

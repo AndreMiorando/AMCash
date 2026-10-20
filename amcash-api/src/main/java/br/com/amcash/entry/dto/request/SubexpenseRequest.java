@@ -14,7 +14,7 @@ import java.math.BigDecimal;
 
 public record SubexpenseRequest(
         @NotBlank(message = "A descrição é obrigatória")
-        @Size(max = 160, message = "A descrição deve ter no máximo 160 caracteres")
+        @Size(max = 40, message = "A descrição deve ter no máximo 40 caracteres")
         String name,
 
         @NotNull(message = "O valor é obrigatório")

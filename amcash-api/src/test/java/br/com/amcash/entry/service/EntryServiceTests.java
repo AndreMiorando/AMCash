@@ -8,6 +8,7 @@ import br.com.amcash.entry.dto.response.MonthlyEntriesResponse;
 import br.com.amcash.entry.entity.EntryType;
 import br.com.amcash.entry.entity.EntryCategory;
 import br.com.amcash.entry.entity.FinancialEntry;
+import br.com.amcash.entry.entity.PaymentMethod;
 import br.com.amcash.entry.entity.RecurrenceFrequency;
 import br.com.amcash.entry.entity.SeriesScope;
 import br.com.amcash.entry.entity.Subexpense;
@@ -103,6 +104,28 @@ class EntryServiceTests {
         verify(subexpenseRepository).findAllByEntryIdInOrderByEntryIdAscCreatedAtAsc(any());
         verify(entryRepository).summarizeSeries(org.mockito.ArgumentMatchers.eq(userId), any());
         verify(subexpenseRepository, never()).findAllByEntryIdOrderByCreatedAtAsc(any());
+    }
+
+    @Test
+    void shouldPersistPaymentDetailsAndNotesOnCreatedEntries() {
+        UUID userId = UUID.randomUUID();
+        User user = user(userId);
+        CreateEntryRequest request = new CreateEntryRequest(
+                "Fatura Nubank", EntryCategory.FINANCIAL, EntryType.EXPENSE, new BigDecimal("250.00"),
+                LocalDate.of(2026, 10, 20), RecurrenceFrequency.NONE, 0, false, List.of(),
+                PaymentMethod.CREDIT_CARD, "Compras do mês");
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(entryRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<FinancialEntry> entries = invocation.getArgument(0);
+            entries.forEach(entry -> entry.setId(UUID.randomUUID()));
+            return entries;
+        });
+
+        CreatedEntriesResponse response = entryService.create(userId, request);
+
+        assertEquals(PaymentMethod.CREDIT_CARD, response.entries().get(0).paymentMethod());
+        assertEquals("Compras do mês", response.entries().get(0).notes());
     }
 
     @Test

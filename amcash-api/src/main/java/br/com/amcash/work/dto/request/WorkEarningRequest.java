@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 
 public record WorkEarningRequest(
         @NotBlank(message = "Informe a fonte do faturamento")
-        @Size(max = 80, message = "A fonte deve ter no máximo 80 caracteres")
+        @Size(max = 30, message = "A fonte deve ter no máximo 30 caracteres")
         String source,
 
         @NotNull(message = "Informe o valor faturado")

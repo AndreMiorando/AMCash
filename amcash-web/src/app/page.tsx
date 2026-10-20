@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Script from "next/script";
-import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ApiEntry,
   ApiEntryCategory,
@@ -13,6 +13,7 @@ import {
   ApiCustomGoalPeriod,
   ApiPrimaryGoalType,
   ApiHome,
+  ApiPaymentMethod,
   ApiWorkCostCategory,
   ApiWorkOverview,
   ApiRecurrenceFrequency,
@@ -22,6 +23,8 @@ import {
   financeApi,
 } from "@/lib/api";
 import WorkScreen from "@/app/components/WorkScreen";
+import AppHeader from "@/app/components/AppHeader";
+import { CostCategoryGrid, CostCategoryIcon, workCostCategoryLabels } from "@/app/components/CostCategoryGrid";
 
 type GoogleCredentialResponse = {
   credential?: string;
@@ -128,6 +131,8 @@ type Transaction = {
   paidOccurrences: number;
   totalOccurrences: number;
   subexpenses: Subexpense[];
+  paymentMethod: ApiPaymentMethod | null;
+  notes: string;
 };
 
 type TransactionGroup = {
@@ -146,7 +151,20 @@ type NewTransaction = {
   recurrenceCount: number;
   hasSubexpenses: boolean;
   items: { name: string; value: number; recurrenceFrequency: RecurrenceFrequency; recurrenceCount: number }[];
+  paymentMethod: ApiPaymentMethod | null;
+  notes: string;
 };
+
+const expensePaymentMethods: { value: ApiPaymentMethod; label: string }[] = [
+  { value: "CASH", label: "Dinheiro" },
+  { value: "PIX", label: "Pix" },
+  { value: "DEBIT_CARD", label: "Cartão de débito" },
+  { value: "CREDIT_CARD", label: "Cartão de crédito" },
+  { value: "BANK_TRANSFER", label: "Transferência bancária" },
+  { value: "OTHER", label: "Outra" },
+];
+
+const incomePaymentMethods = expensePaymentMethods.filter(({ value }) => value !== "DEBIT_CARD" && value !== "CREDIT_CARD");
 
 type Subexpense = {
   id: string;
@@ -222,7 +240,7 @@ function BottomNavigation({ active, onHome, onFinance, onRadar, onGoals, onWork,
       </button>}
       <button type="button" className={`nav-item${active === "radar" ? " active" : ""}`} onClick={onRadar} aria-current={active === "radar" ? "page" : undefined}>
         <Icon name="radar" />
-        <span>Radar</span>
+        <span>Projeção</span>
       </button>
     </nav>
   );
@@ -273,6 +291,10 @@ function maskCurrencyInput(value: string) {
   const decimal = padded.slice(-2);
 
   return `${integer},${decimal}`;
+}
+
+function maskRepetitionCount(value: string) {
+  return value.replace(/\D/g, "").slice(0, 3);
 }
 
 function completeCurrencyInput(value: string) {
@@ -378,6 +400,8 @@ function mapEntries(entries: ApiEntry[]) {
       paidOccurrences: entry.paidOccurrences,
       totalOccurrences: entry.totalOccurrences,
       subexpenses: entry.subexpenses.map(mapSubexpense),
+      paymentMethod: entry.paymentMethod ?? null,
+      notes: entry.notes ?? "",
     };
   });
 }
@@ -409,7 +433,18 @@ function CategoryPickerInput({
   onChange: (value: ApiEntryCategory) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const selectedLabel = options.find((option) => option.value === value)?.label;
+  const income = options === incomeCategories;
+  const normalizedQuery = query.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").trim();
+  const filteredOptions = normalizedQuery
+    ? options.filter((option) => option.label.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").includes(normalizedQuery))
+    : options;
+
+  function closePicker() {
+    setQuery("");
+    setIsOpen(false);
+  }
 
   return (
     <div className="field full-field category-field">
@@ -421,34 +456,92 @@ function CategoryPickerInput({
         aria-haspopup="dialog"
         aria-expanded={isOpen}
       >
-        <span>{selectedLabel ?? "Selecione uma categoria"}</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
+        <span className="category-input-content">
+          {value && <span className="category-option-icon"><Icon name={iconForCategory(value, income)} /></span>}
+          <span>{selectedLabel ?? "Selecione uma categoria"}</span>
+        </span>
+        <Icon name="forward" />
       </button>
 
       {isOpen && (
-        <div className="category-picker-backdrop" role="presentation" onMouseDown={() => setIsOpen(false)}>
-          <section className="category-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="category-picker-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="category-picker-backdrop" role="presentation">
+          <section className="category-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="category-picker-title">
             <div className="category-picker-heading">
-              <div><span>CATEGORIA</span><h2 id="category-picker-title">Selecionar categoria</h2></div>
-              <button type="button" onClick={() => setIsOpen(false)} aria-label="Fechar">×</button>
+              <button type="button" onClick={closePicker} aria-label="Voltar"><Icon name="back" /></button>
+              <h2 id="category-picker-title">Selecionar categoria</h2>
             </div>
+            <label className="category-picker-search">
+              <Icon name="search" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar categoria..." autoFocus />
+              {query && <button type="button" onClick={() => setQuery("")} aria-label="Limpar busca">×</button>}
+            </label>
             <div className="category-picker-options">
-              {options.map((option) => (
+              {filteredOptions.map((option) => (
                 <button
                   type="button"
                   key={option.value}
                   className={value === option.value ? "selected" : ""}
-                  onClick={() => { onChange(option.value); setIsOpen(false); }}
+                  onClick={() => { onChange(option.value); closePicker(); }}
                   aria-pressed={value === option.value}
                 >
-                  {option.label}
-                  {value === option.value && <Icon name="check" />}
+                  <span className="category-option-icon"><Icon name={iconForCategory(option.value, income)} /></span>
+                  <span>{option.label}</span>
+                  <Icon name={value === option.value ? "check" : "forward"} />
                 </button>
               ))}
+              {filteredOptions.length === 0 && <p className="category-picker-empty">Nenhuma categoria encontrada.</p>}
             </div>
           </section>
         </div>
       )}
+    </div>
+  );
+}
+
+function PaymentMethodPickerInput({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: ApiPaymentMethod | "";
+  options: { value: ApiPaymentMethod; label: string }[];
+  onChange: (value: ApiPaymentMethod | "") => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const selectedLabel = options.find((option) => option.value === value)?.label;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    function closeOnOutsideClick(event: MouseEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) setIsOpen(false);
+    }
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    return () => document.removeEventListener("mousedown", closeOnOutsideClick);
+  }, [isOpen]);
+
+  return (
+    <div className="field full-field transaction-method-field" ref={containerRef}>
+      <span>{label}</span>
+      <div className="payment-picker-control">
+        <button type="button" className={`category-input-button${value ? "" : " placeholder"}`} onClick={() => setIsOpen((current) => !current)} aria-haspopup="listbox" aria-expanded={isOpen}>
+          <span>{selectedLabel ?? "Selecione uma opção"}</span>
+          <Icon name="forward" />
+        </button>
+        {isOpen && (
+          <div className="payment-method-options" role="listbox" aria-label={label}>
+            {options.map((option) => (
+              <button type="button" role="option" aria-selected={option.value === value} className={option.value === value ? "selected" : ""} key={option.value} onClick={() => { onChange(option.value); setIsOpen(false); }}>
+                <span>{option.label}</span>
+                {option.value === value && <Icon name="check" />}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <small className="field-hint">Informação registrada apenas para consulta e auditoria.</small>
     </div>
   );
 }
@@ -676,26 +769,32 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: Authenticated
 
 function CreateTransactionSheet({
   defaultDate,
+  initialType,
   onClose,
   onCreate,
 }: {
   defaultDate: string;
+  initialType: "expense" | "income";
   onClose: () => void;
   onCreate: (transaction: NewTransaction) => Promise<void>;
 }) {
   type DraftExpenseItem = { id: string; name: string; amount: string; recurrenceFrequency: RecurrenceFrequency; recurrenceCount: string };
+  type LaunchType = "single" | "recurring";
 
-  const [type, setType] = useState<"expense" | "income">("expense");
+  const type = initialType;
   const [name, setName] = useState("");
   const [category, setCategory] = useState<ApiEntryCategory | "">("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(defaultDate);
+  const [launchType, setLaunchType] = useState<LaunchType>("single");
   const [recurrenceFrequency, setRecurrenceFrequency] = useState<RecurrenceFrequency>("none");
   const [recurrenceCount, setRecurrenceCount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<ApiPaymentMethod | "">("");
+  const [notes, setNotes] = useState("");
   const [hasSubexpenses, setHasSubexpenses] = useState(false);
   const [expenseItems, setExpenseItems] = useState<DraftExpenseItem[]>([]);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
-  const [discardAction, setDiscardAction] = useState<"disable" | "income" | null>(null);
+  const [discardAction, setDiscardAction] = useState<"disable" | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -722,8 +821,19 @@ function CreateTransactionSheet({
     setExpenseItems([]);
   }
 
+  function selectLaunchType(nextType: LaunchType) {
+    setLaunchType(nextType);
+    if (nextType === "single") {
+      setRecurrenceFrequency("none");
+      setRecurrenceCount("");
+      return;
+    }
+    if (recurrenceFrequency === "none") setRecurrenceFrequency("monthly");
+  }
+
   function toggleDetailedExpense(checked: boolean) {
     if (checked) {
+      setLaunchType("single");
       setRecurrenceFrequency("none");
       setRecurrenceCount("");
       setHasSubexpenses(true);
@@ -737,25 +847,9 @@ function CreateTransactionSheet({
     clearDetailedExpense();
   }
 
-  function selectType(nextType: "expense" | "income") {
-    if (nextType === type) return;
-    if (nextType === "income" && hasSubexpenses && hasFilledItems) {
-      setDiscardAction("income");
-      return;
-    }
-    if (nextType === "income") clearDetailedExpense();
-    setType(nextType);
-    setCategory("");
-  }
-
   function confirmDiscardItems() {
-    const action = discardAction;
     clearDetailedExpense();
     setDiscardAction(null);
-    if (action === "income") {
-      setType("income");
-      setCategory("");
-    }
   }
 
   function updateExpenseItem(id: string, field: "name" | "amount" | "recurrenceFrequency" | "recurrenceCount", value: string) {
@@ -791,6 +885,8 @@ function CreateTransactionSheet({
         recurrenceCount: recurrenceFrequency === "none" ? 0 : numericRecurrenceCount,
         hasSubexpenses: type === "expense" && hasSubexpenses,
         items: type === "expense" && hasSubexpenses ? parsedItems : [],
+        paymentMethod: paymentMethod || null,
+        notes: notes.trim(),
       });
     } catch (requestError) {
       setError(messageFromError(requestError));
@@ -799,31 +895,58 @@ function CreateTransactionSheet({
   }
 
   return (
-    <div className="sheet-backdrop create-transaction-backdrop" role="presentation" onMouseDown={onClose}>
-      <section className="subexpense-sheet create-transaction-sheet" role="dialog" aria-modal="true" aria-labelledby="create-transaction-title" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="sheet-handle" aria-hidden="true" />
+    <div className="create-transaction-screen">
+      <section className="subexpense-sheet create-transaction-sheet" aria-labelledby="create-transaction-title">
         <div className="sheet-heading create-sheet-heading">
-          <h2 id="create-transaction-title">Novo lançamento</h2>
+          <button type="button" className="create-sheet-back" onClick={onClose} aria-label="Voltar"><Icon name="back" /></button>
+          <h2 id="create-transaction-title"><span className={`create-sheet-icon ${type}`}><Icon name={type === "expense" ? "card" : "wallet"} /></span>{type === "expense" ? "Nova despesa" : "Nova receita"}</h2>
           <button type="button" className="sheet-close" onClick={onClose} aria-label="Fechar">×</button>
         </div>
 
         <form onSubmit={submit}>
-          <div className="type-switch" aria-label="Tipo do lançamento">
-            <button type="button" className={type === "expense" ? "active expense" : ""} onClick={() => selectType("expense")}><Icon name="card" /> Despesa</button>
-            <button type="button" className={type === "income" ? "active income" : ""} onClick={() => selectType("income")}><Icon name="wallet" /> Receita</button>
-          </div>
-
-          <label className="field full-field"><span>Descrição</span><input value={name} onChange={(event) => setName(event.target.value)} placeholder={type === "expense" ? "Ex.: Supermercado" : "Ex.: Salário"} /></label>
+          <label className="field full-field"><span>Descrição</span><input maxLength={40} value={name} onChange={(event) => setName(event.target.value)} placeholder={type === "expense" ? "Ex.: Supermercado" : "Ex.: Salário"} /></label>
           <CategoryPickerInput value={category} options={type === "expense" ? expenseCategories : incomeCategories} onChange={setCategory} />
 
+          <PaymentMethodPickerInput label={type === "expense" ? "Forma de pagamento (opcional)" : "Forma de recebimento (opcional)"} value={paymentMethod} options={type === "expense" ? expensePaymentMethods : incomePaymentMethods} onChange={setPaymentMethod} />
+
           {type === "expense" && (
-            <label className="paid-toggle subexpense-toggle detail-expense-toggle">
-              <input type="checkbox" checked={hasSubexpenses} onChange={(event) => toggleDetailedExpense(event.target.checked)} />
-              <span><b>Quero detalhar esta despesa</b><small>Adicione os itens que compõem o valor total.</small></span>
-            </label>
+            <button type="button" className={`detail-expense-selector${hasSubexpenses ? " active" : ""}`} onClick={() => toggleDetailedExpense(!hasSubexpenses)} aria-pressed={hasSubexpenses}>
+              <b>Detalhar esta despesa <small>(opcional)</small></b>
+              <span>Adicione os itens que compõem o valor total.</span>
+            </button>
           )}
 
-          {hasSubexpenses ? (
+          {!hasSubexpenses && (
+            <div className="field-grid">
+              <label className="field"><span>Valor</span><div className="currency-input"><b>R$</b><input value={amount} onChange={(event) => setAmount(maskCurrencyInput(event.target.value))} onBlur={() => setAmount(completeCurrencyInput(amount))} placeholder="0,00" inputMode="numeric" /></div></label>
+              <DatePickerInput label="Data" value={date} onChange={setDate} />
+            </div>
+          )}
+
+          {!hasSubexpenses && (
+            <section className="launch-type-section" aria-labelledby="launch-type-title">
+              <div className="launch-type-title" id="launch-type-title"><Icon name="clock" /> Tipo de lançamento</div>
+              <div className="launch-type-options">
+                <button type="button" className={launchType === "single" ? "active" : ""} onClick={() => selectLaunchType("single")}><b>Única</b><small>Um lançamento que acontece uma vez</small></button>
+                <button type="button" className={launchType === "recurring" ? "active" : ""} onClick={() => selectLaunchType("recurring")}><b>Recorrente</b><small>{type === "expense" ? "Contas que se repetem" : "Entradas que se repetem"}</small></button>
+              </div>
+              {launchType === "recurring" && (
+                <fieldset className="recurrence-choice launch-frequency">
+                  <legend>Frequência</legend>
+                  <div>
+                    {([["daily", "Diária"], ["weekly", "Semanal"], ["monthly", "Mensal"]] as [Exclude<RecurrenceFrequency, "none">, string][]).map(([frequency, label]) => (
+                      <button type="button" key={frequency} className={recurrenceFrequency === frequency ? "active" : ""} onClick={() => setRecurrenceFrequency(frequency)}>{label}</button>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
+              {launchType !== "single" && (
+                <label className="field recurrence-count"><span>Total de repetições (incluindo esta)</span><input type="text" inputMode="numeric" pattern="[0-9]*" value={recurrenceCount} placeholder="0" onChange={(event) => setRecurrenceCount(maskRepetitionCount(event.target.value))} /></label>
+              )}
+            </section>
+          )}
+
+          {hasSubexpenses && (
             <>
               <section className="expense-items-editor" aria-labelledby="expense-items-title">
                 <h3 id="expense-items-title">Itens da despesa</h3>
@@ -831,43 +954,15 @@ function CreateTransactionSheet({
                   {expenseItems.map((item, index) => (
                     <div className="expense-item-card" key={item.id}>
                       <div className="expense-item-row">
-                        <input
-                          className="expense-item-name"
-                          value={item.name}
-                          onChange={(event) => updateExpenseItem(item.id, "name", event.target.value)}
-                          placeholder="Descrição do item"
-                          aria-label={`Descrição do item ${index + 1}`}
-                          maxLength={160}
-                        />
-                        <div className="currency-input expense-item-amount">
-                          <b>R$</b>
-                          <input
-                            value={item.amount}
-                            onChange={(event) => updateExpenseItem(item.id, "amount", maskCurrencyInput(event.target.value))}
-                            onBlur={() => updateExpenseItem(item.id, "amount", completeCurrencyInput(item.amount))}
-                            placeholder="0,00"
-                            inputMode="numeric"
-                            aria-label={`Valor do item ${index + 1}`}
-                          />
-                        </div>
+                        <input className="expense-item-name" value={item.name} onChange={(event) => updateExpenseItem(item.id, "name", event.target.value)} placeholder="Descrição do item" aria-label={`Descrição do item ${index + 1}`} maxLength={40} />
+                        <div className="currency-input expense-item-amount"><b>R$</b><input value={item.amount} onChange={(event) => updateExpenseItem(item.id, "amount", maskCurrencyInput(event.target.value))} onBlur={() => updateExpenseItem(item.id, "amount", completeCurrencyInput(item.amount))} placeholder="0,00" inputMode="numeric" aria-label={`Valor do item ${index + 1}`} /></div>
                         <button type="button" className="expense-item-remove" onClick={() => removeExpenseItem(item.id)} aria-label={`Remover item ${index + 1}`}><Icon name="trash" /></button>
                       </div>
-                      <button type="button" className="expense-item-recurrence" onClick={() => setEditingItemId((current) => current === item.id ? null : item.id)} aria-expanded={editingItemId === item.id}>
-                        {itemRecurrenceSummary(item)}
-                      </button>
+                      <button type="button" className="expense-item-recurrence" onClick={() => setEditingItemId((current) => current === item.id ? null : item.id)} aria-expanded={editingItemId === item.id}>{itemRecurrenceSummary(item)}</button>
                       {editingItemId === item.id && (
                         <div className="item-recurrence-editor">
-                          <fieldset className="recurrence-choice">
-                            <legend>Repetição do item</legend>
-                            <div>
-                              {([["none", "Não repetir"], ["daily", "Diária"], ["weekly", "Semanal"], ["monthly", "Mensal"]] as [RecurrenceFrequency, string][]).map(([frequency, label]) => (
-                                <button type="button" key={frequency} className={item.recurrenceFrequency === frequency ? "active" : ""} onClick={() => updateExpenseItem(item.id, "recurrenceFrequency", frequency)}>{label}</button>
-                              ))}
-                            </div>
-                          </fieldset>
-                          {item.recurrenceFrequency !== "none" && (
-                            <label className="field recurrence-count"><span>Total de repetições (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={item.recurrenceCount} placeholder="0" onChange={(event) => updateExpenseItem(item.id, "recurrenceCount", event.target.value)} /></label>
-                          )}
+                          <fieldset className="recurrence-choice"><legend>Repetição do item</legend><div>{([["none", "Não repetir"], ["daily", "Diária"], ["weekly", "Semanal"], ["monthly", "Mensal"]] as [RecurrenceFrequency, string][]).map(([frequency, label]) => <button type="button" key={frequency} className={item.recurrenceFrequency === frequency ? "active" : ""} onClick={() => updateExpenseItem(item.id, "recurrenceFrequency", frequency)}>{label}</button>)}</div></fieldset>
+                          {item.recurrenceFrequency !== "none" && <label className="field recurrence-count"><span>Total de repetições (incluindo esta)</span><input type="text" inputMode="numeric" pattern="[0-9]*" value={item.recurrenceCount} placeholder="0" onChange={(event) => updateExpenseItem(item.id, "recurrenceCount", maskRepetitionCount(event.target.value))} /></label>}
                         </div>
                       )}
                     </div>
@@ -876,34 +971,11 @@ function CreateTransactionSheet({
                 <button type="button" className="add-expense-item" onClick={() => setExpenseItems((current) => [...current, createEmptyItem()])}><Icon name="plus" /> Adicionar item</button>
                 <div className="expense-items-total"><span>Total da despesa</span><strong>{formatCurrency(calculatedTotal)}</strong></div>
               </section>
-              <div className="field-grid field-grid--single">
-                <DatePickerInput label="Data" value={date} onChange={setDate} />
-              </div>
+              <div className="field-grid field-grid--single"><DatePickerInput label="Data" value={date} onChange={setDate} /></div>
             </>
-          ) : (
-            <div className="field-grid">
-              <label className="field"><span>Valor</span><div className="currency-input"><b>R$</b><input value={amount} onChange={(event) => setAmount(maskCurrencyInput(event.target.value))} onBlur={() => setAmount(completeCurrencyInput(amount))} placeholder="0,00" inputMode="numeric" /></div></label>
-              <DatePickerInput label="Data" value={date} onChange={setDate} />
-            </div>
           )}
 
-          {!hasSubexpenses && (
-            <>
-              <div className="recurrence-fields">
-                <fieldset className="recurrence-choice">
-                  <legend>Repetição</legend>
-                  <div>
-                    {([["none", "Não repetir"], ["daily", "Diária"], ["weekly", "Semanal"], ["monthly", "Mensal"]] as [RecurrenceFrequency, string][]).map(([frequency, label]) => (
-                      <button type="button" key={frequency} className={recurrenceFrequency === frequency ? "active" : ""} onClick={() => setRecurrenceFrequency(frequency)}>{label}</button>
-                    ))}
-                  </div>
-                </fieldset>
-              </div>
-              {recurrenceFrequency !== "none" && (
-                <label className="field recurrence-count"><span>Total de parcelas (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={recurrenceCount} placeholder="0" onChange={(event) => setRecurrenceCount(event.target.value)} /></label>
-              )}
-            </>
-          )}
+          <label className="field full-field transaction-notes"><span>Observações (opcional)</span><textarea maxLength={120} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Adicione um comentário..." /><small className="field-character-count">{notes.length}/120</small></label>
 
           {error && <p className="auth-error" role="alert">{error}</p>}
           <button type="submit" className={`primary-button create-transaction-submit${type === "income" ? " create-transaction-submit--income" : ""}`} disabled={!canSave || isSubmitting}><Icon name="plus" /> {isSubmitting ? "Adicionando..." : `Adicionar ${type === "expense" ? "despesa" : "receita"}`}</button>
@@ -1048,7 +1120,7 @@ function Dashboard({
     return new Date(initialPeriod.year, initialPeriod.month - 1, 1);
   });
   const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
-  const [isCreateOpen, setIsCreateOpen] = useState(initialCreateOpen);
+  const [createType, setCreateType] = useState<"expense" | "income" | null>(initialCreateOpen ? "expense" : null);
   const [pickerYear, setPickerYear] = useState(selectedMonth.getFullYear());
   const [pendingDelete, setPendingDelete] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -1156,13 +1228,12 @@ function Dashboard({
 
   return (
     <main className="dashboard-screen">
-      <header className="dashboard-header">
-        <div className="header-brand" aria-label="AMCash">
-          <Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority />
-          <span><b>AM</b>Cash</span>
+      <AppHeader>
+        <div className="header-create-actions">
+          <button type="button" className="header-add-button header-add-button--expense" disabled={isLoading} onClick={() => setCreateType("expense")} aria-label="Nova despesa" title="Nova despesa"><Icon name="card" /></button>
+          <button type="button" className="header-add-button header-add-button--income" disabled={isLoading} onClick={() => setCreateType("income")} aria-label="Nova receita" title="Nova receita"><Icon name="wallet" /></button>
         </div>
-        <button type="button" className="header-add-button" disabled={isLoading} onClick={() => setIsCreateOpen(true)} aria-label="Adicionar receita ou despesa"><Icon name="plus" /><span>Nova despesa</span></button>
-      </header>
+      </AppHeader>
 
       <section className="month-selector" aria-label="Período selecionado">
         <button type="button" className="month-arrow" onClick={() => changeMonth(-1)} aria-label={`Ir para ${periodFormatter.format(previousMonth)}`}><Icon name="back" /></button>
@@ -1267,11 +1338,12 @@ function Dashboard({
         </div>
       )}
 
-      {isCreateOpen && (
+      {createType && (
         <CreateTransactionSheet
           defaultDate={defaultDate}
-          onClose={() => setIsCreateOpen(false)}
-          onCreate={async (transaction) => { await onCreate(transaction); setIsCreateOpen(false); }}
+          initialType={createType}
+          onClose={() => setCreateType(null)}
+          onCreate={async (transaction) => { await onCreate(transaction); setCreateType(null); }}
         />
       )}
 
@@ -1312,6 +1384,7 @@ function SubexpenseEditor({
   onDelete: (id: string, scope: ApiSeriesScope) => Promise<void>;
 }) {
   const [draft, setDraft] = useState(item);
+  const recurrenceCountMemory = useRef(item.recurrenceCount >= 2 ? item.recurrenceCount : 0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [pendingAction, setPendingAction] = useState<"save" | "delete" | null>(null);
@@ -1389,7 +1462,7 @@ function SubexpenseEditor({
 
         <label className="field full-field">
           <span>Descrição</span>
-          <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Descrição do item" />
+          <input maxLength={40} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Descrição do item" />
         </label>
         <div className="field-grid field-grid--single">
           <label className="field">
@@ -1397,19 +1470,26 @@ function SubexpenseEditor({
             <div className="currency-input"><b>R$</b><input value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: maskCurrencyInput(event.target.value) })} onBlur={() => setDraft({ ...draft, amount: completeCurrencyInput(draft.amount) })} inputMode="numeric" /></div>
           </label>
         </div>
-        <div className="recurrence-fields item-editor-recurrence">
-          <fieldset className="recurrence-choice">
-            <legend>Repetição do item</legend>
-            <div>
-              {([["none", "Não repetir"], ["daily", "Diária"], ["weekly", "Semanal"], ["monthly", "Mensal"]] as [RecurrenceFrequency, string][]).map(([frequency, label]) => (
-                <button type="button" key={frequency} className={draft.recurrenceFrequency === frequency ? "active" : ""} onClick={() => setDraft({ ...draft, recurrenceFrequency: frequency })}>{label}</button>
-              ))}
-            </div>
-          </fieldset>
-        </div>
-        {draft.recurrenceFrequency !== "none" && (
-          <label className="field recurrence-count"><span>Total de repetições (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={draft.recurrenceCount || ""} placeholder="0" onChange={(event) => setDraft({ ...draft, recurrenceCount: Number(event.target.value) })} /></label>
-        )}
+        <section className="launch-type-section item-editor-recurrence" aria-labelledby="item-launch-type-title">
+          <div className="launch-type-title" id="item-launch-type-title"><Icon name="clock" /> Tipo de lançamento</div>
+          <div className="launch-type-options">
+            <button type="button" className={draft.recurrenceFrequency === "none" ? "active" : ""} onClick={() => setDraft((current) => ({ ...current, recurrenceFrequency: "none", recurrenceCount: 0 }))}><b>Única</b><small>Um lançamento que acontece uma vez</small></button>
+            <button type="button" className={draft.recurrenceFrequency !== "none" ? "active" : ""} onClick={() => setDraft((current) => ({ ...current, recurrenceFrequency: current.recurrenceFrequency === "none" ? "monthly" : current.recurrenceFrequency, recurrenceCount: current.recurrenceCount >= 2 ? current.recurrenceCount : recurrenceCountMemory.current }))}><b>Recorrente</b><small>Contas que se repetem</small></button>
+          </div>
+          {draft.recurrenceFrequency !== "none" && (
+            <fieldset className="recurrence-choice launch-frequency">
+              <legend>Frequência</legend>
+              <div>
+                {([["daily", "Diária"], ["weekly", "Semanal"], ["monthly", "Mensal"]] as [Exclude<RecurrenceFrequency, "none">, string][]).map(([frequency, label]) => (
+                  <button type="button" key={frequency} className={draft.recurrenceFrequency === frequency ? "active" : ""} onClick={() => setDraft((current) => ({ ...current, recurrenceFrequency: frequency, recurrenceCount: current.recurrenceCount >= 2 ? current.recurrenceCount : recurrenceCountMemory.current }))}>{label}</button>
+                ))}
+              </div>
+            </fieldset>
+          )}
+          {draft.recurrenceFrequency !== "none" && (
+            <label className="field recurrence-count"><span>Total de repetições (incluindo esta)</span><input type="text" inputMode="numeric" pattern="[0-9]*" value={draft.recurrenceCount || ""} placeholder="0" onChange={(event) => { const nextCount = Number(maskRepetitionCount(event.target.value)); if (nextCount >= 2) recurrenceCountMemory.current = nextCount; setDraft((current) => ({ ...current, recurrenceCount: nextCount })); }} /></label>
+          )}
+        </section>
         <label className="paid-toggle">
           <input type="checkbox" checked={draft.paid} onChange={(event) => setDraft({ ...draft, paid: event.target.checked })} />
           <span>Marcar como paga</span>
@@ -1454,6 +1534,9 @@ function DetailScreen({
   const [dueDate, setDueDate] = useState(transaction.date);
   const [recurrenceFrequency, setRecurrenceFrequency] = useState<RecurrenceFrequency>(transaction.recurrenceFrequency);
   const [recurrenceCount, setRecurrenceCount] = useState(String(transaction.recurrenceCount || 1));
+  const recurrenceCountMemory = useRef(String(transaction.recurrenceCount >= 2 ? transaction.recurrenceCount : ""));
+  const [paymentMethod, setPaymentMethod] = useState<ApiPaymentMethod | "">(transaction.paymentMethod ?? "");
+  const [notes, setNotes] = useState(transaction.notes);
   const [subexpenses, setSubexpenses] = useState<Subexpense[]>(transaction.subexpenses);
   const [editing, setEditing] = useState<Subexpense | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -1475,6 +1558,8 @@ function DetailScreen({
     || name.trim() !== transaction.name
     || category !== transaction.category
     || dueDate !== transaction.date
+    || paymentMethod !== (transaction.paymentMethod ?? "")
+    || notes.trim() !== transaction.notes
     || (!transaction.hasSubexpenses && (
       Math.round(numericAmount * 100) !== Math.round(transaction.value * 100)
       || recurrenceFrequency !== transaction.recurrenceFrequency
@@ -1506,6 +1591,8 @@ function DetailScreen({
         recurrenceFrequency: transaction.hasSubexpenses ? "NONE" : recurrenceToApi[recurrenceFrequency],
         recurrenceCount: transaction.hasSubexpenses || recurrenceFrequency === "none" ? 0 : numericRecurrenceCount,
         hasSubexpenses: type === "expense" && transaction.hasSubexpenses,
+        paymentMethod: paymentMethod || null,
+        notes: notes.trim() || null,
       }, scope);
       await onChanged();
       onBack();
@@ -1608,30 +1695,33 @@ function DetailScreen({
 
           <div className="type-switch" aria-label="Tipo do lançamento">
             <button type="button" className={type === "expense" ? "active expense" : ""} onClick={() => { setType("expense"); if (type !== "expense") setCategory(""); }}>Despesa</button>
-            <button type="button" className={type === "income" ? "active income" : ""} onClick={() => { setType("income"); if (type !== "income") setCategory(""); }}>Receita</button>
+            <button type="button" className={type === "income" ? "active income" : ""} onClick={() => { setType("income"); if (type !== "income") setCategory(""); if (paymentMethod === "DEBIT_CARD" || paymentMethod === "CREDIT_CARD") setPaymentMethod(""); }}>Receita</button>
           </div>
 
-          <label className="field full-field"><span>Descrição</span><input value={name} onChange={(event) => setName(event.target.value)} /></label>
+          <label className="field full-field"><span>Descrição</span><input maxLength={40} value={name} onChange={(event) => setName(event.target.value)} /></label>
           <CategoryPickerInput value={category} options={type === "expense" ? expenseCategories : incomeCategories} onChange={setCategory} />
+          <PaymentMethodPickerInput label={type === "expense" ? "Forma de pagamento (opcional)" : "Forma de recebimento (opcional)"} value={paymentMethod} options={type === "expense" ? expensePaymentMethods : incomePaymentMethods} onChange={setPaymentMethod} />
           <div className="field-grid">
             <label className="field"><span>Valor</span><div className="currency-input"><b>R$</b><input value={amount} onChange={(event) => setAmount(maskCurrencyInput(event.target.value))} onBlur={() => setAmount(completeCurrencyInput(amount))} inputMode="numeric" readOnly={transaction.hasSubexpenses} aria-readonly={transaction.hasSubexpenses} /></div></label>
             <DatePickerInput label="Vencimento" value={dueDate} onChange={setDueDate} />
           </div>
           {!transaction.hasSubexpenses && (
-            <>
-              <div className="recurrence-fields">
-                <fieldset className="recurrence-choice">
-                  <legend>Repetição</legend>
-                  <div>
-                    {([['none', 'Não repetir'], ['daily', 'Diária'], ['weekly', 'Semanal'], ['monthly', 'Mensal']] as [RecurrenceFrequency, string][]).map(([frequency, label]) => (
-                      <button type="button" key={frequency} className={recurrenceFrequency === frequency ? "active" : ""} onClick={() => setRecurrenceFrequency(frequency)}>{label}</button>
-                    ))}
-                  </div>
-                </fieldset>
+            <section className="launch-type-section" aria-labelledby="edit-launch-type-title">
+              <div className="launch-type-title" id="edit-launch-type-title"><Icon name="clock" /> Tipo de lançamento</div>
+              <div className="launch-type-options">
+                <button type="button" className={recurrenceFrequency === "none" ? "active" : ""} onClick={() => { setRecurrenceFrequency("none"); setRecurrenceCount(""); }}><b>Única</b><small>Um lançamento que acontece uma vez</small></button>
+                <button type="button" className={recurrenceFrequency !== "none" ? "active" : ""} onClick={() => { if (recurrenceFrequency === "none") setRecurrenceFrequency("monthly"); if (Number(recurrenceCount) < 2) setRecurrenceCount(recurrenceCountMemory.current); }}><b>Recorrente</b><small>{type === "expense" ? "Contas que se repetem" : "Entradas que se repetem"}</small></button>
               </div>
-              {recurrenceFrequency !== "none" && <label className="field recurrence-count"><span>Total de parcelas (incluindo esta)</span><input type="number" inputMode="numeric" min="2" max="120" value={recurrenceCount} placeholder="0" onChange={(event) => setRecurrenceCount(event.target.value)} /></label>}
-            </>
+              {recurrenceFrequency !== "none" && (
+                <fieldset className="recurrence-choice launch-frequency">
+                  <legend>Frequência</legend>
+                  <div>{([["daily", "Diária"], ["weekly", "Semanal"], ["monthly", "Mensal"]] as [Exclude<RecurrenceFrequency, "none">, string][]).map(([frequency, label]) => <button type="button" key={frequency} className={recurrenceFrequency === frequency ? "active" : ""} onClick={() => { setRecurrenceFrequency(frequency); if (Number(recurrenceCount) < 2) setRecurrenceCount(recurrenceCountMemory.current); }}>{label}</button>)}</div>
+                </fieldset>
+              )}
+              {recurrenceFrequency !== "none" && <label className="field recurrence-count"><span>Total de repetições (incluindo esta)</span><input type="text" inputMode="numeric" pattern="[0-9]*" value={recurrenceCount} placeholder="0" onChange={(event) => { const nextCount = maskRepetitionCount(event.target.value); if (Number(nextCount) >= 2) recurrenceCountMemory.current = nextCount; setRecurrenceCount(nextCount); }} /></label>}
+            </section>
           )}
+          <label className={`field full-field transaction-notes${transaction.hasSubexpenses ? " transaction-notes--detailed" : ""}`}><span>Observações (opcional)</span><textarea maxLength={120} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Adicione um comentário..." /><small className="field-character-count">{notes.length}/120</small></label>
         </section>
 
         {transaction.hasSubexpenses && type === "expense" && (
@@ -1747,13 +1837,9 @@ function RadarScreen({ onHome, onFinance, onGoals, onWork, showWorkFeatures = tr
 
   return (
     <main className="dashboard-screen radar-screen">
-      <header className="dashboard-header radar-header">
-        <div className="header-brand" aria-label="AMCash">
-          <Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority />
-          <span><b>AM</b>Cash</span>
-        </div>
-        <span className="radar-header-label">RADAR FINANCEIRO</span>
-      </header>
+      <AppHeader className="radar-header">
+        <span className="radar-header-label">PROJEÇÃO</span>
+      </AppHeader>
 
       <div className="radar-content">
         <section className="radar-intro">
@@ -2047,7 +2133,7 @@ function CustomGoalsPanel({ referenceDate, schedule, onScheduleUpdated, primaryG
     {editorOpen && <div className="sheet-backdrop custom-goal-backdrop" role="presentation" onMouseDown={() => !isSaving && setEditorOpen(false)}>
       <section className="custom-goal-dialog" role="dialog" aria-modal="true" aria-labelledby="custom-goal-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="custom-goal-dialog-handle" /><header><div><span>META PERSONALIZADA</span><h2 id="custom-goal-title">{customGoal ? "Editar meta" : "Nova meta"}</h2></div><button type="button" onClick={() => setEditorOpen(false)} aria-label="Fechar">×</button></header>
-        <label className="field full-field"><span>Nome da meta</span><input maxLength={80} placeholder="Ex.: Meta de faturamento" value={name} onChange={(event) => setName(event.target.value)} /></label>
+        <label className="field full-field"><span>Nome da meta</span><input maxLength={40} placeholder="Ex.: Meta de faturamento" value={name} onChange={(event) => setName(event.target.value)} /></label>
         <label className="field full-field"><span>Valor da meta</span><div className="currency-input"><b>R$</b><input value={amount} inputMode="numeric" placeholder="0,00" onChange={(event) => setAmount(maskCurrencyInput(event.target.value))} onBlur={() => setAmount(completeCurrencyInput(amount))} /></div></label>
         <fieldset className="custom-goal-period"><legend>Periodicidade</legend><div>{(Object.keys(customGoalPeriodLabels) as ApiCustomGoalPeriod[]).map((option) => <button type="button" className={period === option ? "selected" : ""} key={option} onClick={() => setPeriod(option)}>{customGoalPeriodLabels[option]}</button>)}</div></fieldset>
         {error && <p className="auth-error" role="alert">{error}</p>}
@@ -2264,13 +2350,9 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, initialMode = "expens
 
   return (
     <main className="dashboard-screen goals-screen">
-      <header className="dashboard-header goals-header">
-        <div className="header-brand" aria-label="AMCash">
-          <Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority />
-          <span><b>AM</b>Cash</span>
-        </div>
+      <AppHeader className="goals-header">
         <span className="goals-header-label">METAS</span>
-      </header>
+      </AppHeader>
 
       <div className="goals-content">
         <div className="goals-mode-tabs" role="tablist" aria-label="Tipo de meta">
@@ -2363,27 +2445,6 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, initialMode = "expens
   );
 }
 
-const homeCostLabels: Record<ApiWorkCostCategory, string> = {
-  FUEL: "Combustível",
-  MAINTENANCE: "Manutenção",
-  TOLL: "Pedágio",
-  WASH: "Lavagem",
-  FOOD: "Alimentação",
-  OTHER: "Outro",
-};
-
-function HomeCostCategoryIcon({ category }: { category: ApiWorkCostCategory }) {
-  const paths: Record<ApiWorkCostCategory, ReactNode> = {
-    FUEL: <><path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16" /><path d="M3 21h13M7 7h5v4H7zM15 8h2l2 2v7a1.5 1.5 0 0 0 3 0v-5l-2-2" /></>,
-    MAINTENANCE: <><path d="M14.5 6.5a4 4 0 0 0-5-5L7 4l3 3 2.5-2.5a4 4 0 0 0 2 5L6 18l-1 3 3-1 8.5-8.5a4 4 0 0 0 5-5L19 9l-3-3 2.5-2.5" /></>,
-    TOLL: <><circle cx="7" cy="16" r="3" /><circle cx="12" cy="11" r="3" /><circle cx="17" cy="6" r="3" /></>,
-    WASH: <><path d="M12 2C9 7 6 10 6 14a6 6 0 0 0 12 0c0-4-3-7-6-12Z" /><path d="M9.5 16.5c.8 1.2 2 1.7 3.5 1.4" /></>,
-    FOOD: <><path d="M6 3v7M9 3v7M6 7h3M7.5 10v11" /><path d="M15.5 3v18M15.5 3c3 2 3.2 7 0 9" /></>,
-    OTHER: <><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none" /></>,
-  };
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[category]}</svg>;
-}
-
 type HomeCostDraft = {
   key: string;
   id?: string;
@@ -2420,7 +2481,7 @@ function UsageProfileScreen({ onSelect, onCancel }: { onSelect: (profile: ApiUsa
   }
 
   return <main className="usage-profile-screen">
-    <header className="dashboard-header"><div className="header-brand" aria-label="AMCash"><Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority /><span><b>AM</b>Cash</span></div>{onCancel && <button type="button" className="usage-profile-close" onClick={onCancel} aria-label="Fechar">×</button>}</header>
+    <AppHeader>{onCancel && <button type="button" className="usage-profile-close" onClick={onCancel} aria-label="Fechar">×</button>}</AppHeader>
     <section className="usage-profile-content">
       <span>PERSONALIZE SUA EXPERIÊNCIA</span>
       <h1>Como você usa o AMCash?</h1>
@@ -2517,7 +2578,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
           id: item.id,
           category: item.category,
           amount: maskCurrencyInput(String(Math.round(Number(item.amount) * 100))),
-          description: storedDescription === homeCostLabels[item.category] ? "" : storedDescription,
+          description: storedDescription === workCostCategoryLabels[item.category] ? "" : storedDescription,
         };
       }) : []);
       setOpenCostKey(null);
@@ -2602,7 +2663,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
       const retainedCostIds = new Set(validCosts.flatMap((item) => item.id ? [item.id] : []));
       await Promise.all([
         ...validCosts.map((item) => {
-          const payload = { date: today, category: item.category, description: `${homeCostPrefix}${item.description.trim() || homeCostLabels[item.category]}`, amount: item.parsedAmount };
+          const payload = { date: today, category: item.category, description: `${homeCostPrefix}${item.description.trim() || workCostCategoryLabels[item.category]}`, amount: item.parsedAmount };
           return item.id ? financeApi.updateWorkCost(item.id, payload) : financeApi.createWorkCost(payload);
         }),
         ...savedHomeCosts.filter((item) => !retainedCostIds.has(item.id)).map((item) => financeApi.deleteWorkCost(item.id)),
@@ -2616,10 +2677,9 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   }
 
   return <main className="daily-home-screen">
-    <header className="dashboard-header daily-home-header">
-      <div className="header-brand" aria-label="AMCash"><Image src="/amcash-logo.png" alt="" width={1254} height={1254} priority /><span><b>AM</b>Cash</span></div>
+    <AppHeader className="daily-home-header">
       <div className="daily-home-account"><time className="daily-home-date" dateTime={today}>{dateLabel}</time><AccountMenu onLogout={onLogout} usageProfile={usageProfile} onChangeProfile={onChangeProfile} /></div>
-    </header>
+    </AppHeader>
     <div className="daily-home-content">
       {loading ? <div className="daily-home-loading"><div className="loader" /><span>Atualizando seu progresso</span></div> : error ?
         <div className="daily-home-error"><p>{error}</p><button type="button" onClick={() => void load()}>Tentar novamente</button></div> : summary && <>
@@ -2670,14 +2730,12 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
               <div className="home-costs-list">
                 {homeCosts.map((item, index) => <div className={`home-cost-row${openCostKey === item.key ? " expanded" : ""}`} key={item.key}>
                   <button type="button" className="home-cost-summary" aria-expanded={openCostKey === item.key} onClick={() => setOpenCostKey((current) => current === item.key ? null : item.key)}>
-                    <span className="home-cost-summary-icon"><HomeCostCategoryIcon category={item.category} /></span><span className="home-cost-summary-copy"><strong>{homeCostLabels[item.category]}</strong><small>{item.description.trim() || "Custo do dia"}</small></span><b>{formatCurrency(parseCurrencyInput(item.amount) || 0)}</b><svg className="home-cost-summary-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
+                    <span className="home-cost-summary-icon"><CostCategoryIcon category={item.category} /></span><span className="home-cost-summary-copy"><strong>{workCostCategoryLabels[item.category]}</strong><small>{item.description.trim() || "Custo do dia"}</small></span><b>{formatCurrency(parseCurrencyInput(item.amount) || 0)}</b><svg className="home-cost-summary-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
                   </button>
                   {openCostKey === item.key && <div className="home-cost-editor">
-                    <span className="home-cost-category-label">Categoria</span><div className="cost-category-grid" role="listbox" aria-label={`Categoria do custo ${index + 1}`}>
-                      {(Object.keys(homeCostLabels) as ApiWorkCostCategory[]).map((category) => <button type="button" role="option" aria-selected={category === item.category} className={category === item.category ? "selected" : ""} key={category} onClick={() => updateHomeCost(item.key, { category })}><HomeCostCategoryIcon category={category} /><span>{homeCostLabels[category]}</span></button>)}
-                    </div>
+                    <span className="home-cost-category-label">Categoria</span><CostCategoryGrid value={item.category} ariaLabel={`Categoria do custo ${index + 1}`} onChange={(category) => updateHomeCost(item.key, { category })} />
                     <label><span>Valor</span><div><b>R$</b><input value={item.amount} onChange={(event) => updateHomeCost(item.key, { amount: maskCurrencyInput(event.target.value) })} placeholder="0,00" inputMode="numeric" /></div></label>
-                    <label><span>Descrição (opcional)</span><div><input maxLength={160} value={item.description} onChange={(event) => updateHomeCost(item.key, { description: event.target.value })} placeholder="Ex.: Abastecimento no posto" /></div></label>
+                    <label><span>Descrição (opcional)</span><div><input maxLength={60} value={item.description} onChange={(event) => updateHomeCost(item.key, { description: event.target.value })} placeholder="Ex.: Abastecimento no posto" /></div></label>
                     <button type="button" className="home-cost-remove" onClick={() => removeHomeCost(item.key)}><Icon name="trash" />Remover custo</button>
                   </div>}
                 </div>)}
@@ -2860,6 +2918,8 @@ export default function Home() {
       recurrenceFrequency: recurrenceToApi[transaction.recurrenceFrequency],
       recurrenceCount: transaction.recurrenceCount,
       hasSubexpenses: transaction.hasSubexpenses,
+      paymentMethod: transaction.paymentMethod,
+      notes: transaction.notes || null,
       subexpenses: transaction.items.map((item) => ({
         name: item.name,
         amount: item.value,

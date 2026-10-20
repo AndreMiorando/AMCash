@@ -3,6 +3,7 @@ package br.com.amcash.entry.dto.request;
 import br.com.amcash.entry.entity.EntryType;
 import br.com.amcash.entry.entity.EntryCategory;
 import br.com.amcash.entry.entity.RecurrenceFrequency;
+import br.com.amcash.entry.entity.PaymentMethod;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
@@ -18,7 +19,7 @@ import java.util.List;
 
 public record CreateEntryRequest(
         @NotBlank(message = "A descrição é obrigatória")
-        @Size(max = 160, message = "A descrição deve ter no máximo 160 caracteres")
+        @Size(max = 40, message = "A descrição deve ter no máximo 40 caracteres")
         String name,
 
         @NotNull(message = "A categoria é obrigatória")
@@ -44,6 +45,24 @@ public record CreateEntryRequest(
 
         boolean hasSubexpenses,
 
-        List<@Valid SubexpenseRequest> subexpenses
+        List<@Valid SubexpenseRequest> subexpenses,
+
+        PaymentMethod paymentMethod,
+
+        @Size(max = 120, message = "As observações devem ter no máximo 120 caracteres")
+        String notes
 ) {
+    public CreateEntryRequest(
+            String name,
+            EntryCategory category,
+            EntryType type,
+            BigDecimal amount,
+            LocalDate dueDate,
+            RecurrenceFrequency recurrenceFrequency,
+            int recurrenceCount,
+            boolean hasSubexpenses,
+            List<SubexpenseRequest> subexpenses) {
+        this(name, category, type, amount, dueDate, recurrenceFrequency, recurrenceCount,
+                hasSubexpenses, subexpenses, null, null);
+    }
 }

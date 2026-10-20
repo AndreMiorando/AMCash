@@ -3,6 +3,7 @@ package br.com.amcash.entry.dto.response;
 import br.com.amcash.entry.entity.EntryType;
 import br.com.amcash.entry.entity.EntryCategory;
 import br.com.amcash.entry.entity.RecurrenceFrequency;
+import br.com.amcash.entry.entity.PaymentMethod;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -28,6 +29,8 @@ public record EntryResponse(
         int completedSubexpenses,
         int totalSubexpenses,
         List<SubexpenseResponse> subexpenses,
+        PaymentMethod paymentMethod,
+        String notes,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt
 ) {

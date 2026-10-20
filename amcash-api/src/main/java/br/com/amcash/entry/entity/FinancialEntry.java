@@ -64,6 +64,13 @@ public class FinancialEntry {
     @Column(name = "has_subexpenses", nullable = false)
     private boolean hasSubexpenses;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_method", length = 24)
+    private PaymentMethod paymentMethod;
+
+    @Column(length = 500)
+    private String notes;
+
     @Column(nullable = false)
     private boolean paid;
 
@@ -135,6 +142,16 @@ public class FinancialEntry {
         this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 
+    public void updatePaymentDetails(PaymentMethod paymentMethod, String notes) {
+        this.paymentMethod = paymentMethod;
+        this.notes = normalizeOptional(notes);
+        this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
+    }
+
+    private String normalizeOptional(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
     public User getUser() { return user; }
@@ -148,6 +165,8 @@ public class FinancialEntry {
     public int getRecurrenceIndex() { return recurrenceIndex; }
     public UUID getSeriesId() { return seriesId; }
     public boolean isHasSubexpenses() { return hasSubexpenses; }
+    public PaymentMethod getPaymentMethod() { return paymentMethod; }
+    public String getNotes() { return notes; }
     public boolean isPaid() { return paid; }
     public void setPaid(boolean paid) {
         this.paid = paid;
