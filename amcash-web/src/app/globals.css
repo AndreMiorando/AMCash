@@ -1617,6 +1617,10 @@ a {
   letter-spacing: 0.17em;
 }
 
+.work-header-actions { display: flex; align-items: center; gap: 0.55rem; }
+.work-register-button { border-color: #cfe0fb; background: #f1f6ff; color: #075cf4; box-shadow: 0 0.35rem 0.9rem rgb(7 92 244 / 10%); }
+.work-register-button:hover { border-color: #b9d2fa; background: #e8f1ff; color: #0753dc; box-shadow: 0 0.45rem 1rem rgb(7 92 244 / 14%); }
+
 .work-content {
   min-height: 0;
   flex: 1 1 auto;
@@ -1734,8 +1738,8 @@ a {
 
 .work-net-card {
   display: grid;
-  min-height: 8.5rem;
-  padding: 1.2rem;
+  min-height: 7.25rem;
+  padding: 1rem 1.2rem;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 1rem;
@@ -1751,7 +1755,6 @@ a {
 .work-net-main > span { font-size: 0.56rem; font-weight: 760; letter-spacing: 0.15em; opacity: 0.72; }
 .work-net-main > strong { margin-top: 0.45rem; font-size: 1.75rem; letter-spacing: -0.05em; }
 .work-net-main > strong.negative { color: #ffe0e5; }
-.work-net-main > small { margin-top: 0.45rem; font-size: 0.62rem; opacity: 0.72; }
 .work-net-comparison { display: flex; min-width: 3.8rem; align-items: center; flex-direction: column; gap: 0.22rem; color: #fff; }
 .work-net-comparison svg { width: 1.45rem; height: 1.45rem; }
 .work-net-comparison strong { font-size: 0.72rem; }
@@ -1908,8 +1911,13 @@ a {
 .work-sheet > .work-record-header h2 { margin: 0; color: #092444; font-size: 1.45rem; font-weight: 780; letter-spacing: -0.035em; }
 .work-sheet > .work-record-header p { display: flex; margin: 0.28rem 0 0; align-items: center; gap: 0.4rem; color: #6e83a0; font-size: 0.78rem; }
 .work-sheet > .work-record-header p svg { width: 1rem; height: 1rem; }
+.work-record-date { display: flex; margin-top: 0.28rem; align-items: center; gap: 0.4rem; color: #6e83a0; }
+.work-record-date svg { width: 1rem; height: 1rem; flex: 0 0 auto; }
+.work-record-date input { padding: 0; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; font-size: 0.78rem; }
 .work-sheet > .work-record-header button { grid-column: auto; width: 2.35rem; height: 2.35rem; background: #f0f4fa; color: #607791; font-size: 1.55rem; font-weight: 350; line-height: 1; }
 .work-record-sheet .work-form-scroll { margin-top: 1rem; padding-inline: 0.05rem; }
+.work-existing-record { display: flex; margin-bottom: 0.8rem; padding: 0.7rem 0.8rem; align-items: center; justify-content: space-between; gap: 0.65rem; border-radius: 0.75rem; background: #fff0f2; color: #c83f54; font-size: 0.66rem; }
+.work-existing-record button { flex: 0 0 auto; padding: 0.45rem 0.6rem; border: 0; border-radius: 0.55rem; background: #fff; color: #075cf4; font: inherit; font-size: 0.62rem; font-weight: 720; cursor: pointer; }
 .work-record-kilometers { display: flex; flex-direction: column; gap: 0.4rem; color: #617793; font-size: 0.72rem; font-weight: 720; }
 .work-record-kilometers > div { display: flex; height: 3.55rem; padding: 0 0.9rem 0 0.55rem; align-items: center; border: 1px solid #d9e3ef; border-radius: 0.95rem; background: #fcfdff; }
 .work-record-road-icon { display: grid; width: 2.45rem; height: 2.45rem; flex: 0 0 auto; place-items: center; border-radius: 0.72rem; background: #f2f6fb; overflow: hidden; }

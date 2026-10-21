@@ -75,9 +75,12 @@ export default function WorkScreen({ navigation }: {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [draft, setDraft] = useState<WorkDraft | null>(null);
+  const [draftMode, setDraftMode] = useState<"create" | "edit">("edit");
+  const [existingRecord, setExistingRecord] = useState<{ day: ApiWorkDay; costs: ApiWorkCost[] } | null>(null);
   const [editingCostKey, setEditingCostKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const requestId = useRef(0);
+  const existingRecordRequestId = useRef(0);
   const nextCostKey = useRef(0);
 
   const load = useCallback(async () => {
@@ -111,6 +114,37 @@ export default function WorkScreen({ navigation }: {
         description: costDescription(cost), amount: moneyForInput(Number(cost.amount)), homeManaged: isHomeCost(cost) })),
       originalCostIds: costs.map((cost) => cost.id), hadWorkDay: Boolean(day) });
     setEditingCostKey(null);
+    setDraftMode("edit");
+    setExistingRecord(null);
+    setError("");
+  }
+
+  async function checkExistingRecord(date: string) {
+    const currentRequest = ++existingRecordRequestId.current;
+    setExistingRecord(null);
+    if (!date) return;
+    try {
+      const response = await financeApi.workOverview(date, "DAY");
+      const day = response.days.find((item) => item.date === date);
+      if (currentRequest === existingRecordRequestId.current && day) setExistingRecord({ day, costs: response.costs.filter((cost) => cost.date === date) });
+    } catch (requestError) {
+      if (currentRequest === existingRecordRequestId.current) setError(messageFrom(requestError));
+    }
+  }
+
+  function openCreateRecord() {
+    const date = isoDate(new Date());
+    setDraft({ date, kilometers: "", uber: "", ninetyNine: "", additional: [], costs: [], originalCostIds: [], hadWorkDay: false });
+    setDraftMode("create");
+    setExistingRecord(null);
+    setEditingCostKey(null);
+    setError("");
+    void checkExistingRecord(date);
+  }
+
+  function editExistingRecord() {
+    if (!draft || !existingRecord) return;
+    openRecord(draft.date, existingRecord.day, existingRecord.costs);
   }
 
   async function saveRecord() {
@@ -121,10 +155,20 @@ export default function WorkScreen({ navigation }: {
     const retainedCostIds = new Set(validCosts.flatMap((cost) => cost.id ? [cost.id] : []));
     const hasWorkValues = numberFromInput(draft.kilometers) > 0 || numberFromInput(draft.uber) > 0
       || numberFromInput(draft.ninetyNine) > 0 || additional.some((item) => numberFromInput(item.amount) > 0);
+    if (draftMode === "create" && !hasWorkValues && !validCosts.length) { setError("Informe ao menos um dado do trabalho antes de registrar."); return; }
     setSaving(true); setError("");
     try {
+      if (draftMode === "create") {
+        const selectedDay = await financeApi.workOverview(draft.date, "DAY");
+        const day = selectedDay.days.find((item) => item.date === draft.date);
+        if (day) {
+          setExistingRecord({ day, costs: selectedDay.costs.filter((cost) => cost.date === draft.date) });
+          setError("Já existe um trabalho registrado nesta data. Você pode editar o registro existente.");
+          return;
+        }
+      }
       const operations: Promise<unknown>[] = [];
-      if (draft.hadWorkDay || hasWorkValues) operations.push(financeApi.saveWorkDay(draft.date, {
+      if (draftMode === "create" || draft.hadWorkDay || hasWorkValues) operations.push(financeApi.saveWorkDay(draft.date, {
         kilometers: numberFromInput(draft.kilometers),
         earnings: [
           { source: "Uber", amount: numberFromInput(draft.uber) },
@@ -142,7 +186,8 @@ export default function WorkScreen({ navigation }: {
       operations.push(...draft.originalCostIds.filter((id) => !retainedCostIds.has(id))
         .map((id) => financeApi.deleteWorkCost(id)));
       await Promise.all(operations);
-      setReferenceDate(draft.date); setDraft(null); await load();
+      const refreshed = await financeApi.workOverview(draft.date, period);
+      setReferenceDate(draft.date); setOverview(refreshed); setDraft(null); setExistingRecord(null);
     } catch (requestError) { setError(messageFrom(requestError)); } finally { setSaving(false); }
   }
   async function deleteRecord() {
@@ -177,13 +222,13 @@ export default function WorkScreen({ navigation }: {
   const draftCosts = draft?.costs.reduce((total, cost) => total + numberFromInput(cost.amount), 0) ?? 0;
   const draftNet = draftGross - draftCosts;
   return <main className="work-screen">
-    <AppHeader className="work-header"><span className="work-header-label">TRABALHO</span></AppHeader>
+    <AppHeader className="work-header"><div className="work-header-actions"><span className="work-header-label">TRABALHO</span><button type="button" className="header-add-button work-register-button" onClick={openCreateRecord} aria-label="Registrar dia" title="Registrar dia"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M8 3v4M16 3v4M3.5 9.5h17M12 13v5M9.5 15.5h5" /></svg></button></div></AppHeader>
     <div className="work-content">
       <section className="work-heading"><div><h1>Seu trabalho</h1><p>Acompanhe seus resultados e edite registros.</p></div></section>
-      {error && <p className="work-error" role="alert">{error}</p>}
+      {error && !draft && <p className="work-error" role="alert">{error}</p>}
       {overview && <>
         <section className="work-net-card">
-          <div className="work-net-main"><span>LÍQUIDO NO PERÍODO</span><strong className={(summary?.netEarnings ?? 0) < 0 ? "negative" : ""}>{currency(Number(summary?.netEarnings ?? 0))}</strong><small>Faturamento menos os custos registrados</small></div>
+          <div className="work-net-main"><span>LÍQUIDO NO PERÍODO</span><strong className={(summary?.netEarnings ?? 0) < 0 ? "negative" : ""}>{currency(Number(summary?.netEarnings ?? 0))}</strong></div>
           <div className={`work-net-comparison ${comparisonTone}`} aria-label={`${comparisonValue} em relação ao ${previousPeriodLabel}`} title={`Líquido do ${previousPeriodLabel}: ${currency(Number(comparison?.netEarnings ?? 0))}`}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M5 20v-6M12 20V9M19 20V4" /></svg>
             <strong>{comparisonValue}</strong>
@@ -192,7 +237,7 @@ export default function WorkScreen({ navigation }: {
         <section className="work-metrics">
           <article><span className="work-metric-icon revenue" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M7 10h10M7 14h6" /></svg></span><span className="work-metric-copy"><span>Faturamento</span><strong>{currency(Number(summary?.grossEarnings ?? 0))}</strong></span></article>
           <article><span className="work-metric-icon expense" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18M7 14h5" /></svg></span><span className="work-metric-copy"><span>Custos</span><strong className="cost">{currency(Number(summary?.totalCosts ?? 0))}</strong></span></article>
-          <article><span className="work-metric-icon" aria-hidden="true"><Image src="/road-icon.png" alt="" width={1254} height={1254} /></span><span className="work-metric-copy"><span>Quilômetros</span><strong>{decimal(Number(summary?.kilometers ?? 0))} km</strong></span></article>
+          <article><span className="work-metric-icon" aria-hidden="true"><Image src="/road-icon.png" alt="" width={1254} height={1254} /></span><span className="work-metric-copy"><span>Quilômetros</span><strong>{decimal(Number(summary?.kilometers ?? 0))}</strong></span></article>
           <article><span className="work-metric-icon" aria-hidden="true"><Image src="/earnings-per-km-icon.png" alt="" width={1254} height={1254} /></span><span className="work-metric-copy"><span>Por km</span><strong>{currency(Number(summary?.earningsPerKilometer ?? 0))}</strong></span></article>
         </section>
       </>}
@@ -217,10 +262,12 @@ export default function WorkScreen({ navigation }: {
       </>}
     </div>{navigation}
 
-    {draft && <ModalBackdrop onClose={() => !saving && setDraft(null)}><section className="work-sheet work-record-sheet" role="dialog" aria-modal="true" aria-labelledby="work-sheet-title" onMouseDown={(event) => event.stopPropagation()}>
+    {draft && <ModalBackdrop onClose={() => { if (!saving) { setDraft(null); setExistingRecord(null); } }}><section className="work-sheet work-record-sheet" role="dialog" aria-modal="true" aria-labelledby="work-sheet-title" onMouseDown={(event) => event.stopPropagation()}>
       <div className="work-sheet-handle" />
-      <header className="work-record-header"><div><h2 id="work-sheet-title">Editar trabalho</h2><p><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></svg>{longDate(draft.date)}</p></div><button type="button" onClick={() => setDraft(null)} aria-label="Fechar">×</button></header>
+      <header className="work-record-header"><div><h2 id="work-sheet-title">{draftMode === "create" ? "Registrar trabalho" : "Editar trabalho"}</h2>{draftMode === "create" ? <label className="work-record-date"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></svg><span className="sr-only">Data do trabalho</span><input type="date" max={isoDate(new Date())} value={draft.date} onChange={(event) => { const date = event.target.value; setDraft({ ...draft, date }); void checkExistingRecord(date); }} /></label> : <p><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></svg>{longDate(draft.date)}</p>}</div><button type="button" onClick={() => { setDraft(null); setExistingRecord(null); }} aria-label="Fechar">×</button></header>
       <div className="work-form-scroll">
+        {error && <p className="work-error" role="alert">{error}</p>}
+        {draftMode === "create" && existingRecord && <div className="work-existing-record" role="alert"><span>Já existe trabalho registrado nesta data.</span><button type="button" onClick={editExistingRecord}>Editar registro existente</button></div>}
         <label className="work-record-kilometers"><span>Quilômetros rodados</span><div><span className="work-record-road-icon"><Image src="/road-icon.png" alt="" width={1254} height={1254} /></span><b>km</b><input inputMode="decimal" aria-label="Quilômetros rodados" placeholder="0" value={draft.kilometers} onChange={(event) => setDraft({ ...draft, kilometers: numberInput(event.target.value) })} /></div></label>
         <div className="work-record-section-title"><h3>Faturamento</h3></div><div className="work-form-grid">
           <BrandedMoneyField label="Uber" logo="/uber-logo.jpeg" value={draft.uber} onChange={(value) => setDraft({ ...draft, uber: value })} /><BrandedMoneyField label="99" logo="/99-logo.png" value={draft.ninetyNine} onChange={(value) => setDraft({ ...draft, ninetyNine: value })} /></div>
@@ -243,7 +290,7 @@ export default function WorkScreen({ navigation }: {
 
         <div className="work-record-result"><span><b>Resultado líquido do dia</b><small>Faturamento {currency(draftGross)} · Custos {currency(draftCosts)}</small></span><strong className={draftNet < 0 ? "negative" : ""}>{draftNet < 0 ? "- " : ""}{currency(Math.abs(draftNet))}</strong></div>
       </div>
-      <footer><button type="button" className="work-save" disabled={saving || !draft.date} onClick={saveRecord}>{saving ? "Salvando..." : "Salvar alterações"}</button><button type="button" className="work-delete" disabled={saving} onClick={deleteRecord}>Excluir registro</button></footer>
+      <footer><button type="button" className="work-save" disabled={saving || !draft.date || Boolean(existingRecord)} onClick={saveRecord}>{saving ? "Salvando..." : draftMode === "create" ? "Registrar trabalho" : "Salvar alterações"}</button>{draftMode === "edit" && <button type="button" className="work-delete" disabled={saving} onClick={deleteRecord}>Excluir registro</button>}</footer>
     </section></ModalBackdrop>}
   </main>;
 }
