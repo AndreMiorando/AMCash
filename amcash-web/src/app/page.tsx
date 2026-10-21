@@ -2678,8 +2678,8 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
             <article><span>RESULTADO LÍQUIDO</span><strong className={projectedTodayNet < 0 ? "negative" : ""}>{projectedTodayNet < 0 ? "- " : ""}{formatCurrency(projectedTodayNet)}</strong></article>
             <article><span>FATURAMENTO POR KM</span><strong>{kilometersValue > 0 ? formatCurrency(earningsPerKilometer) : "—"}</strong></article>
           </section>
-          <section className="home-quick-entry" aria-label="Meu trabalho hoje">
-            <div className="home-work-card-heading"><div><span>TRABALHO DE HOJE</span><h2>Meu trabalho hoje</h2></div><small>Edite os valores diretamente</small></div>
+          <section className="home-quick-entry" aria-label="Trabalho de hoje">
+            <div className="home-work-card-heading"><div><span>TRABALHO DE HOJE</span></div><small>Edite os valores diretamente</small></div>
             <div className="home-work-fields">
               <label><span className="home-work-source logo metric-logo"><Image src="/road-icon.png" alt="" width={1254} height={1254} /></span><span>Quilômetros rodados</span><div><b>km</b><input aria-label="Quilômetros rodados" value={kilometers} onChange={(event) => setKilometers(maskDecimalInput(event.target.value))} placeholder="0" inputMode="decimal" /></div></label>
               <label><span className="home-work-source uber logo"><Image src="/uber-logo.jpeg" alt="" width={768} height={512} /></span><span>Uber</span><div><b>R$</b><input aria-label="Faturamento Uber" value={uber} onChange={(event) => setUber(maskCurrencyInput(event.target.value))} placeholder="0,00" inputMode="numeric" /></div></label>
@@ -2688,11 +2688,11 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
               <button type="button" className="home-add-source" onClick={() => setAdditionalEarnings((current) => [...current, { key: crypto.randomUUID(), source: "", amount: "" }])}><Icon name="plus" />Adicionar outra fonte</button>
             </div>
             <div className="home-costs-block">
-              <div className="home-costs-heading"><div><span>CUSTOS DE HOJE</span><small>Combustível, alimentação e outros gastos</small></div></div>
+              <div className="home-costs-heading"><div><span>CUSTOS DE HOJE</span></div></div>
               <div className="home-costs-list">
                 {homeCosts.map((item, index) => <div className={`home-cost-row${openCostKey === item.key ? " expanded" : ""}`} key={item.key}>
                   <button type="button" className="home-cost-summary" aria-expanded={openCostKey === item.key} onClick={() => setOpenCostKey((current) => current === item.key ? null : item.key)}>
-                    <span className="home-cost-summary-icon"><CostCategoryIcon category={item.category} /></span><span className="home-cost-summary-copy"><strong>{workCostCategoryLabels[item.category]}</strong><small>{item.description.trim() || "Custo do dia"}</small></span><b>{formatCurrency(parseCurrencyInput(item.amount) || 0)}</b><svg className="home-cost-summary-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
+                    <span className="home-cost-summary-icon"><CostCategoryIcon category={item.category} /></span><span className="home-cost-summary-copy"><strong>{workCostCategoryLabels[item.category]}</strong>{item.description.trim() && <small>{item.description.trim()}</small>}</span><b>{formatCurrency(parseCurrencyInput(item.amount) || 0)}</b><svg className="home-cost-summary-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
                   </button>
                   {openCostKey === item.key && <div className="home-cost-editor">
                     <span className="home-cost-category-label">Categoria</span><CostCategoryGrid value={item.category} ariaLabel={`Categoria do custo ${index + 1}`} onChange={(category) => updateHomeCost(item.key, { category })} />

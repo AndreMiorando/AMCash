@@ -1545,7 +1545,6 @@ a {
 
 .home-work-card-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; }
 .home-work-card-heading span { color: #8a9caf; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.14em; }
-.home-work-card-heading h2 { margin: 0.22rem 0 0; font-size: 1rem; }
 .home-work-card-heading small { color: #8a9caf; font-size: 0.62rem; }
 .home-work-fields { margin-top: 0.75rem; border-top: 1px solid #edf1f6; }
 .home-work-fields > label { display: grid; min-height: 3.35rem; padding: 0.45rem 0; grid-template-columns: 2rem minmax(0, 1fr) minmax(7rem, 0.65fr); align-items: center; gap: 0.55rem; border-bottom: 1px solid #edf1f6; color: #304962; font-size: 0.72rem; }
@@ -1601,7 +1600,6 @@ a {
 .home-costs-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 0.75rem; }
 .home-costs-heading > div { display: flex; min-width: 0; flex-direction: column; gap: 0.2rem; }
 .home-costs-heading span { color: #8a9caf; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.14em; }
-.home-costs-heading small { color: #8a9caf; font-size: 0.65rem; font-weight: 500; }
 .home-costs-heading button { display: flex; min-height: 2.1rem; padding: 0 0.7rem; align-items: center; gap: 0.32rem; flex: 0 0 auto; border: 1px solid #cfe0f8; border-radius: 0.65rem; background: #f3f7ff; color: #086cf3; font-size: 0.68rem; font-weight: 700; }
 .home-costs-heading button svg { width: 0.9rem; }
 .home-costs-list { display: flex; margin-top: 0.75rem; flex-direction: column; gap: 0.65rem; }
