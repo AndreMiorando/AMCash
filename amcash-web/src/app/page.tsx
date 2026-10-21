@@ -22,9 +22,13 @@ import {
   ApiUsageProfile,
   financeApi,
 } from "@/lib/api";
+import DatePickerInput, { dateToInputValue } from "@/app/components/DatePickerInput";
 import WorkScreen from "@/app/components/WorkScreen";
 import AppHeader from "@/app/components/AppHeader";
 import { CostCategoryGrid, CostCategoryIcon, workCostCategoryLabels } from "@/app/components/CostCategoryGrid";
+import Button from "@/app/components/ui/Button";
+import { Input, InputField } from "@/app/components/ui/Input";
+import SegmentedControl from "@/app/components/ui/SegmentedControl";
 
 type GoogleCredentialResponse = {
   credential?: string;
@@ -75,6 +79,24 @@ declare global {
 
 type RecurrenceFrequency = "none" | "daily" | "weekly" | "monthly";
 type TransactionFilter = "pending" | "paid" | "all";
+const recurrenceFrequencyOptions = [
+  { value: "daily", label: "Diária" },
+  { value: "weekly", label: "Semanal" },
+  { value: "monthly", label: "Mensal" },
+] satisfies ReadonlyArray<{ value: Exclude<RecurrenceFrequency, "none">; label: string }>;
+const itemRecurrenceOptions = [
+  { value: "none", label: "Não repetir" },
+  ...recurrenceFrequencyOptions,
+] satisfies ReadonlyArray<{ value: RecurrenceFrequency; label: string }>;
+const transactionFilterOptions = [
+  { value: "all", label: "Todos" },
+  { value: "pending", label: "Pendentes" },
+  { value: "paid", label: "Pagas" },
+] satisfies ReadonlyArray<{ value: TransactionFilter; label: string }>;
+const goalModeOptions = [
+  { value: "expenses", label: "Despesas" },
+  { value: "custom", label: "Personalizada" },
+] satisfies ReadonlyArray<{ value: "expenses" | "custom"; label: string }>;
 
 const expenseCategories: { value: ApiEntryCategory; label: string }[] = [
   { value: "FOOD", label: "Alimentação" },
@@ -421,10 +443,6 @@ function messageFromError(error: unknown) {
   return error instanceof Error ? error.message : "Não foi possível concluir a operação.";
 }
 
-function dateToInputValue(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
 function CategoryPickerInput({
   value,
   options,
@@ -544,91 +562,6 @@ function PaymentMethodPickerInput({
         )}
       </div>
       <small className="field-hint">Informação registrada apenas para consulta e auditoria.</small>
-    </div>
-  );
-}
-
-function DatePickerInput({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const selectedDate = new Date(`${value}T12:00:00`);
-  const initialDate = Number.isNaN(selectedDate.getTime()) ? new Date() : selectedDate;
-  const [isOpen, setIsOpen] = useState(false);
-  const [visibleMonth, setVisibleMonth] = useState(() => new Date(initialDate.getFullYear(), initialDate.getMonth(), 1));
-  const monthLabel = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(visibleMonth);
-  const firstGridDate = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1 - visibleMonth.getDay());
-  const days = Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(firstGridDate);
-    date.setDate(firstGridDate.getDate() + index);
-    return date;
-  });
-  const todayValue = dateToInputValue(new Date());
-
-  function openCalendar() {
-    const current = new Date(`${value}T12:00:00`);
-    const reference = Number.isNaN(current.getTime()) ? new Date() : current;
-    setVisibleMonth(new Date(reference.getFullYear(), reference.getMonth(), 1));
-    setIsOpen(true);
-  }
-
-  function chooseDate(date: Date) {
-    onChange(dateToInputValue(date));
-    setIsOpen(false);
-  }
-
-  return (
-    <div className="field date-picker-field">
-      <span>{label}</span>
-      <button type="button" className="date-input-button" onClick={openCalendar} aria-haspopup="dialog" aria-expanded={isOpen}>
-        <span>{value ? formatDate(value) : "Selecionar data"}</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-          <rect x="3.5" y="5" width="17" height="15" rx="2" />
-          <path d="M8 3v4M16 3v4M3.5 9.5h17" />
-        </svg>
-      </button>
-
-      {isOpen && (
-        <div className="date-picker-backdrop" role="presentation" onMouseDown={() => setIsOpen(false)}>
-          <section className="date-picker-dialog" role="dialog" aria-modal="true" aria-label="Selecionar data" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="date-picker-header">
-              <button type="button" onClick={() => setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))} aria-label="Mês anterior"><Icon name="back" /></button>
-              <strong>{monthLabel}</strong>
-              <button type="button" onClick={() => setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))} aria-label="Próximo mês"><Icon name="forward" /></button>
-            </div>
-
-            <div className="date-picker-weekdays" aria-hidden="true">
-              {["D", "S", "T", "Q", "Q", "S", "S"].map((weekday, index) => <span key={`${weekday}-${index}`}>{weekday}</span>)}
-            </div>
-            <div className="date-picker-days">
-              {days.map((date) => {
-                const dateValue = dateToInputValue(date);
-                const outside = date.getMonth() !== visibleMonth.getMonth();
-                return (
-                  <button
-                    type="button"
-                    key={dateValue}
-                    className={`${outside ? "outside " : ""}${dateValue === value ? "selected " : ""}${dateValue === todayValue ? "today" : ""}`}
-                    onClick={() => chooseDate(date)}
-                    aria-pressed={dateValue === value}
-                  >
-                    {date.getDate()}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="date-picker-actions">
-              <button type="button" onClick={() => setIsOpen(false)}>Cancelar</button>
-              <button type="button" onClick={() => chooseDate(new Date())}>Hoje</button>
-            </div>
-          </section>
-        </div>
-      )}
     </div>
   );
 }
@@ -906,7 +839,7 @@ function CreateTransactionSheet({
         </div>
 
         <form onSubmit={submit}>
-          <label className="field full-field"><span>Descrição</span><input maxLength={40} value={name} onChange={(event) => setName(event.target.value)} placeholder={type === "expense" ? "Ex.: Supermercado" : "Ex.: Salário"} /></label>
+          <InputField fieldClassName="field full-field" label="Descrição" maxLength={40} value={name} onChange={(event) => setName(event.target.value)} placeholder={type === "expense" ? "Ex.: Supermercado" : "Ex.: Salário"} />
           <CategoryPickerInput value={category} options={type === "expense" ? expenseCategories : incomeCategories} onChange={setCategory} />
 
           <PaymentMethodPickerInput label={type === "expense" ? "Forma de pagamento (opcional)" : "Forma de recebimento (opcional)"} value={paymentMethod} options={type === "expense" ? expensePaymentMethods : incomePaymentMethods} onChange={setPaymentMethod} />
@@ -920,7 +853,7 @@ function CreateTransactionSheet({
 
           {!hasSubexpenses && (
             <div className="field-grid">
-              <label className="field"><span>Valor</span><div className="currency-input"><b>R$</b><input value={amount} onChange={(event) => setAmount(maskCurrencyInput(event.target.value))} onBlur={() => setAmount(completeCurrencyInput(amount))} placeholder="0,00" inputMode="numeric" /></div></label>
+              <InputField fieldClassName="field" controlClassName="currency-input" label="Valor" prefix="R$" value={amount} onChange={(event) => setAmount(maskCurrencyInput(event.target.value))} onBlur={() => setAmount(completeCurrencyInput(amount))} placeholder="0,00" inputMode="numeric" />
               <DatePickerInput label="Data" value={date} onChange={setDate} />
             </div>
           )}
@@ -935,15 +868,11 @@ function CreateTransactionSheet({
               {launchType === "recurring" && (
                 <fieldset className="recurrence-choice launch-frequency">
                   <legend>Frequência</legend>
-                  <div>
-                    {([["daily", "Diária"], ["weekly", "Semanal"], ["monthly", "Mensal"]] as [Exclude<RecurrenceFrequency, "none">, string][]).map(([frequency, label]) => (
-                      <button type="button" key={frequency} className={recurrenceFrequency === frequency ? "active" : ""} onClick={() => setRecurrenceFrequency(frequency)}>{label}</button>
-                    ))}
-                  </div>
+                  <SegmentedControl ariaLabel="Frequência do lançamento" value={recurrenceFrequency} options={recurrenceFrequencyOptions} onChange={setRecurrenceFrequency} />
                 </fieldset>
               )}
               {launchType !== "single" && (
-                <label className="field recurrence-count"><span>Total de repetições (incluindo esta)</span><input type="text" inputMode="numeric" pattern="[0-9]*" value={recurrenceCount} placeholder="0" onChange={(event) => setRecurrenceCount(maskRepetitionCount(event.target.value))} /></label>
+                <InputField fieldClassName="field recurrence-count" label="Total de repetições (incluindo esta)" type="text" inputMode="numeric" pattern="[0-9]*" value={recurrenceCount} placeholder="0" onChange={(event) => setRecurrenceCount(maskRepetitionCount(event.target.value))} />
               )}
             </section>
           )}
@@ -956,15 +885,15 @@ function CreateTransactionSheet({
                   {expenseItems.map((item, index) => (
                     <div className="expense-item-card" key={item.id}>
                       <div className="expense-item-row">
-                        <input className="expense-item-name" value={item.name} onChange={(event) => updateExpenseItem(item.id, "name", event.target.value)} placeholder="Descrição do item" aria-label={`Descrição do item ${index + 1}`} maxLength={40} />
-                        <div className="currency-input expense-item-amount"><b>R$</b><input value={item.amount} onChange={(event) => updateExpenseItem(item.id, "amount", maskCurrencyInput(event.target.value))} onBlur={() => updateExpenseItem(item.id, "amount", completeCurrencyInput(item.amount))} placeholder="0,00" inputMode="numeric" aria-label={`Valor do item ${index + 1}`} /></div>
+                        <Input className="expense-item-name" value={item.name} onChange={(event) => updateExpenseItem(item.id, "name", event.target.value)} placeholder="Descrição do item" aria-label={`Descrição do item ${index + 1}`} maxLength={40} />
+                        <span className="ui-input-control currency-input expense-item-amount"><b className="ui-input-affix">R$</b><Input value={item.amount} onChange={(event) => updateExpenseItem(item.id, "amount", maskCurrencyInput(event.target.value))} onBlur={() => updateExpenseItem(item.id, "amount", completeCurrencyInput(item.amount))} placeholder="0,00" inputMode="numeric" aria-label={`Valor do item ${index + 1}`} /></span>
                         <button type="button" className="expense-item-remove" onClick={() => removeExpenseItem(item.id)} aria-label={`Remover item ${index + 1}`}><Icon name="trash" /></button>
                       </div>
                       <button type="button" className="expense-item-recurrence" onClick={() => setEditingItemId((current) => current === item.id ? null : item.id)} aria-expanded={editingItemId === item.id}>{itemRecurrenceSummary(item)}</button>
                       {editingItemId === item.id && (
                         <div className="item-recurrence-editor">
-                          <fieldset className="recurrence-choice"><legend>Repetição do item</legend><div>{([["none", "Não repetir"], ["daily", "Diária"], ["weekly", "Semanal"], ["monthly", "Mensal"]] as [RecurrenceFrequency, string][]).map(([frequency, label]) => <button type="button" key={frequency} className={item.recurrenceFrequency === frequency ? "active" : ""} onClick={() => updateExpenseItem(item.id, "recurrenceFrequency", frequency)}>{label}</button>)}</div></fieldset>
-                          {item.recurrenceFrequency !== "none" && <label className="field recurrence-count"><span>Total de repetições (incluindo esta)</span><input type="text" inputMode="numeric" pattern="[0-9]*" value={item.recurrenceCount} placeholder="0" onChange={(event) => updateExpenseItem(item.id, "recurrenceCount", maskRepetitionCount(event.target.value))} /></label>}
+                          <fieldset className="recurrence-choice"><legend>Repetição do item</legend><SegmentedControl ariaLabel={`Repetição do item ${index + 1}`} value={item.recurrenceFrequency} options={itemRecurrenceOptions} onChange={(frequency) => updateExpenseItem(item.id, "recurrenceFrequency", frequency)} /></fieldset>
+                          {item.recurrenceFrequency !== "none" && <InputField fieldClassName="field recurrence-count" label="Total de repetições (incluindo esta)" type="text" inputMode="numeric" pattern="[0-9]*" value={item.recurrenceCount} placeholder="0" onChange={(event) => updateExpenseItem(item.id, "recurrenceCount", maskRepetitionCount(event.target.value))} />}
                         </div>
                       )}
                     </div>
@@ -980,7 +909,7 @@ function CreateTransactionSheet({
           <label className="field full-field transaction-notes"><span>Observações (opcional)</span><textarea maxLength={120} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Adicione um comentário..." /><small className="field-character-count">{notes.length}/120</small></label>
 
           {error && <p className="auth-error" role="alert">{error}</p>}
-          <button type="submit" className={`primary-button create-transaction-submit${type === "income" ? " create-transaction-submit--income" : ""}`} disabled={!canSave || isSubmitting}><Icon name="plus" /> {isSubmitting ? "Adicionando..." : `Adicionar ${type === "expense" ? "despesa" : "receita"}`}</button>
+          <Button type="submit" className={`create-transaction-submit${type === "income" ? " create-transaction-submit--income" : ""}`} fullWidth loading={isSubmitting} loadingLabel="Adicionando..." disabled={!canSave}><Icon name="plus" /> Adicionar {type === "expense" ? "despesa" : "receita"}</Button>
         </form>
 
         {discardAction && (
@@ -1246,11 +1175,7 @@ function Dashboard({
         <button type="button" className="month-arrow" onClick={() => changeMonth(1)} aria-label={`Ir para ${periodFormatter.format(nextMonth)}`}><Icon name="forward" /></button>
       </section>
 
-      <div className="transaction-filter" role="group" aria-label="Filtrar lançamentos por pagamento">
-        <button type="button" className={transactionFilter === "all" ? "selected" : ""} aria-pressed={transactionFilter === "all"} onClick={() => setTransactionFilter("all")}>Todos</button>
-        <button type="button" className={transactionFilter === "pending" ? "selected" : ""} aria-pressed={transactionFilter === "pending"} onClick={() => setTransactionFilter("pending")}>Pendentes</button>
-        <button type="button" className={transactionFilter === "paid" ? "selected" : ""} aria-pressed={transactionFilter === "paid"} onClick={() => setTransactionFilter("paid")}>Pagas</button>
-      </div>
+      <SegmentedControl className="transaction-filter" ariaLabel="Filtrar lançamentos por pagamento" value={transactionFilter} options={transactionFilterOptions} onChange={setTransactionFilter} />
 
       {(error || actionError) && <p className="auth-error" role="alert">{error || actionError}</p>}
 
@@ -1462,15 +1387,9 @@ function SubexpenseEditor({
           <button type="button" className="sheet-close" onClick={onClose} aria-label="Fechar">×</button>
         </div>
 
-        <label className="field full-field">
-          <span>Descrição</span>
-          <input maxLength={40} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Descrição do item" />
-        </label>
+        <InputField fieldClassName="field full-field" label="Descrição" maxLength={40} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Descrição do item" />
         <div className="field-grid field-grid--single">
-          <label className="field">
-            <span>Valor</span>
-            <div className="currency-input"><b>R$</b><input value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: maskCurrencyInput(event.target.value) })} onBlur={() => setDraft({ ...draft, amount: completeCurrencyInput(draft.amount) })} inputMode="numeric" /></div>
-          </label>
+          <InputField fieldClassName="field" controlClassName="currency-input" label="Valor" prefix="R$" value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: maskCurrencyInput(event.target.value) })} onBlur={() => setDraft({ ...draft, amount: completeCurrencyInput(draft.amount) })} inputMode="numeric" />
         </div>
         <section className="launch-type-section item-editor-recurrence" aria-labelledby="item-launch-type-title">
           <div className="launch-type-title" id="item-launch-type-title"><Icon name="clock" /> Tipo de lançamento</div>
@@ -1481,15 +1400,11 @@ function SubexpenseEditor({
           {draft.recurrenceFrequency !== "none" && (
             <fieldset className="recurrence-choice launch-frequency">
               <legend>Frequência</legend>
-              <div>
-                {([["daily", "Diária"], ["weekly", "Semanal"], ["monthly", "Mensal"]] as [Exclude<RecurrenceFrequency, "none">, string][]).map(([frequency, label]) => (
-                  <button type="button" key={frequency} className={draft.recurrenceFrequency === frequency ? "active" : ""} onClick={() => setDraft((current) => ({ ...current, recurrenceFrequency: frequency, recurrenceCount: current.recurrenceCount >= 2 ? current.recurrenceCount : recurrenceCountMemory.current }))}>{label}</button>
-                ))}
-              </div>
+              <SegmentedControl ariaLabel="Frequência do item" value={draft.recurrenceFrequency} options={recurrenceFrequencyOptions} onChange={(frequency) => setDraft((current) => ({ ...current, recurrenceFrequency: frequency, recurrenceCount: current.recurrenceCount >= 2 ? current.recurrenceCount : recurrenceCountMemory.current }))} />
             </fieldset>
           )}
           {draft.recurrenceFrequency !== "none" && (
-            <label className="field recurrence-count"><span>Total de repetições (incluindo esta)</span><input type="text" inputMode="numeric" pattern="[0-9]*" value={draft.recurrenceCount || ""} placeholder="0" onChange={(event) => { const nextCount = Number(maskRepetitionCount(event.target.value)); if (nextCount >= 2) recurrenceCountMemory.current = nextCount; setDraft((current) => ({ ...current, recurrenceCount: nextCount })); }} /></label>
+            <InputField fieldClassName="field recurrence-count" label="Total de repetições (incluindo esta)" type="text" inputMode="numeric" pattern="[0-9]*" value={draft.recurrenceCount || ""} placeholder="0" onChange={(event) => { const nextCount = Number(maskRepetitionCount(event.target.value)); if (nextCount >= 2) recurrenceCountMemory.current = nextCount; setDraft((current) => ({ ...current, recurrenceCount: nextCount })); }} />
           )}
         </section>
         <label className="paid-toggle">
@@ -1500,7 +1415,7 @@ function SubexpenseEditor({
         {error && <p className="auth-error" role="alert">{error}</p>}
         <div className="sheet-actions">
           <button type="button" className="sub-delete" disabled={isSubmitting} onClick={remove}><Icon name="trash" /> {item.id ? "Excluir" : "Cancelar"}</button>
-          <button type="button" className="primary-button" disabled={!canSave || isSubmitting} onClick={save}>{isSubmitting ? "Salvando..." : "Salvar alteração"}</button>
+          <Button type="button" fullWidth loading={isSubmitting} loadingLabel="Salvando..." disabled={!canSave} onClick={save}>Salvar alteração</Button>
         </div>
       </section>
       {pendingAction && (
@@ -1700,11 +1615,11 @@ function DetailScreen({
             <button type="button" className={type === "income" ? "active income" : ""} onClick={() => { setType("income"); if (type !== "income") setCategory(""); if (paymentMethod === "DEBIT_CARD" || paymentMethod === "CREDIT_CARD") setPaymentMethod(""); }}>Receita</button>
           </div>
 
-          <label className="field full-field"><span>Descrição</span><input maxLength={40} value={name} onChange={(event) => setName(event.target.value)} /></label>
+          <InputField fieldClassName="field full-field" label="Descrição" maxLength={40} value={name} onChange={(event) => setName(event.target.value)} />
           <CategoryPickerInput value={category} options={type === "expense" ? expenseCategories : incomeCategories} onChange={setCategory} />
           <PaymentMethodPickerInput label={type === "expense" ? "Forma de pagamento (opcional)" : "Forma de recebimento (opcional)"} value={paymentMethod} options={type === "expense" ? expensePaymentMethods : incomePaymentMethods} onChange={setPaymentMethod} />
           <div className="field-grid">
-            <label className="field"><span>Valor</span><div className="currency-input"><b>R$</b><input value={amount} onChange={(event) => setAmount(maskCurrencyInput(event.target.value))} onBlur={() => setAmount(completeCurrencyInput(amount))} inputMode="numeric" readOnly={transaction.hasSubexpenses} aria-readonly={transaction.hasSubexpenses} /></div></label>
+            <InputField fieldClassName="field" controlClassName="currency-input" label="Valor" prefix="R$" value={amount} onChange={(event) => setAmount(maskCurrencyInput(event.target.value))} onBlur={() => setAmount(completeCurrencyInput(amount))} inputMode="numeric" readOnly={transaction.hasSubexpenses} aria-readonly={transaction.hasSubexpenses} />
             <DatePickerInput label="Vencimento" value={dueDate} onChange={setDueDate} />
           </div>
           {!transaction.hasSubexpenses && (
@@ -1717,10 +1632,10 @@ function DetailScreen({
               {recurrenceFrequency !== "none" && (
                 <fieldset className="recurrence-choice launch-frequency">
                   <legend>Frequência</legend>
-                  <div>{([["daily", "Diária"], ["weekly", "Semanal"], ["monthly", "Mensal"]] as [Exclude<RecurrenceFrequency, "none">, string][]).map(([frequency, label]) => <button type="button" key={frequency} className={recurrenceFrequency === frequency ? "active" : ""} onClick={() => { setRecurrenceFrequency(frequency); if (Number(recurrenceCount) < 2) setRecurrenceCount(recurrenceCountMemory.current); }}>{label}</button>)}</div>
+                  <SegmentedControl ariaLabel="Frequência do lançamento" value={recurrenceFrequency} options={recurrenceFrequencyOptions} onChange={(frequency) => { setRecurrenceFrequency(frequency); if (Number(recurrenceCount) < 2) setRecurrenceCount(recurrenceCountMemory.current); }} />
                 </fieldset>
               )}
-              {recurrenceFrequency !== "none" && <label className="field recurrence-count"><span>Total de repetições (incluindo esta)</span><input type="text" inputMode="numeric" pattern="[0-9]*" value={recurrenceCount} placeholder="0" onChange={(event) => { const nextCount = maskRepetitionCount(event.target.value); if (Number(nextCount) >= 2) recurrenceCountMemory.current = nextCount; setRecurrenceCount(nextCount); }} /></label>}
+              {recurrenceFrequency !== "none" && <InputField fieldClassName="field recurrence-count" label="Total de repetições (incluindo esta)" type="text" inputMode="numeric" pattern="[0-9]*" value={recurrenceCount} placeholder="0" onChange={(event) => { const nextCount = maskRepetitionCount(event.target.value); if (Number(nextCount) >= 2) recurrenceCountMemory.current = nextCount; setRecurrenceCount(nextCount); }} />}
             </section>
           )}
           <label className={`field full-field transaction-notes${transaction.hasSubexpenses ? " transaction-notes--detailed" : ""}`}><span>Observações (opcional)</span><textarea maxLength={120} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Adicione um comentário..." /><small className="field-character-count">{notes.length}/120</small></label>
@@ -1746,7 +1661,7 @@ function DetailScreen({
         )}
 
         {error && <p className="auth-error" role="alert">{error}</p>}
-        <button type="button" className="primary-button save-details" disabled={isSaving || !hasParentChanges || !parentFormIsValid} onClick={saveDetails}>{isSaving ? "Salvando..." : hasParentChanges ? "Salvar alterações" : "Tudo salvo"}</button>
+        <Button type="button" className="save-details" fullWidth loading={isSaving} loadingLabel="Salvando..." disabled={!hasParentChanges || !parentFormIsValid} onClick={saveDetails}>{hasParentChanges ? "Salvar alterações" : "Tudo salvo"}</Button>
         <button type="button" className="danger-button" onClick={() => setConfirmDelete(true)}><Icon name="trash" /> Excluir lançamento</button>
       </div>
 
@@ -1959,6 +1874,7 @@ const customGoalPeriodLabels: Record<ApiCustomGoalPeriod, string> = {
   WEEKLY: "Semanal",
   MONTHLY: "Mensal",
 };
+const customGoalPeriodOptions = (Object.keys(customGoalPeriodLabels) as ApiCustomGoalPeriod[]).map((value) => ({ value, label: customGoalPeriodLabels[value] }));
 
 function PrimaryGoalControl({ selected, disabled, onSelect }: {
   selected: boolean;
@@ -2135,11 +2051,11 @@ function CustomGoalsPanel({ referenceDate, schedule, onScheduleUpdated, primaryG
     {editorOpen && <div className="sheet-backdrop custom-goal-backdrop" role="presentation" onMouseDown={() => !isSaving && setEditorOpen(false)}>
       <section className="custom-goal-dialog" role="dialog" aria-modal="true" aria-labelledby="custom-goal-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="custom-goal-dialog-handle" /><header><div><span>META PERSONALIZADA</span><h2 id="custom-goal-title">{customGoal ? "Editar meta" : "Nova meta"}</h2></div><button type="button" onClick={() => setEditorOpen(false)} aria-label="Fechar">×</button></header>
-        <label className="field full-field"><span>Nome da meta</span><input maxLength={40} placeholder="Ex.: Meta de faturamento" value={name} onChange={(event) => setName(event.target.value)} /></label>
-        <label className="field full-field"><span>Valor da meta</span><div className="currency-input"><b>R$</b><input value={amount} inputMode="numeric" placeholder="0,00" onChange={(event) => setAmount(maskCurrencyInput(event.target.value))} onBlur={() => setAmount(completeCurrencyInput(amount))} /></div></label>
-        <fieldset className="custom-goal-period"><legend>Periodicidade</legend><div>{(Object.keys(customGoalPeriodLabels) as ApiCustomGoalPeriod[]).map((option) => <button type="button" className={period === option ? "selected" : ""} key={option} onClick={() => setPeriod(option)}>{customGoalPeriodLabels[option]}</button>)}</div></fieldset>
+        <InputField fieldClassName="field full-field" label="Nome da meta" maxLength={40} placeholder="Ex.: Meta de faturamento" value={name} onChange={(event) => setName(event.target.value)} />
+        <InputField fieldClassName="field full-field" controlClassName="currency-input" label="Valor da meta" prefix="R$" value={amount} inputMode="numeric" placeholder="0,00" onChange={(event) => setAmount(maskCurrencyInput(event.target.value))} onBlur={() => setAmount(completeCurrencyInput(amount))} />
+        <fieldset className="custom-goal-period"><legend>Periodicidade</legend><SegmentedControl ariaLabel="Periodicidade da meta" value={period} options={customGoalPeriodOptions} onChange={setPeriod} /></fieldset>
         {error && <p className="auth-error" role="alert">{error}</p>}
-        <button type="button" className="primary-button" disabled={isSaving} onClick={() => void save()}>{isSaving ? "Salvando..." : customGoal ? "Salvar alterações" : "Criar meta"}</button>
+        <Button type="button" fullWidth loading={isSaving} loadingLabel="Salvando..." onClick={() => void save()}>{customGoal ? "Salvar alterações" : "Criar meta"}</Button>
       </section>
     </div>}
 
@@ -2357,10 +2273,7 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, initialMode = "expens
       </AppHeader>
 
       <div className="goals-content">
-        <div className="goals-mode-tabs" role="tablist" aria-label="Tipo de meta">
-          <button type="button" role="tab" aria-selected={goalMode === "expenses"} className={goalMode === "expenses" ? "selected" : ""} onClick={() => setGoalMode("expenses")}>Despesas</button>
-          <button type="button" role="tab" aria-selected={goalMode === "custom"} className={goalMode === "custom" ? "selected" : ""} onClick={() => setGoalMode("custom")}>Personalizada</button>
-        </div>
+        <SegmentedControl className="goals-mode-tabs" ariaLabel="Tipo de meta" value={goalMode} options={goalModeOptions} onChange={setGoalMode} />
 
         {error && <p className="auth-error" role="alert">{error}</p>}
 
@@ -2737,7 +2650,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
             <h2>Comece pelas contas do mês</h2>
             <p>{usageProfile === "PERSONAL" ? "Cadastre suas receitas e despesas para acompanhar o saldo do mês e seus próximos pagamentos." : "Cadastre o que precisa pagar para o AMCash calcular sua meta diária. Se preferir outro objetivo, crie uma meta personalizada."}</p>
             <div className="home-empty-actions">
-              <button type="button" className="primary" onClick={onCreateExpense}><Icon name="plus" /><span>Cadastrar primeira despesa</span></button>
+              <Button type="button" className="primary" onClick={onCreateExpense}><Icon name="plus" /><span>Cadastrar primeira despesa</span></Button>
               {usageProfile !== "PERSONAL" && <button type="button" onClick={onCreateCustomGoal}><Icon name="target" /><span>Criar meta personalizada</span></button>}
             </div>
           </section> : <>
@@ -2791,7 +2704,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
               </div>
               <button type="button" className="home-add-cost" onClick={addHomeCost}><Icon name="plus" />Adicionar custo</button>
             </div>
-            <button type="button" disabled={saving || !hasWorkChanges || !additionalEarningsAreValid} onClick={() => void saveDailyResult()}>{saving ? "Atualizando..." : "Atualizar trabalho de hoje"}</button>
+            <Button type="button" fullWidth loading={saving} loadingLabel="Atualizando..." disabled={!hasWorkChanges || !additionalEarningsAreValid} onClick={() => void saveDailyResult()}>Atualizar trabalho de hoje</Button>
           </section>
           </>}
           </>}

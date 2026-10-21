@@ -20,9 +20,10 @@
 | Tokens e estilos globais | `amcash-web/src/app/globals.css` |
 | Fonte e metadados | `amcash-web/src/app/layout.tsx` |
 | Home, Metas, navegação e ícones gerais | `amcash-web/src/app/page.tsx` |
-| Trabalho e modal de edição | `amcash-web/src/app/components/WorkScreen.tsx` |
+| Trabalho e telas de registro/edição | `amcash-web/src/app/components/WorkScreen.tsx` |
 | Cabeçalho compartilhado | `amcash-web/src/app/components/AppHeader.tsx` |
 | Categorias de custo | `amcash-web/src/app/components/CostCategoryGrid.tsx` |
+| Controles compartilhados | `amcash-web/src/app/components/ui/` |
 | Logos e imagens de indicadores | `amcash-web/public/` |
 
 Não há biblioteca externa de componentes, Storybook ou suíte de regressão visual configurada. Tailwind está instalado, mas o visual das telas analisadas é implementado principalmente com classes semânticas em `globals.css`.
@@ -44,6 +45,16 @@ Tokens globais atualmente declarados em `:root`:
 --text-muted: #8a9caf;
 --border-subtle: #edf1f6;
 --border-control: #dce5f0;
+--control-height: 2.7rem;
+--control-radius: 0.7rem;
+--control-border: #dfe6ef;
+--control-background: #ffffff;
+--focus-border: #78aafa;
+--focus-ring: 0 0 0 0.2rem rgb(7 92 244 / 10%);
+--button-height: 3rem;
+--button-radius: 0.8rem;
+--segmented-height: 2.5rem;
+--segmented-radius: 0.8rem;
 --expense-surface: #fff0f2;
 --shadow-card: 0 0.4rem 1.2rem rgb(38 68 104 / 5%);
 ```
@@ -131,7 +142,6 @@ Não existe uma escala nomeada. Os valores dominantes encontrados são:
 | Card padrão B | `0 0.45rem 1.3rem rgb(27 65 112 / 5%)` |
 | Ação primária | `0 0.5rem 1rem rgb(8 108 243 / 18%)` |
 | Hero de Trabalho | `0 0.9rem 2rem rgb(7 92 244 / 18%)` |
-| Modal de Trabalho | `0 1.4rem 4rem rgb(14 40 79 / 24%)` |
 | Modal de meta | `0 1.2rem 3rem rgb(14 31 52 / 24%)` |
 | Shell em telas amplas | `0 1.5rem 5rem rgb(24 52 99 / 9%)` |
 
@@ -228,7 +238,7 @@ Não existe uma escala nomeada. Os valores dominantes encontrados são:
 
 ### 4.7 Botões
 
-**Primário:** azul sólido (`#075cf4` ou `#086cf3`), texto branco, raio `0.75rem–0.9rem`, altura aproximada `2.65rem–3.15rem`, sombra azul suave.
+**Primário:** componente `Button`, altura `3rem`, raio `0.8rem`, gradiente azul, texto branco e sombra azul suave.
 
 **Secundário:** superfície branca/azul muito clara, borda azul-acinzentada e texto azul.
 
@@ -236,30 +246,34 @@ Não existe uma escala nomeada. Os valores dominantes encontrados são:
 
 **Ícone circular:** `2rem–2.4rem`, fundo `#f1f5fa`/`#f3f6fa`.
 
-**Estados:** `disabled` reduz opacidade (`0.45–0.65`) e altera cursor; hover existe apenas em alguns controles.
+**Estados:** `disabled`, `loading` e foco visível são centralizados; ícones e largura total são opcionais.
 
-Não existe hoje um componente React genérico de botão. As variações são classes específicas de contexto.
+**Variações compartilhadas:** `primary`, `secondary` e `danger`. Ações especiais mantêm classes próprias quando sua função visual é diferente.
 
 ### 4.8 Campos monetários e de formulário
 
 **Finalidade:** entrada direta de valores, distâncias e texto.
 
-**Padrão:** altura `3rem–3.55rem`, borda `#dce5f0`, raio `0.8rem–0.95rem`, fundo `#f9fbfe`/`#fbfcff`, label `0.61rem–0.72rem`.
+**Padrão comum:** componentes `Input` e `InputField`, altura `2.7rem`, borda `#dfe6ef`, raio `0.7rem`, fundo branco `#ffffff` e foco `#78aafa` com anel externo de `0.2rem`. Campos digitáveis compostos da Home e Trabalho reutilizam o mesmo token de fundo; seletores e áreas informativas mantêm superfícies próprias.
 
 **Variações:** prefixos `R$` e `km`, logo de fonte, descrição opcional. A Home e a edição de Trabalho permitem fontes de faturamento adicionais.
 
-**Componentes existentes em Trabalho:**
+**Componentes existentes:**
 
-- `MoneyField`: `label`, `value`, `onChange`.
+- `Input`: input base com estados nativo, inválido e desabilitado.
+- `InputField`: label, prefixo/sufixo e mensagem de erro opcionais.
+- `MoneyField`: composição de Trabalho sobre `InputField`.
 - `BrandedMoneyField`: `label`, `logo`, `value`, `onChange`.
 
-**Localização:** `WorkScreen.tsx`; equivalentes inline na Home em `page.tsx`.
+Campos de quilometragem, fontes com logomarca e composições compactas da Home permanecem variantes especiais, mas usam os mesmos tokens de foco.
 
 ### 4.9 Seletor segmentado
 
 **Finalidade:** alternar entre poucas opções mutuamente exclusivas.
 
-**Variações:** Dia/Semana/Mês (`work-period-tabs`), Despesas/Personalizada (`goals-mode-tabs`), horizonte de Projeção.
+**Componente:** `SegmentedControl`, com opções dinâmicas, valor controlado, estado desabilitado e navegação por setas, Home/End.
+
+**Usos:** Todos/Pendentes/Pagas, Dia/Semana/Mês, Despesas/Personalizada, periodicidade de meta e frequências de repetição.
 
 **Padrão:** contêiner azul-cinza claro, padding interno pequeno, opção ativa branca com sombra e texto azul.
 
@@ -275,23 +289,21 @@ Não existe hoje um componente React genérico de botão. As variações são cl
 
 **Localização:** `components/CostCategoryGrid.tsx`; estilos compartilhados em `cost-category-grid`.
 
-### 4.11 Modais e sheets
+### 4.11 Telas de fluxo, modais e sheets
 
-**Finalidade:** edição/criação sem sair do contexto atual.
+**Finalidade:** edição/criação em fluxos dedicados ou sobre o contexto atual.
 
-**Padrão:** backdrop escuro translúcido com blur, card branco, handle superior, cabeçalho com fechar circular, conteúdo rolável e ações inferiores.
+**Padrão:** fluxos principais usam tela branca interna com cabeçalho de retorno, conteúdo rolável e ações inferiores; operações secundárias podem usar backdrop e sheet.
 
 **Variações:**
 
-- Trabalho: `ModalBackdrop` + `work-sheet`; modal central responsivo, largura máxima `32rem`, altura máxima `94svh`/`48rem`.
+- Trabalho: `work-record-screen`; tela interna de registro/edição com formulário compartilhado, largura útil máxima de `32rem` e retorno pelo cabeçalho.
 - Meta personalizada: `custom-goal-backdrop` + `custom-goal-dialog`; largura máxima `27rem`.
 - Finanças: família `sheet-backdrop`, pickers e diálogos próprios.
 
 No fluxo de Finanças, despesa e receita abrem telas próprias em vez de modais, preservando a mesma estrutura visual e retornando pelo cabeçalho. Os atalhos usam somente os ícones tonalizados de despesa e receita. A seleção de categoria abre uma etapa própria, com busca de borda única, lista completa, ícones e retorno imediato após a escolha. A forma de pagamento/recebimento aparece logo abaixo da categoria e usa o seletor próprio do AMCash, com a mesma superfície dos campos e lista de opções estilizada. O detalhamento também aparece antes de valor e data e funciona como botão seletor centralizado, sem checkbox; os campos editáveis usam superfície branca para se diferenciarem das áreas informativas. O tipo de lançamento é apresentado como escolha entre Única e Recorrente; frequência e quantidade aparecem progressivamente, com as três frequências na mesma linha. A forma de pagamento/recebimento e as observações são opcionais e servem apenas para consulta e auditoria; não alteram as regras de detalhamento da despesa.
 
-**Props de `ModalBackdrop`:** `children`, `onClose`.
-
-**Acessibilidade atual:** `role="dialog"`, `aria-modal`, `aria-labelledby` e botões com `aria-label` aparecem no modal de Trabalho.
+**Acessibilidade atual:** as telas de Trabalho usam `aria-labelledby` e botão de retorno com `aria-label`; diálogos preservam `role="dialog"` e `aria-modal`.
 
 ### 4.12 Ícones
 
@@ -378,8 +390,8 @@ Limitações atuais a preservar/avaliar antes de refatorar:
 - `#fff` e `#ffffff` coexistem.
 - `body` usa Arial, enquanto shells internos usam Geist.
 - Cards equivalentes usam duas sombras quase idênticas.
-- Raios de controles semelhantes variam entre `0.65rem` e `0.95rem`.
-- Botões, campos monetários, backdrops e estados vazios ainda são repetidos como marcação/CSS contextual.
+- Raios de cards e controles especiais ainda variam entre `0.65rem` e `0.95rem` por contexto.
+- Backdrops, estados vazios e campos compostos especiais ainda possuem marcação/CSS contextual.
 - Formatação/máscara monetária possui implementações separadas em `page.tsx` e `WorkScreen.tsx`.
 - `page.tsx` concentra telas e componentes de domínios diferentes, reduzindo a descoberta e reutilização.
 
@@ -396,7 +408,7 @@ O repositório não possui infraestrutura detectada para screenshots automatizad
 Antes da primeira refatoração, registrar capturas dos estados afetados em pelo menos:
 
 - Home: dia com meta, dia de folga, formulário de trabalho aberto e perfil Pessoal;
-- Trabalho: Semana, histórico preenchido, vazio e modal de edição com custo aberto;
+- Trabalho: Semana, histórico preenchido, vazio e tela de edição com custo aberto;
 - Metas: Despesas, Personalizada, mês coberto e calendário;
 - larguras abaixo de `25rem`, mobile padrão, `48rem` e landscape a partir de `64rem`, quando aplicável.
 
@@ -413,8 +425,8 @@ Se o ambiente autenticado/dados não estiverem disponíveis, a ausência de comp
 ### Lote 2 — primitives de baixo risco
 
 - `AppHeader` extraído e aplicado às telas autenticadas.
-- Próximos candidatos: `SegmentedControl`, `MoneyField`, `IconButton`, `StatusMessage` e `ModalShell`, somente quando a marcação e o comportamento forem equivalentes.
-- Manter classes atuais inicialmente para reduzir risco visual.
+- `Button`, `Input`, `InputField` e `SegmentedControl` extraídos em `components/ui` e aplicados aos usos equivalentes.
+- Próximos candidatos: `IconButton`, `StatusMessage` e `ModalShell`, somente quando a marcação e o comportamento forem equivalentes.
 
 ### Lote 3 — composições financeiras
 

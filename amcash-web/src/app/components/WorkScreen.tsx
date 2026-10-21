@@ -5,6 +5,10 @@ import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { ApiWorkCost, ApiWorkCostCategory, ApiWorkDay, ApiWorkOverview, ApiWorkPeriod, financeApi } from "@/lib/api";
 import AppHeader from "@/app/components/AppHeader";
 import { CostCategoryGrid, CostCategoryIcon, workCostCategoryLabels } from "@/app/components/CostCategoryGrid";
+import DatePickerInput, { dateToInputValue } from "@/app/components/DatePickerInput";
+import Button from "@/app/components/ui/Button";
+import { InputField } from "@/app/components/ui/Input";
+import SegmentedControl from "@/app/components/ui/SegmentedControl";
 
 type EarningDraft = { source: string; amount: string };
 type CostDraft = { key: string; id?: string; category: ApiWorkCostCategory; description: string; amount: string; homeManaged?: boolean };
@@ -23,16 +27,10 @@ const homeCostPrefix = "HOME: ";
 const legacyHomeCostDescription = "Custo do dia — Home";
 
 const periodLabels: Record<ApiWorkPeriod, string> = { DAY: "Dia", WEEK: "Semana", MONTH: "Mês" };
-function isoDate(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
+const periodOptions = (Object.keys(periodLabels) as ApiWorkPeriod[]).map((value) => ({ value, label: periodLabels[value] }));
 function parseDate(value: string) { return new Date(`${value}T12:00:00`); }
 function currency(value: number) { return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value); }
 function decimal(value: number) { return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 }).format(value); }
-function longDate(value: string) { return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long", year: "numeric" }).format(parseDate(value)); }
 function dayAndMonth(value: string) { return new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "long" }).format(parseDate(value)); }
 function inputMoney(value: string) {
   const digits = value.replace(/\D/g, "");
@@ -70,17 +68,17 @@ export default function WorkScreen({ navigation }: {
   navigation: ReactNode;
 }) {
   const [period, setPeriod] = useState<ApiWorkPeriod>("WEEK");
-  const [referenceDate, setReferenceDate] = useState(() => isoDate(new Date()));
+  const [referenceDate, setReferenceDate] = useState(() => dateToInputValue(new Date()));
   const [overview, setOverview] = useState<ApiWorkOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [draft, setDraft] = useState<WorkDraft | null>(null);
   const [draftMode, setDraftMode] = useState<"create" | "edit">("edit");
-  const [existingRecord, setExistingRecord] = useState<{ day: ApiWorkDay; costs: ApiWorkCost[] } | null>(null);
+  const [checkingDate, setCheckingDate] = useState(false);
   const [editingCostKey, setEditingCostKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const requestId = useRef(0);
-  const existingRecordRequestId = useRef(0);
+  const workDateRequestId = useRef(0);
   const nextCostKey = useRef(0);
 
   const load = useCallback(async () => {
@@ -101,7 +99,7 @@ export default function WorkScreen({ navigation }: {
     if (period === "DAY") date.setDate(date.getDate() + direction);
     if (period === "WEEK") date.setDate(date.getDate() + 7 * direction);
     if (period === "MONTH") date.setMonth(date.getMonth() + direction, 1);
-    setReferenceDate(isoDate(date));
+    setReferenceDate(dateToInputValue(date));
   }
   function openRecord(date: string, day: ApiWorkDay | undefined, costs: ApiWorkCost[]) {
     const uber = day?.earnings.find((earning) => earning.source.toLowerCase() === "uber");
@@ -115,36 +113,33 @@ export default function WorkScreen({ navigation }: {
       originalCostIds: costs.map((cost) => cost.id), hadWorkDay: Boolean(day) });
     setEditingCostKey(null);
     setDraftMode("edit");
-    setExistingRecord(null);
     setError("");
   }
 
-  async function checkExistingRecord(date: string) {
-    const currentRequest = ++existingRecordRequestId.current;
-    setExistingRecord(null);
-    if (!date) return;
+  function emptyDraft(date: string): WorkDraft {
+    return { date, kilometers: "", uber: "", ninetyNine: "", additional: [], costs: [], originalCostIds: [], hadWorkDay: false };
+  }
+
+  async function selectWorkDate(date: string) {
+    const currentRequest = ++workDateRequestId.current;
+    setDraft(emptyDraft(date));
+    setDraftMode("create");
+    setEditingCostKey(null);
+    setCheckingDate(true);
+    setError("");
     try {
       const response = await financeApi.workOverview(date, "DAY");
       const day = response.days.find((item) => item.date === date);
-      if (currentRequest === existingRecordRequestId.current && day) setExistingRecord({ day, costs: response.costs.filter((cost) => cost.date === date) });
+      if (currentRequest !== workDateRequestId.current) return;
+      const costs = response.costs.filter((cost) => cost.date === date);
+      if (day || costs.length) openRecord(date, day, costs);
     } catch (requestError) {
-      if (currentRequest === existingRecordRequestId.current) setError(messageFrom(requestError));
-    }
+      if (currentRequest === workDateRequestId.current) setError(messageFrom(requestError));
+    } finally { if (currentRequest === workDateRequestId.current) setCheckingDate(false); }
   }
 
   function openCreateRecord() {
-    const date = isoDate(new Date());
-    setDraft({ date, kilometers: "", uber: "", ninetyNine: "", additional: [], costs: [], originalCostIds: [], hadWorkDay: false });
-    setDraftMode("create");
-    setExistingRecord(null);
-    setEditingCostKey(null);
-    setError("");
-    void checkExistingRecord(date);
-  }
-
-  function editExistingRecord() {
-    if (!draft || !existingRecord) return;
-    openRecord(draft.date, existingRecord.day, existingRecord.costs);
+    void selectWorkDate(dateToInputValue(new Date()));
   }
 
   async function saveRecord() {
@@ -162,8 +157,8 @@ export default function WorkScreen({ navigation }: {
         const selectedDay = await financeApi.workOverview(draft.date, "DAY");
         const day = selectedDay.days.find((item) => item.date === draft.date);
         if (day) {
-          setExistingRecord({ day, costs: selectedDay.costs.filter((cost) => cost.date === draft.date) });
-          setError("Já existe um trabalho registrado nesta data. Você pode editar o registro existente.");
+          openRecord(draft.date, day, selectedDay.costs.filter((cost) => cost.date === draft.date));
+          setError("Os dados existentes desta data foram carregados para edição.");
           return;
         }
       }
@@ -187,7 +182,7 @@ export default function WorkScreen({ navigation }: {
         .map((id) => financeApi.deleteWorkCost(id)));
       await Promise.all(operations);
       const refreshed = await financeApi.workOverview(draft.date, period);
-      setReferenceDate(draft.date); setOverview(refreshed); setDraft(null); setExistingRecord(null);
+      setReferenceDate(draft.date); setOverview(refreshed); setDraft(null);
     } catch (requestError) { setError(messageFrom(requestError)); } finally { setSaving(false); }
   }
   async function deleteRecord() {
@@ -241,8 +236,7 @@ export default function WorkScreen({ navigation }: {
           <article><span className="work-metric-icon" aria-hidden="true"><Image src="/earnings-per-km-icon.png" alt="" width={1254} height={1254} /></span><span className="work-metric-copy"><span>Por km</span><strong>{currency(Number(summary?.earningsPerKilometer ?? 0))}</strong></span></article>
         </section>
       </>}
-      <div className="work-period-tabs" role="group" aria-label="Período do resumo">{(Object.keys(periodLabels) as ApiWorkPeriod[]).map((option) =>
-        <button key={option} type="button" className={period === option ? "selected" : ""} onClick={() => setPeriod(option)}>{periodLabels[option]}</button>)}</div>
+      <SegmentedControl className="work-period-tabs" ariaLabel="Período do resumo" value={period} options={periodOptions} onChange={setPeriod} />
       <div className="work-period-selector"><button type="button" onClick={() => movePeriod(-1)} aria-label="Período anterior">‹</button>
         <strong>{periodTitle(overview, period, referenceDate)}</strong><button type="button" onClick={() => movePeriod(1)} aria-label="Próximo período">›</button></div>
       {loading ? <div className="work-loading"><div className="loader" /><span>Calculando seus resultados</span></div> : <>
@@ -262,16 +256,16 @@ export default function WorkScreen({ navigation }: {
       </>}
     </div>{navigation}
 
-    {draft && <ModalBackdrop onClose={() => { if (!saving) { setDraft(null); setExistingRecord(null); } }}><section className="work-sheet work-record-sheet" role="dialog" aria-modal="true" aria-labelledby="work-sheet-title" onMouseDown={(event) => event.stopPropagation()}>
-      <div className="work-sheet-handle" />
-      <header className="work-record-header"><div><h2 id="work-sheet-title">{draftMode === "create" ? "Registrar trabalho" : "Editar trabalho"}</h2>{draftMode === "create" ? <label className="work-record-date"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></svg><span className="sr-only">Data do trabalho</span><input type="date" max={isoDate(new Date())} value={draft.date} onChange={(event) => { const date = event.target.value; setDraft({ ...draft, date }); void checkExistingRecord(date); }} /></label> : <p><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></svg>{longDate(draft.date)}</p>}</div><button type="button" onClick={() => { setDraft(null); setExistingRecord(null); }} aria-label="Fechar">×</button></header>
+    {draft && <section className="work-record-screen" aria-labelledby="work-record-title">
+      <header className="work-record-page-header"><button type="button" onClick={() => { if (!saving) setDraft(null); }} aria-label="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg></button><h2 id="work-record-title">{draftMode === "create" ? "Registrar trabalho" : "Editar trabalho"}</h2><span aria-hidden="true" /></header>
       <div className="work-form-scroll">
         {error && <p className="work-error" role="alert">{error}</p>}
-        {draftMode === "create" && existingRecord && <div className="work-existing-record" role="alert"><span>Já existe trabalho registrado nesta data.</span><button type="button" onClick={editExistingRecord}>Editar registro existente</button></div>}
-        <label className="work-record-kilometers"><span>Quilômetros rodados</span><div><span className="work-record-road-icon"><Image src="/road-icon.png" alt="" width={1254} height={1254} /></span><b>km</b><input inputMode="decimal" aria-label="Quilômetros rodados" placeholder="0" value={draft.kilometers} onChange={(event) => setDraft({ ...draft, kilometers: numberInput(event.target.value) })} /></div></label>
+        <div className="work-record-date-field"><DatePickerInput label="Data do trabalho" value={draft.date} max={dateToInputValue(new Date())} onChange={(date) => void selectWorkDate(date)} /></div>
+        {checkingDate && <p className="work-date-loading" role="status">Carregando dados da data selecionada...</p>}
+        <label className="work-record-kilometers"><span>Quilômetros rodados</span><div><span className="work-record-road-icon"><Image src="/road-icon.png" alt="" width={1254} height={1254} /></span><span className="work-record-kilometers-input"><b>km</b><input inputMode="decimal" aria-label="Quilômetros rodados" placeholder="0" value={draft.kilometers} onChange={(event) => setDraft({ ...draft, kilometers: numberInput(event.target.value) })} /></span></div></label>
         <div className="work-record-section-title"><h3>Faturamento</h3></div><div className="work-form-grid">
           <BrandedMoneyField label="Uber" logo="/uber-logo.jpeg" value={draft.uber} onChange={(value) => setDraft({ ...draft, uber: value })} /><BrandedMoneyField label="99" logo="/99-logo.png" value={draft.ninetyNine} onChange={(value) => setDraft({ ...draft, ninetyNine: value })} /></div>
-        {draft.additional.map((item, index) => <div className="work-additional-row" key={index}><label className="work-field"><span>Fonte adicional</span><input maxLength={30} placeholder="Ex.: particular" value={item.source} onChange={(event) => setDraft({ ...draft, additional: draft.additional.map((current, i) => i === index ? { ...current, source: event.target.value } : current) })} /></label>
+        {draft.additional.map((item, index) => <div className="work-additional-row" key={index}><InputField fieldClassName="work-field" label="Fonte adicional" maxLength={30} placeholder="Ex.: particular" value={item.source} onChange={(event) => setDraft({ ...draft, additional: draft.additional.map((current, i) => i === index ? { ...current, source: event.target.value } : current) })} />
           <MoneyField label="Valor" value={item.amount} onChange={(value) => setDraft({ ...draft, additional: draft.additional.map((current, i) => i === index ? { ...current, amount: value } : current) })} />
           <button type="button" onClick={() => setDraft({ ...draft, additional: draft.additional.filter((_, i) => i !== index) })} aria-label="Remover fonte"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 10v6M14 10v6" /></svg></button></div>)}
         <button type="button" className="work-add-source" onClick={() => setDraft({ ...draft, additional: [...draft.additional, { source: "", amount: "" }] })}>+ Adicionar outra fonte</button>
@@ -283,19 +277,18 @@ export default function WorkScreen({ navigation }: {
           </button>
           {editingCostKey === cost.key && <div className="work-record-cost-fields"><div className="work-cost-category"><span>Categoria</span><CostCategoryGrid value={cost.category} ariaLabel="Categoria do custo" onChange={(category) => setDraft({ ...draft, costs: draft.costs.map((current, i) => i === index ? { ...current, category } : current) })} /></div>
             <MoneyField label="Valor" value={cost.amount} onChange={(amount) => setDraft({ ...draft, costs: draft.costs.map((current, i) => i === index ? { ...current, amount } : current) })} />
-            <label className="work-field"><span>Descrição (opcional)</span><input maxLength={60} placeholder="Ex.: Abastecimento no posto" value={cost.description} onChange={(event) => setDraft({ ...draft, costs: draft.costs.map((current, i) => i === index ? { ...current, description: event.target.value } : current) })} /></label>
+            <InputField fieldClassName="work-field" label="Descrição (opcional)" maxLength={60} placeholder="Ex.: Abastecimento no posto" value={cost.description} onChange={(event) => setDraft({ ...draft, costs: draft.costs.map((current, i) => i === index ? { ...current, description: event.target.value } : current) })} />
             <button type="button" className="work-record-cost-remove" onClick={() => { setDraft({ ...draft, costs: draft.costs.filter((_, i) => i !== index) }); setEditingCostKey(null); }}>× <span>Remover custo</span></button></div>}
         </div>)}</div>
         <button type="button" className="work-add-source work-add-cost" onClick={() => { const key = `new-${nextCostKey.current++}`; setDraft({ ...draft, costs: [...draft.costs, { key, category: "FUEL", description: "", amount: "" }] }); setEditingCostKey(key); }}>+ Adicionar custo</button>
 
         <div className="work-record-result"><span><b>Resultado líquido do dia</b><small>Faturamento {currency(draftGross)} · Custos {currency(draftCosts)}</small></span><strong className={draftNet < 0 ? "negative" : ""}>{draftNet < 0 ? "- " : ""}{currency(Math.abs(draftNet))}</strong></div>
       </div>
-      <footer><button type="button" className="work-save" disabled={saving || !draft.date || Boolean(existingRecord)} onClick={saveRecord}>{saving ? "Salvando..." : draftMode === "create" ? "Registrar trabalho" : "Salvar alterações"}</button>{draftMode === "edit" && <button type="button" className="work-delete" disabled={saving} onClick={deleteRecord}>Excluir registro</button>}</footer>
-    </section></ModalBackdrop>}
+      <footer><Button type="button" className="work-save" fullWidth loading={saving} loadingLabel="Salvando..." disabled={checkingDate || !draft.date} onClick={saveRecord}>{draftMode === "create" ? "Registrar trabalho" : "Salvar alterações"}</Button>{draftMode === "edit" && <button type="button" className="work-delete" disabled={saving || checkingDate} onClick={deleteRecord}>Excluir registro</button>}</footer>
+    </section>}
   </main>;
 }
 
 function DateBadge({ date }: { date: string }) { return <span className="work-day-date"><b>{String(parseDate(date).getDate()).padStart(2, "0")}</b><small>{new Intl.DateTimeFormat("pt-BR", { weekday: "short" }).format(parseDate(date)).replace(".", "")}</small></span>; }
-function MoneyField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="work-field"><span>{label}</span><div className="work-money-input"><b>R$</b><input inputMode="numeric" placeholder="0,00" value={value} onChange={(event) => onChange(inputMoney(event.target.value))} /></div></label>; }
+function MoneyField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <InputField fieldClassName="work-field" controlClassName="work-money-input" label={label} prefix="R$" inputMode="numeric" placeholder="0,00" value={value} onChange={(event) => onChange(inputMoney(event.target.value))} />; }
 function BrandedMoneyField({ label, logo, value, onChange }: { label: string; logo: string; value: string; onChange: (value: string) => void }) { return <label className="work-branded-money"><span>{label}</span><div><span className="work-branded-logo"><Image src={logo} alt="" width={96} height={96} /></span><span className="work-branded-input"><b>R$</b><input inputMode="numeric" placeholder="0,00" value={value} onChange={(event) => onChange(inputMoney(event.target.value))} /></span></div></label>; }
-function ModalBackdrop({ children, onClose }: { children: ReactNode; onClose: () => void }) { return <div className="work-sheet-backdrop" role="presentation" onMouseDown={onClose}>{children}</div>; }
