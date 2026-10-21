@@ -178,7 +178,7 @@ type Subexpense = {
   seriesId?: string;
 };
 
-type IconName = Transaction["kind"] | "search" | "more" | "back" | "forward" | "home" | "radar" | "target" | "work" | "edit" | "trash" | "plus" | "check" | "logout" | "clock" | "calendar";
+type IconName = Transaction["kind"] | "search" | "more" | "back" | "forward" | "home" | "radar" | "target" | "work" | "edit" | "trash" | "plus" | "check" | "logout" | "clock" | "calendar" | "income" | "expense";
 
 function Icon({ name }: { name: IconName }) {
   if (name === "more") {
@@ -206,6 +206,8 @@ function Icon({ name }: { name: IconName }) {
     logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>,
     clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
     calendar: <><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M8 3v4M16 3v4M3.5 9.5h17" /></>,
+    income: <><path d="M17 7 7 17M7 9v8h8" /></>,
+    expense: <><path d="m7 17 10-10M9 7h8v8" /></>,
   };
 
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
@@ -1230,8 +1232,8 @@ function Dashboard({
     <main className="dashboard-screen">
       <AppHeader>
         <div className="header-create-actions">
-          <button type="button" className="header-add-button header-add-button--expense" disabled={isLoading} onClick={() => setCreateType("expense")} aria-label="Nova despesa" title="Nova despesa"><Icon name="card" /></button>
-          <button type="button" className="header-add-button header-add-button--income" disabled={isLoading} onClick={() => setCreateType("income")} aria-label="Nova receita" title="Nova receita"><Icon name="wallet" /></button>
+          <button type="button" className="header-add-button header-add-button--expense" disabled={isLoading} onClick={() => setCreateType("expense")} aria-label="Nova despesa" title="Nova despesa"><Icon name="expense" /></button>
+          <button type="button" className="header-add-button header-add-button--income" disabled={isLoading} onClick={() => setCreateType("income")} aria-label="Nova receita" title="Nova receita"><Icon name="income" /></button>
         </div>
       </AppHeader>
 
