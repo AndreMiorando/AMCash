@@ -17,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -64,6 +65,9 @@ class CustomGoalServiceTests {
         assertEquals(period, response.period());
         assertEquals(new BigDecimal("1500.00"), response.amount());
         assertEquals(new BigDecimal("1500.00"), response.remainingAmount());
+        ArgumentCaptor<CustomGoal> savedGoal = ArgumentCaptor.forClass(CustomGoal.class);
+        verify(repository).save(savedGoal.capture());
+        assertTrue(savedGoal.getValue().isTrackedOnHome());
     }
 
     @Test
