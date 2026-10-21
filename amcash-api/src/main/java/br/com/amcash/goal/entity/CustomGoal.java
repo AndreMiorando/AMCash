@@ -58,6 +58,7 @@ public class CustomGoal {
         this.name = name;
         this.targetAmount = targetAmount;
         this.period = period;
+        this.trackedOnHome = true;
         this.createdAt = now;
         this.updatedAt = now;
     }

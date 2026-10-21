@@ -285,32 +285,49 @@ export class ApiError extends Error {
 }
 
 const apiUrl = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080").replace(/\/$/, "");
+const inFlightGetRequests = new Map<string, Promise<unknown>>();
 
 async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = window.localStorage.getItem("amcash.accessToken");
-  const response = await fetch(`${apiUrl}${path}`, {
-    ...init,
-    headers: {
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init.headers,
-    },
-  });
-
-  if (!response.ok) {
-    let message = "Não foi possível concluir a operação.";
-    try {
-      const body = await response.json() as { message?: string };
-      if (body.message) message = body.message;
-    } catch {
-      // The status code still provides a useful fallback when the body is empty.
-    }
-    if (response.status === 401) window.dispatchEvent(new Event("amcash:unauthorized"));
-    throw new ApiError(message, response.status);
+  const method = (init.method ?? "GET").toUpperCase();
+  const requestKey = `${token ?? "anonymous"}:${path}`;
+  if (method === "GET") {
+    const pendingRequest = inFlightGetRequests.get(requestKey);
+    if (pendingRequest) return pendingRequest as Promise<T>;
   }
 
-  if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+  const request = (async () => {
+    const response = await fetch(`${apiUrl}${path}`, {
+      ...init,
+      headers: {
+        ...(init.body ? { "Content-Type": "application/json" } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init.headers,
+      },
+    });
+
+    if (!response.ok) {
+      let message = "Não foi possível concluir a operação.";
+      try {
+        const body = await response.json() as { message?: string };
+        if (body.message) message = body.message;
+      } catch {
+        // The status code still provides a useful fallback when the body is empty.
+      }
+      if (response.status === 401) window.dispatchEvent(new Event("amcash:unauthorized"));
+      throw new ApiError(message, response.status);
+    }
+
+    if (response.status === 204) return undefined as T;
+    return response.json() as Promise<T>;
+  })();
+
+  if (method !== "GET") return request;
+  inFlightGetRequests.set(requestKey, request);
+  void request.finally(() => {
+    if (inFlightGetRequests.get(requestKey) === request) inFlightGetRequests.delete(requestKey);
+  }).catch(() => undefined);
+  return request;
 }
 
 export const financeApi = {

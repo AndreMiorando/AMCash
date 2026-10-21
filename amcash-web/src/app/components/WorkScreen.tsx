@@ -9,6 +9,7 @@ import DatePickerInput, { dateToInputValue } from "@/app/components/DatePickerIn
 import Button from "@/app/components/ui/Button";
 import { InputField } from "@/app/components/ui/Input";
 import SegmentedControl from "@/app/components/ui/SegmentedControl";
+import { KpiLabel, KpiValue, PrimaryKpiCard, SecondaryKpiGroup, SecondaryKpiItem } from "@/app/components/ui/Kpi";
 
 type EarningDraft = { source: string; amount: string };
 type CostDraft = { key: string; id?: string; category: ApiWorkCostCategory; description: string; amount: string; homeManaged?: boolean };
@@ -219,22 +220,21 @@ export default function WorkScreen({ navigation }: {
   return <main className="work-screen">
     <AppHeader className="work-header"><div className="work-header-actions"><span className="work-header-label">TRABALHO</span><button type="button" className="header-add-button work-register-button" onClick={openCreateRecord} aria-label="Registrar dia" title="Registrar dia"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M8 3v4M16 3v4M3.5 9.5h17M12 13v5M9.5 15.5h5" /></svg></button></div></AppHeader>
     <div className="work-content">
-      <section className="work-heading"><div><h1>Seu trabalho</h1><p>Acompanhe seus resultados e edite registros.</p></div></section>
       {error && !draft && <p className="work-error" role="alert">{error}</p>}
       {overview && <>
-        <section className="work-net-card">
-          <div className="work-net-main"><span>LÍQUIDO NO PERÍODO</span><strong className={(summary?.netEarnings ?? 0) < 0 ? "negative" : ""}>{currency(Number(summary?.netEarnings ?? 0))}</strong></div>
+        <PrimaryKpiCard className="work-net-card">
+          <div className="work-net-main"><KpiLabel>LÍQUIDO NO PERÍODO</KpiLabel><KpiValue className={(summary?.netEarnings ?? 0) < 0 ? "negative" : ""}>{currency(Number(summary?.netEarnings ?? 0))}</KpiValue></div>
           <div className={`work-net-comparison ${comparisonTone}`} aria-label={`${comparisonValue} em relação ao ${previousPeriodLabel}`} title={`Líquido do ${previousPeriodLabel}: ${currency(Number(comparison?.netEarnings ?? 0))}`}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M5 20v-6M12 20V9M19 20V4" /></svg>
             <strong>{comparisonValue}</strong>
           </div>
-        </section>
-        <section className="work-metrics">
-          <article><span className="work-metric-icon revenue" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M7 10h10M7 14h6" /></svg></span><span className="work-metric-copy"><span>Faturamento</span><strong>{currency(Number(summary?.grossEarnings ?? 0))}</strong></span></article>
-          <article><span className="work-metric-icon expense" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18M7 14h5" /></svg></span><span className="work-metric-copy"><span>Custos</span><strong className="cost">{currency(Number(summary?.totalCosts ?? 0))}</strong></span></article>
-          <article><span className="work-metric-icon" aria-hidden="true"><Image src="/road-icon.png" alt="" width={1254} height={1254} /></span><span className="work-metric-copy"><span>Quilômetros</span><strong>{decimal(Number(summary?.kilometers ?? 0))}</strong></span></article>
-          <article><span className="work-metric-icon" aria-hidden="true"><Image src="/earnings-per-km-icon.png" alt="" width={1254} height={1254} /></span><span className="work-metric-copy"><span>Por km</span><strong>{currency(Number(summary?.earningsPerKilometer ?? 0))}</strong></span></article>
-        </section>
+        </PrimaryKpiCard>
+        <SecondaryKpiGroup className="work-metrics">
+          <SecondaryKpiItem><span className="work-metric-icon revenue" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M7 10h10M7 14h6" /></svg></span><span className="work-metric-copy"><KpiLabel>Faturamento</KpiLabel><KpiValue>{currency(Number(summary?.grossEarnings ?? 0))}</KpiValue></span></SecondaryKpiItem>
+          <SecondaryKpiItem><span className="work-metric-icon expense" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18M7 14h5" /></svg></span><span className="work-metric-copy"><KpiLabel>Custos</KpiLabel><KpiValue className="cost">{currency(Number(summary?.totalCosts ?? 0))}</KpiValue></span></SecondaryKpiItem>
+          <SecondaryKpiItem><span className="work-metric-icon" aria-hidden="true"><Image src="/road-icon.png" alt="" width={1254} height={1254} /></span><span className="work-metric-copy"><KpiLabel>Quilômetros</KpiLabel><KpiValue>{decimal(Number(summary?.kilometers ?? 0))}</KpiValue></span></SecondaryKpiItem>
+          <SecondaryKpiItem><span className="work-metric-icon" aria-hidden="true"><Image src="/earnings-per-km-icon.png" alt="" width={1254} height={1254} /></span><span className="work-metric-copy"><KpiLabel>Por km</KpiLabel><KpiValue>{currency(Number(summary?.earningsPerKilometer ?? 0))}</KpiValue></span></SecondaryKpiItem>
+        </SecondaryKpiGroup>
       </>}
       <SegmentedControl className="work-period-tabs" ariaLabel="Período do resumo" value={period} options={periodOptions} onChange={setPeriod} />
       <div className="work-period-selector"><button type="button" onClick={() => movePeriod(-1)} aria-label="Período anterior">‹</button>
