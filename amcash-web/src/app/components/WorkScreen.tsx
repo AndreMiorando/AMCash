@@ -50,10 +50,10 @@ function isHomeCost(cost: ApiWorkCost) { return cost.description === legacyHomeC
 function costDescription(cost: ApiWorkCost) {
   if (cost.description?.startsWith(homeCostPrefix)) {
     const description = cost.description.slice(homeCostPrefix.length);
-    return description === workCostCategoryLabels[cost.category] ? "Custo do dia" : description;
+    return description === workCostCategoryLabels[cost.category] ? "" : description;
   }
-  if (cost.description === legacyHomeCostDescription) return "Custo do dia";
-  return cost.description || workCostCategoryLabels[cost.category];
+  if (cost.description === legacyHomeCostDescription) return "";
+  return cost.description || "";
 }
 function messageFrom(error: unknown) { return error instanceof Error ? error.message : "Não foi possível concluir a operação."; }
 function periodTitle(overview: ApiWorkOverview | null, period: ApiWorkPeriod, referenceDate: string) {
@@ -273,7 +273,7 @@ export default function WorkScreen({ navigation }: {
         <div className="work-record-section-title"><h3>Custos do dia</h3></div>
         <div className="work-record-costs">{draft.costs.map((cost, index) => <div className={`work-record-cost-item${editingCostKey === cost.key ? " expanded" : ""}`} key={cost.key}>
           <button type="button" className="work-record-cost-summary" aria-expanded={editingCostKey === cost.key} onClick={() => setEditingCostKey((current) => current === cost.key ? null : cost.key)}>
-            <span className="work-record-cost-icon"><CostCategoryIcon category={cost.category} /></span><span className="work-record-cost-copy"><strong>{workCostCategoryLabels[cost.category]}</strong><small>{cost.description.trim() || "Custo do dia"}</small></span><b>{currency(numberFromInput(cost.amount))}</b><span className="work-record-cost-chevron" aria-hidden="true">›</span>
+            <span className="work-record-cost-icon"><CostCategoryIcon category={cost.category} /></span><span className="work-record-cost-copy"><strong>{workCostCategoryLabels[cost.category]}</strong>{cost.description.trim() && <small>{cost.description.trim()}</small>}</span><b>{currency(numberFromInput(cost.amount))}</b><span className="work-record-cost-chevron" aria-hidden="true">›</span>
           </button>
           {editingCostKey === cost.key && <div className="work-record-cost-fields"><div className="work-cost-category"><span>Categoria</span><CostCategoryGrid value={cost.category} ariaLabel="Categoria do custo" onChange={(category) => setDraft({ ...draft, costs: draft.costs.map((current, i) => i === index ? { ...current, category } : current) })} /></div>
             <MoneyField label="Valor" value={cost.amount} onChange={(amount) => setDraft({ ...draft, costs: draft.costs.map((current, i) => i === index ? { ...current, amount } : current) })} />
