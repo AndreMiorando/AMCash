@@ -9,3 +9,5 @@ Thumbs.db
 # Local Spring Boot configuration (may contain credentials)
 amcash-api/src/main/resources/application-local.yaml
 
+.vercel
+.env*

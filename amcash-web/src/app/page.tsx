@@ -2255,12 +2255,12 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, initialMode }: { onHo
           <div className="goal-type-choice-options">
             <button type="button" className={goalMode === "expenses" ? "selected" : ""} disabled={isSavingPrimary} aria-pressed={goalMode === "expenses"} onClick={() => void chooseGoalMode("expenses")}>
               <i aria-hidden="true"><Icon name="wallet" /></i>
-              <span><strong>Usar despesas como meta</strong><small>Calcula automaticamente quanto falta para cobrir o mês.</small></span>
+              <span><strong>Usar despesas como meta</strong></span>
               {goalMode === "expenses" && <Icon name="check" />}
             </button>
             <button type="button" className={goalMode === "custom" ? "selected" : ""} disabled={isSavingPrimary} aria-pressed={goalMode === "custom"} onClick={() => void chooseGoalMode("custom")}>
               <i aria-hidden="true"><Icon name="target" /></i>
-              <span><strong>Cadastrar uma meta</strong><small>Defina seu próprio valor diário, semanal ou mensal.</small></span>
+              <span><strong>Cadastrar uma meta</strong></span>
               {goalMode === "custom" && <Icon name="check" />}
             </button>
           </div>
