@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Script from "next/script";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   ApiEntry,
   ApiEntryCategory,
@@ -231,8 +231,11 @@ function Icon({ name }: { name: IconName }) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
+type NavigationTab = "home" | "finance" | "radar" | "goals" | "work";
+const NavigationLoadingContext = createContext<NavigationTab | null>(null);
+
 function BottomNavigation({ active, loading = false, onHome, onFinance, onRadar, onGoals, onWork, showWorkFeatures = true }: {
-  active: "home" | "finance" | "radar" | "goals" | "work";
+  active: NavigationTab;
   loading?: boolean;
   onHome: () => void;
   onFinance: () => void;
@@ -241,32 +244,54 @@ function BottomNavigation({ active, loading = false, onHome, onFinance, onRadar,
   onWork: () => void;
   showWorkFeatures?: boolean;
 }) {
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const pendingTab = useContext(NavigationLoadingContext);
+  const loadingTab = pendingTab ?? (loading ? active : null);
+  const moreIsActive = active === "goals" || active === "radar";
+  const moreIsLoading = loadingTab === "goals" || loadingTab === "radar";
   const navigationIcon = (tab: "home" | "finance" | "radar" | "goals" | "work", icon: IconName) => (
-    loading && active === tab ? <span className="nav-icon-loader" role="status" aria-label="Carregando página" /> : <Icon name={icon} />
+    loadingTab === tab ? <span className="nav-icon-loader" role="status" aria-label="Carregando página" /> : <Icon name={icon} />
   );
+  useEffect(() => {
+    if (!isMoreOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setIsMoreOpen(false); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [isMoreOpen]);
   return (
+    <>
     <nav className="bottom-nav" aria-label="Navegação principal">
-      <button type="button" className={`nav-item${active === "home" ? " active" : ""}`} onClick={onHome} aria-current={active === "home" ? "page" : undefined} aria-busy={loading && active === "home"}>
+      <button type="button" className={`nav-item${active === "home" ? " active" : ""}`} onClick={onHome} aria-current={active === "home" ? "page" : undefined} aria-busy={loadingTab === "home"}>
         {navigationIcon("home", "home")}
         <span>Home</span>
       </button>
-      <button type="button" className={`nav-item${active === "finance" ? " active" : ""}`} onClick={onFinance} aria-current={active === "finance" ? "page" : undefined} aria-busy={loading && active === "finance"}>
+      <button type="button" className={`nav-item${active === "finance" ? " active" : ""}`} onClick={onFinance} aria-current={active === "finance" ? "page" : undefined} aria-busy={loadingTab === "finance"}>
         {navigationIcon("finance", "wallet")}
         <span>Finanças</span>
       </button>
-      {showWorkFeatures && <button type="button" className={`nav-item${active === "work" ? " active" : ""}`} onClick={onWork} aria-current={active === "work" ? "page" : undefined} aria-busy={loading && active === "work"}>
+      {showWorkFeatures && <button type="button" className={`nav-item${active === "work" ? " active" : ""}`} onClick={onWork} aria-current={active === "work" ? "page" : undefined} aria-busy={loadingTab === "work"}>
         {navigationIcon("work", "work")}
         <span>Trabalho</span>
       </button>}
-      {showWorkFeatures && <button type="button" className={`nav-item${active === "goals" ? " active" : ""}`} onClick={onGoals} aria-current={active === "goals" ? "page" : undefined} aria-busy={loading && active === "goals"}>
-        {navigationIcon("goals", "target")}
-        <span>Metas</span>
-      </button>}
-      <button type="button" className={`nav-item${active === "radar" ? " active" : ""}`} onClick={onRadar} aria-current={active === "radar" ? "page" : undefined} aria-busy={loading && active === "radar"}>
-        {navigationIcon("radar", "radar")}
-        <span>Projeção</span>
+      <button type="button" className={`nav-item${moreIsActive ? " active" : ""}`} onClick={() => setIsMoreOpen(true)} aria-current={moreIsActive ? "page" : undefined} aria-expanded={isMoreOpen} aria-haspopup="dialog" aria-busy={moreIsLoading}>
+        {moreIsLoading ? <span className="nav-icon-loader" role="status" aria-label="Carregando página" /> : <svg className="nav-more-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="7" cy="7" r="2.25" /><circle cx="17" cy="7" r="2.25" /><circle cx="7" cy="17" r="2.25" /><circle cx="17" cy="17" r="2.25" /></svg>}
+        <span>Mais</span>
       </button>
     </nav>
+    {isMoreOpen && <div className="more-menu-backdrop" role="presentation" onMouseDown={() => setIsMoreOpen(false)}>
+      <section className="more-menu-sheet" role="dialog" aria-modal="true" aria-label="Mais opções" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="more-menu-handle" aria-hidden="true" />
+        <div className="more-menu-actions">
+          {showWorkFeatures && <button type="button" className={active === "goals" ? "active" : ""} onClick={() => { setIsMoreOpen(false); onGoals(); }}>
+            <span className="more-menu-icon goals"><Icon name="target" /></span><strong>Metas</strong><Icon name="forward" />
+          </button>}
+          <button type="button" className={active === "radar" ? "active" : ""} onClick={() => { setIsMoreOpen(false); onRadar(); }}>
+            <span className="more-menu-icon radar"><Icon name="radar" /></span><strong>Projeção</strong><Icon name="forward" />
+          </button>
+        </div>
+      </section>
+    </div>}
+    </>
   );
 }
 
@@ -1026,6 +1051,7 @@ function Dashboard({
   initialPeriod,
   initialCreateOpen = false,
   onInitialCreateHandled,
+  onReady,
   error = "",
   isLoading = false,
 }: {
@@ -1043,6 +1069,7 @@ function Dashboard({
   initialPeriod: { year: number; month: number };
   initialCreateOpen?: boolean;
   onInitialCreateHandled?: () => void;
+  onReady?: () => void;
   error?: string;
   isLoading?: boolean;
 }) {
@@ -1060,6 +1087,7 @@ function Dashboard({
   useEffect(() => {
     if (initialCreateOpen) onInitialCreateHandled?.();
   }, [initialCreateOpen, onInitialCreateHandled]);
+  useEffect(() => { if (!isLoading) onReady?.(); }, [isLoading, onReady]);
   const periodFormatter = new Intl.DateTimeFormat("pt-BR", {
     month: "long",
     year: "numeric",
@@ -1688,7 +1716,7 @@ function DetailScreen({
   );
 }
 
-function RadarScreen({ onHome, onFinance, onGoals, onWork, showWorkFeatures = true }: { onHome: () => void; onFinance: (period?: { year: number; month: number }) => void; onGoals: () => void; onWork: () => void; showWorkFeatures?: boolean }) {
+function RadarScreen({ onHome, onFinance, onGoals, onWork, onReady, showWorkFeatures = true }: { onHome: () => void; onFinance: (period?: { year: number; month: number }) => void; onGoals: () => void; onWork: () => void; onReady?: () => void; showWorkFeatures?: boolean }) {
   const now = new Date();
   const startYear = now.getFullYear();
   const startMonth = now.getMonth() + 1;
@@ -1711,6 +1739,7 @@ function RadarScreen({ onHome, onFinance, onGoals, onWork, showWorkFeatures = tr
       });
     return () => { active = false; };
   }, [startMonth, startYear]);
+  useEffect(() => { if (!isLoading) onReady?.(); }, [isLoading, onReady]);
 
   const timeline = forecast?.timeline ?? [];
   const current = timeline[0];
@@ -2023,13 +2052,13 @@ function CustomGoalsPanel({ referenceDate, schedule, onScheduleUpdated, primaryG
   </div>;
 }
 
-function GoalsScreen({ onHome, onFinance, onRadar, onWork, initialMode }: { onHome: () => void; onFinance: () => void; onRadar: () => void; onWork: () => void; initialMode?: "expenses" | "custom" }) {
+function GoalsScreen({ onHome, onFinance, onRadar, onWork, onReady, initialMode }: { onHome: () => void; onFinance: () => void; onRadar: () => void; onWork: () => void; onReady?: () => void; initialMode?: "expenses" | "custom" }) {
   const [referenceDate, setReferenceDate] = useState(() => dateToInputValue(new Date()));
   const [goal, setGoal] = useState<ApiGoal | null>(null);
   const [nextGoal, setNextGoal] = useState<ApiGoal | null>(null);
   const [isNextGoalExpanded, setIsNextGoalExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isCustomLoading, setIsCustomLoading] = useState(false);
+  const [isCustomLoading, setIsCustomLoading] = useState(initialMode === "custom");
   const [isLoadingNextGoal, setIsLoadingNextGoal] = useState(false);
   const [isSavingDays, setIsSavingDays] = useState(false);
   const [error, setError] = useState("");
@@ -2037,6 +2066,7 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, initialMode }: { onHo
   const [goalMode, setGoalMode] = useState<"expenses" | "custom">(initialMode ?? "expenses");
   const [primaryGoalType, setPrimaryGoalType] = useState<ApiPrimaryGoalType>("EXPENSES");
   const [isSavingPrimary, setIsSavingPrimary] = useState(false);
+  useEffect(() => { if (!isLoading && !isCustomLoading) onReady?.(); }, [isCustomLoading, isLoading, onReady]);
 
   useEffect(() => {
     const updateDate = () => {
@@ -2065,7 +2095,10 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, initialMode }: { onHo
         if (!active) return;
         setGoal(response);
         setPrimaryGoalType(primary.type);
-        if (!initialMode) setGoalMode(primary.type === "CUSTOM" ? "custom" : "expenses");
+        if (!initialMode) {
+          setGoalMode(primary.type === "CUSTOM" ? "custom" : "expenses");
+          setIsCustomLoading(primary.type === "CUSTOM");
+        }
         setNextGoal(null);
         setIsNextGoalExpanded(false);
         setIsLoading(false);
@@ -2114,6 +2147,7 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, initialMode }: { onHo
       return;
     }
 
+    setIsCustomLoading(true);
     try {
       const customGoal = await financeApi.customGoal(referenceDate);
       if (customGoal) await selectPrimaryGoal("CUSTOM");
@@ -2441,7 +2475,7 @@ function AccountMenu({ onLogout, usageProfile, onChangeProfile }: { onLogout: ()
   </div>;
 }
 
-function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, onCreateCustomGoal, onLogout, usageProfile, onChangeProfile }: {
+function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, onCreateCustomGoal, onLogout, onReady, usageProfile, onChangeProfile }: {
   onFinance: () => void;
   onCreateExpense: () => void;
   onRadar: () => void;
@@ -2449,6 +2483,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   onWork: () => void;
   onCreateCustomGoal: () => void;
   onLogout: () => void;
+  onReady?: () => void;
   usageProfile: ApiUsageProfile;
   onChangeProfile: () => void;
 }) {
@@ -2517,6 +2552,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+  useEffect(() => { if (!loading) onReady?.(); }, [loading, onReady]);
 
   const rawDateLabel = new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "2-digit", month: "short" })
     .format(new Date(`${today}T12:00:00`))
@@ -2703,7 +2739,8 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
 export default function Home() {
   const [screen, setScreen] = useState<"checking" | "auth" | "loading" | "refreshing" | "app">("checking");
   const [isLaunchSplashVisible, setIsLaunchSplashVisible] = useState(true);
-  const [activeTab, setActiveTab] = useState<"home" | "finance" | "radar" | "goals" | "work">("home");
+  const [activeTab, setActiveTab] = useState<NavigationTab>("home");
+  const [pendingTab, setPendingTab] = useState<NavigationTab | null>(null);
   const [usageProfile, setUsageProfile] = useState<ApiUsageProfile | null | undefined>(undefined);
   const [profilePickerOpen, setProfilePickerOpen] = useState(false);
   const [goalInitialMode, setGoalInitialMode] = useState<"expenses" | "custom" | undefined>(undefined);
@@ -2727,6 +2764,7 @@ export default function Home() {
     setSelected(null);
     setError("");
     setActiveTab("home");
+    setPendingTab(null);
     setGoalInitialMode(undefined);
     setUsageProfile(undefined);
     setProfilePickerOpen(false);
@@ -2894,23 +2932,18 @@ export default function Home() {
   if (usageProfile === undefined) return <LoadingScreen />;
   if (usageProfile === null || profilePickerOpen) return <UsageProfileScreen onSelect={chooseUsageProfile} onCancel={usageProfile ? () => setProfilePickerOpen(false) : undefined} />;
   const showWorkFeatures = usageProfile !== "PERSONAL";
-  const openWork = () => setActiveTab("work");
-  const openGoals = (mode?: "expenses" | "custom") => { setGoalInitialMode(mode); setActiveTab("goals"); };
+  const navigateTo = (tab: NavigationTab) => {
+    if (tab === activeTab) return;
+    setPendingTab(tab);
+  };
+  const openWork = () => navigateTo("work");
+  const openGoals = (mode?: "expenses" | "custom") => { setGoalInitialMode(mode); navigateTo("goals"); };
   const openFinance = (targetPeriod?: { year: number; month: number }) => {
     const today = new Date();
     const nextPeriod = targetPeriod ?? { year: today.getFullYear(), month: today.getMonth() + 1 };
     changeMonth(nextPeriod.year, nextPeriod.month);
-    setActiveTab("finance");
+    navigateTo("finance");
   };
-  if (activeTab === "radar") return <RadarScreen onHome={() => setActiveTab("home")} onFinance={openFinance} onGoals={() => openGoals()} onWork={() => openWork()} showWorkFeatures={showWorkFeatures} />;
-  if (activeTab === "goals") return <GoalsScreen initialMode={goalInitialMode} onHome={() => setActiveTab("home")} onFinance={() => openFinance()} onRadar={() => setActiveTab("radar")} onWork={() => openWork()} />;
-  if (activeTab === "work") {
-    return (
-      <WorkScreen navigation={(loading) => (
-        <BottomNavigation active="work" loading={loading} onHome={() => setActiveTab("home")} onFinance={() => openFinance()} onRadar={() => setActiveTab("radar")} onGoals={() => openGoals()} onWork={() => {}} />
-      )} />
-    );
-  }
   if (selected) {
     return (
       <DetailScreen
@@ -2922,6 +2955,16 @@ export default function Home() {
     );
   }
 
-  if (activeTab === "finance") return <Dashboard items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onHome={() => setActiveTab("home")} onRadar={() => setActiveTab("radar")} onGoals={() => openGoals()} onWork={() => openWork()} showWorkFeatures={showWorkFeatures} onMonthChange={changeMonth} initialPeriod={period} initialCreateOpen={financeCreateRequested} onInitialCreateHandled={() => setFinanceCreateRequested(false)} error={error} isLoading={isLoading} />;
-  return <HomeDashboard onFinance={() => openFinance()} onCreateExpense={() => { setFinanceCreateRequested(true); openFinance(); }} onRadar={() => setActiveTab("radar")} onGoals={() => openGoals()} onWork={() => openWork()} onCreateCustomGoal={() => openGoals("custom")} onLogout={logout} usageProfile={usageProfile} onChangeProfile={() => setProfilePickerOpen(true)} />;
+  const renderTab = (tab: NavigationTab, isPending: boolean) => {
+    const onReady = isPending ? () => { setActiveTab(tab); setPendingTab(null); } : undefined;
+    if (tab === "radar") return <RadarScreen onReady={onReady} onHome={() => navigateTo("home")} onFinance={openFinance} onGoals={() => openGoals()} onWork={openWork} showWorkFeatures={showWorkFeatures} />;
+    if (tab === "goals") return <GoalsScreen onReady={onReady} initialMode={goalInitialMode} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onWork={openWork} />;
+    if (tab === "work") return <WorkScreen onReady={onReady} navigation={(loading) => <BottomNavigation active="work" loading={loading} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={() => {}} />} />;
+    if (tab === "finance") return <Dashboard onReady={onReady} items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onHome={() => navigateTo("home")} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} showWorkFeatures={showWorkFeatures} onMonthChange={changeMonth} initialPeriod={period} initialCreateOpen={financeCreateRequested} onInitialCreateHandled={() => setFinanceCreateRequested(false)} error={error} isLoading={isLoading} />;
+    return <HomeDashboard onReady={onReady} onFinance={() => openFinance()} onCreateExpense={() => { setFinanceCreateRequested(true); openFinance(); }} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} onCreateCustomGoal={() => openGoals("custom")} onLogout={logout} usageProfile={usageProfile} onChangeProfile={() => setProfilePickerOpen(true)} />;
+  };
+  const renderedTabs = pendingTab && pendingTab !== activeTab ? [activeTab, pendingTab] : [activeTab];
+  return <NavigationLoadingContext.Provider value={pendingTab}>
+    {renderedTabs.map((tab) => <div className={`app-tab-stage${tab === activeTab ? " active" : " pending"}`} key={tab} aria-hidden={tab !== activeTab}>{renderTab(tab, tab === pendingTab)}</div>)}
+  </NavigationLoadingContext.Provider>;
 }
