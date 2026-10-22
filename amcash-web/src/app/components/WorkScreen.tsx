@@ -65,8 +65,9 @@ function periodTitle(overview: ApiWorkOverview | null, period: ApiWorkPeriod, re
   return new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(parseDate(referenceDate));
 }
 
-export default function WorkScreen({ navigation }: {
+export default function WorkScreen({ navigation, onReady }: {
   navigation: (loading: boolean) => ReactNode;
+  onReady?: () => void;
 }) {
   const [period, setPeriod] = useState<ApiWorkPeriod>("WEEK");
   const [referenceDate, setReferenceDate] = useState(() => dateToInputValue(new Date()));
@@ -94,6 +95,7 @@ export default function WorkScreen({ navigation }: {
   }, [period, referenceDate]);
 
   useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
+  useEffect(() => { if (!loading) onReady?.(); }, [loading, onReady]);
 
   function movePeriod(direction: number) {
     const date = parseDate(referenceDate);

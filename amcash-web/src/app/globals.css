@@ -60,6 +60,9 @@ body {
   -webkit-text-size-adjust: 100%;
 }
 
+.app-tab-stage.active { display: contents; }
+.app-tab-stage.pending { display: none; }
+
 body {
   min-height: 100vh;
   min-height: 100dvh;
@@ -2048,6 +2051,98 @@ a {
   border-radius: 50%;
   animation: spin 0.65s linear infinite;
 }
+
+.more-menu-backdrop {
+  position: fixed;
+  z-index: 70;
+  inset-block: 0;
+  left: 50%;
+  display: flex;
+  width: min(100%, var(--app-shell-width));
+  align-items: flex-end;
+  transform: translateX(-50%);
+  background: rgb(14 31 52 / 42%);
+  backdrop-filter: blur(0.18rem);
+  animation: picker-backdrop-in 0.18s ease-out both;
+}
+
+.more-menu-sheet {
+  width: 100%;
+  padding: 0.65rem 1rem calc(1rem + env(safe-area-inset-bottom));
+  border-radius: 1.4rem 1.4rem 0 0;
+  background: #fff;
+  box-shadow: 0 -1rem 3rem rgb(14 31 52 / 18%);
+  animation: sheet-in 0.26s ease-out both;
+}
+
+.more-menu-handle {
+  width: 2.7rem;
+  height: 0.25rem;
+  margin: 0 auto 0.85rem;
+  border-radius: 999px;
+  background: #c5cfdd;
+}
+
+.more-menu-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.65rem;
+}
+
+.more-menu-actions > button {
+  display: grid;
+  min-height: 4.6rem;
+  padding: 0.72rem;
+  grid-template-columns: 2.65rem minmax(0, 1fr) 0.9rem;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid #e5ebf3;
+  border-radius: 1rem;
+  background: #fff;
+  color: #173554;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.more-menu-actions > button:hover,
+.more-menu-actions > button:focus-visible {
+  border-color: #bcd4fb;
+  background: #f7faff;
+  outline: none;
+}
+
+.more-menu-actions > button:active { transform: scale(0.985); }
+
+.more-menu-actions > button.active {
+  border-color: #a9cafc;
+  background: #f2f7ff;
+}
+
+.more-menu-actions > button > strong {
+  overflow: hidden;
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.more-menu-actions > button > svg {
+  width: 0.85rem;
+  color: #8296ae;
+}
+
+.more-menu-icon {
+  display: grid;
+  width: 2.65rem;
+  height: 2.65rem;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.more-menu-icon svg { width: 1.25rem; height: 1.25rem; }
+.more-menu-icon.goals { background: #eaf3ff; color: #0870f5; }
+.more-menu-icon.radar { background: #f1eaff; color: #7d42ed; }
 
 .radar-header {
   border-bottom: 1px solid #edf2f8;
