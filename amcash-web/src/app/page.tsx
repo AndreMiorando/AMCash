@@ -231,8 +231,9 @@ function Icon({ name }: { name: IconName }) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-function BottomNavigation({ active, onHome, onFinance, onRadar, onGoals, onWork, showWorkFeatures = true }: {
+function BottomNavigation({ active, loading = false, onHome, onFinance, onRadar, onGoals, onWork, showWorkFeatures = true }: {
   active: "home" | "finance" | "radar" | "goals" | "work";
+  loading?: boolean;
   onHome: () => void;
   onFinance: () => void;
   onRadar: () => void;
@@ -240,26 +241,29 @@ function BottomNavigation({ active, onHome, onFinance, onRadar, onGoals, onWork,
   onWork: () => void;
   showWorkFeatures?: boolean;
 }) {
+  const navigationIcon = (tab: "home" | "finance" | "radar" | "goals" | "work", icon: IconName) => (
+    loading && active === tab ? <span className="nav-icon-loader" role="status" aria-label="Carregando página" /> : <Icon name={icon} />
+  );
   return (
     <nav className="bottom-nav" aria-label="Navegação principal">
-      <button type="button" className={`nav-item${active === "home" ? " active" : ""}`} onClick={onHome} aria-current={active === "home" ? "page" : undefined}>
-        <Icon name="home" />
+      <button type="button" className={`nav-item${active === "home" ? " active" : ""}`} onClick={onHome} aria-current={active === "home" ? "page" : undefined} aria-busy={loading && active === "home"}>
+        {navigationIcon("home", "home")}
         <span>Home</span>
       </button>
-      <button type="button" className={`nav-item${active === "finance" ? " active" : ""}`} onClick={onFinance} aria-current={active === "finance" ? "page" : undefined}>
-        <Icon name="wallet" />
+      <button type="button" className={`nav-item${active === "finance" ? " active" : ""}`} onClick={onFinance} aria-current={active === "finance" ? "page" : undefined} aria-busy={loading && active === "finance"}>
+        {navigationIcon("finance", "wallet")}
         <span>Finanças</span>
       </button>
-      {showWorkFeatures && <button type="button" className={`nav-item${active === "work" ? " active" : ""}`} onClick={onWork} aria-current={active === "work" ? "page" : undefined}>
-        <Icon name="work" />
+      {showWorkFeatures && <button type="button" className={`nav-item${active === "work" ? " active" : ""}`} onClick={onWork} aria-current={active === "work" ? "page" : undefined} aria-busy={loading && active === "work"}>
+        {navigationIcon("work", "work")}
         <span>Trabalho</span>
       </button>}
-      {showWorkFeatures && <button type="button" className={`nav-item${active === "goals" ? " active" : ""}`} onClick={onGoals} aria-current={active === "goals" ? "page" : undefined}>
-        <Icon name="target" />
+      {showWorkFeatures && <button type="button" className={`nav-item${active === "goals" ? " active" : ""}`} onClick={onGoals} aria-current={active === "goals" ? "page" : undefined} aria-busy={loading && active === "goals"}>
+        {navigationIcon("goals", "target")}
         <span>Metas</span>
       </button>}
-      <button type="button" className={`nav-item${active === "radar" ? " active" : ""}`} onClick={onRadar} aria-current={active === "radar" ? "page" : undefined}>
-        <Icon name="radar" />
+      <button type="button" className={`nav-item${active === "radar" ? " active" : ""}`} onClick={onRadar} aria-current={active === "radar" ? "page" : undefined} aria-busy={loading && active === "radar"}>
+        {navigationIcon("radar", "radar")}
         <span>Projeção</span>
       </button>
     </nav>
@@ -830,8 +834,7 @@ function CreateTransactionSheet({
       <section className="subexpense-sheet create-transaction-sheet" aria-labelledby="create-transaction-title">
         <div className="sheet-heading create-sheet-heading">
           <button type="button" className="create-sheet-back" onClick={onClose} aria-label="Voltar"><Icon name="back" /></button>
-          <h2 id="create-transaction-title"><span className={`create-sheet-icon ${type}`}><Icon name={type === "expense" ? "card" : "wallet"} /></span>{type === "expense" ? "Nova despesa" : "Nova receita"}</h2>
-          <button type="button" className="sheet-close" onClick={onClose} aria-label="Fechar">×</button>
+          <h2 id="create-transaction-title">{type === "expense" ? "Nova despesa" : "Nova receita"}</h2>
         </div>
 
         <form onSubmit={submit}>
@@ -1176,12 +1179,7 @@ function Dashboard({
       {(error || actionError) && <p className="auth-error" role="alert">{error || actionError}</p>}
 
       <section className={`transactions${isLoading || filteredItems.length === 0 ? " transactions--empty" : ""}`} aria-label={`Movimentações de ${monthLabel}`} aria-busy={isLoading}>
-        {isLoading ? (
-          <div className="dashboard-loading" role="status">
-            <div className="loader" aria-hidden="true" />
-            <span>Carregando seus lançamentos</span>
-          </div>
-        ) : filteredItems.length === 0 ? (
+        {isLoading ? null : filteredItems.length === 0 ? (
           <div className="empty-transactions">
             <div className="empty-transactions-icon" aria-hidden="true"><Icon name="wallet" /></div>
             <h2>{transactionFilter === "pending" ? "Nenhuma despesa pendente" : transactionFilter === "paid" ? "Nenhuma despesa paga" : "Nenhum lançamento neste mês"}</h2>
@@ -1210,13 +1208,13 @@ function Dashboard({
           );
         })}      </section>
 
-      <section className="monthly-summary" aria-label="Resumo do mês">
+      {!isLoading && <section className="monthly-summary" aria-label="Resumo do mês">
         <div><span>Receitas</span><strong>{formatCurrency(totalIncome)}</strong></div>
         <div><span>Despesas</span><strong>{formatCurrency(totalExpenses)}</strong></div>
         <div><span>Saldo do mês</span><strong>{monthBalance < 0 ? "- " : ""}{formatCurrency(monthBalance)}</strong></div>
-      </section>
+      </section>}
 
-      <BottomNavigation active="finance" onHome={onHome} onFinance={() => {}} onRadar={onRadar} onGoals={onGoals} onWork={onWork} showWorkFeatures={showWorkFeatures} />
+      <BottomNavigation active="finance" loading={isLoading} onHome={onHome} onFinance={() => {}} onRadar={onRadar} onGoals={onGoals} onWork={onWork} showWorkFeatures={showWorkFeatures} />
 
       {isMonthPickerOpen && (
         <div className="month-picker-backdrop" role="presentation" onMouseDown={() => setIsMonthPickerOpen(false)}>
@@ -1582,29 +1580,9 @@ function DetailScreen({
 
   return (
     <main className="detail-screen">
-      <header className="detail-header">
-        <button type="button" onClick={onBack} aria-label="Voltar"><Icon name="back" /></button>
-        <div><span>LANÇAMENTO</span><h1>Detalhes</h1></div>
-        <button type="button" aria-label="Mais opções"><Icon name="more" /></button>
-      </header>
-
       <div className="detail-content">
-        <section className="detail-hero">
-          <div className={`detail-icon${type === "income" ? " detail-icon--income" : ""}`}><Icon name={transaction.kind} /></div>
-          <div className="detail-hero-copy"><span>{type === "expense" ? "Despesa total" : "Receita total"}</span><strong>{type === "expense" ? "- " : "+ "}R$ {amount}</strong></div>
-          <span className={`status-pill ${type === "income" ? "status-pill--income" : ""}`}>{type === "expense" ? "Despesa" : "Receita"}</span>
-        </section>
-
-        {transaction.recurrenceFrequency !== "none" && (
-          <section className="detail-card progress-card">
-            <div className="progress-heading"><div><span>PROGRESSO</span><strong>{transaction.paidOccurrences} de {transaction.totalOccurrences} parcelas pagas</strong></div><b>{progress}%</b></div>
-            <div className="progress-track"><span style={{ width: `${progress}%` }} /></div>
-            <p>O progresso considera as parcelas desta série marcadas como pagas.</p>
-          </section>
-        )}
-
         <section className="detail-card edit-card">
-          <div className="section-title"><div><span>DADOS PRINCIPAIS</span><h2>Editar lançamento</h2></div><Icon name="edit" /></div>
+          <div className="section-title detail-main-title"><button type="button" onClick={onBack} aria-label="Voltar"><Icon name="back" /></button><h1>Editar lançamento</h1></div>
 
           <div className="type-switch" aria-label="Tipo do lançamento">
             <button type="button" className={type === "expense" ? "active expense" : ""} onClick={() => { setType("expense"); if (type !== "expense") setCategory(""); }}>Despesa</button>
@@ -1637,6 +1615,14 @@ function DetailScreen({
           <label className={`field full-field transaction-notes${transaction.hasSubexpenses ? " transaction-notes--detailed" : ""}`}><span>Observações (opcional)</span><textarea maxLength={120} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Adicione um comentário..." /><small className="field-character-count">{notes.length}/120</small></label>
         </section>
 
+        {transaction.recurrenceFrequency !== "none" && (
+          <section className="detail-card progress-card">
+            <div className="progress-heading"><div><span>PROGRESSO</span><strong>{transaction.paidOccurrences} de {transaction.totalOccurrences} parcelas pagas</strong></div><b>{progress}%</b></div>
+            <div className="progress-track"><span style={{ width: `${progress}%` }} /></div>
+            <p>O progresso considera as parcelas desta série marcadas como pagas.</p>
+          </section>
+        )}
+
         {transaction.hasSubexpenses && type === "expense" && (
           <section className="detail-card subexpenses-card">
             <div className="section-title subexpense-title">
@@ -1646,8 +1632,7 @@ function DetailScreen({
             <div className="subexpense-list">
               {subexpenses.map((item) => (
                 <button type="button" className="subexpense-row" key={item.id} onClick={() => setEditing(item)}>
-                  <span className={`sub-check${item.paid ? " checked" : ""}`}>{item.paid && <Icon name="check" />}</span>
-                  <span className="sub-copy"><strong>{item.name}</strong><small>{item.installment}</small></span>
+                  <span className="sub-copy"><strong>{item.name}</strong><small>{item.installment.toLocaleLowerCase("pt-BR").startsWith("parcela") ? item.installment : `Parcela ${item.installment}`}</small></span>
                   <span className="sub-value">R$ {item.amount}</span>
                   <span className="sub-edit"><Icon name="edit" /></span>
                 </button>
@@ -1703,19 +1688,18 @@ function DetailScreen({
   );
 }
 
-function RadarScreen({ onHome, onFinance, onGoals, onWork, showWorkFeatures = true }: { onHome: () => void; onFinance: () => void; onGoals: () => void; onWork: () => void; showWorkFeatures?: boolean }) {
+function RadarScreen({ onHome, onFinance, onGoals, onWork, showWorkFeatures = true }: { onHome: () => void; onFinance: (period?: { year: number; month: number }) => void; onGoals: () => void; onWork: () => void; showWorkFeatures?: boolean }) {
   const now = new Date();
   const startYear = now.getFullYear();
   const startMonth = now.getMonth() + 1;
-  const [horizon, setHorizon] = useState<6 | 12>(6);
   const [forecast, setForecast] = useState<ApiForecast | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [expandedMonth, setExpandedMonth] = useState<string | null>(`${startYear}-${startMonth}`);
+  const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    financeApi.forecast(startYear, startMonth, horizon)
+    financeApi.forecast(startYear, startMonth, 12)
       .then((response) => {
         if (active) setForecast(response);
       })
@@ -1726,15 +1710,7 @@ function RadarScreen({ onHome, onFinance, onGoals, onWork, showWorkFeatures = tr
         if (active) setIsLoading(false);
       });
     return () => { active = false; };
-  }, [horizon, startMonth, startYear]);
-
-  function changeHorizon(months: 6 | 12) {
-    if (months === horizon) return;
-    setIsLoading(true);
-    setError("");
-    setForecast(null);
-    setHorizon(months);
-  }
+  }, [startMonth, startYear]);
 
   const timeline = forecast?.timeline ?? [];
   const current = timeline[0];
@@ -1755,17 +1731,8 @@ function RadarScreen({ onHome, onFinance, onGoals, onWork, showWorkFeatures = tr
       </AppHeader>
 
       <div className="radar-content">
-        <div className="radar-toolbar">
-          <div className="radar-horizon" aria-label="Horizonte da previsão">
-            <button type="button" className={horizon === 6 ? "active" : ""} onClick={() => changeHorizon(6)}>6 meses</button>
-            <button type="button" className={horizon === 12 ? "active" : ""} onClick={() => changeHorizon(12)}>12 meses</button>
-          </div>
-        </div>
-
         {error && <p className="auth-error" role="alert">{error}</p>}
-        {isLoading ? (
-          <div className="radar-loading" role="status"><div className="loader" aria-hidden="true" /><span>Calculando sua previsão</span></div>
-        ) : (
+        {isLoading ? null : (
           <>
             <div className="radar-summary" aria-label="Resumo da previsão">
               <PrimaryKpiCard className="radar-balance-card">
@@ -1775,14 +1742,14 @@ function RadarScreen({ onHome, onFinance, onGoals, onWork, showWorkFeatures = tr
                 </KpiValue>
               </PrimaryKpiCard>
               <SecondaryKpiGroup className="radar-mini-cards">
-                <SecondaryKpiItem><KpiLabel>Gastos nos {horizon} meses</KpiLabel><KpiValue>{formatCurrency(totalPending)}</KpiValue></SecondaryKpiItem>
+                <SecondaryKpiItem><KpiLabel>Gastos nos 12 meses</KpiLabel><KpiValue>{formatCurrency(totalPending)}</KpiValue></SecondaryKpiItem>
                 <SecondaryKpiItem><KpiLabel>Mês mais apertado</KpiLabel><KpiValue className={Number(lowestBalance?.freeBalance ?? 0) < 0 ? "negative" : ""}>{Number(lowestBalance?.freeBalance ?? 0) < 0 ? "- " : ""}{formatCurrency(Number(lowestBalance?.freeBalance ?? 0))}</KpiValue></SecondaryKpiItem>
               </SecondaryKpiGroup>
             </div>
 
             <section className="radar-timeline" aria-label="Previsão mensal">
               <div className="radar-timeline-title"><span>PREVISÃO MÊS A MÊS</span></div>
-              {timeline.map((period, index) => {
+              {timeline.map((period) => {
                 const freeBalance = Number(period.freeBalance);
                 const expenseChange = Number(period.expenseChange);
                 const income = Number(period.income);
@@ -1790,10 +1757,11 @@ function RadarScreen({ onHome, onFinance, onGoals, onWork, showWorkFeatures = tr
                 const barWidth = income > 0 ? Math.min(100, Math.round((pending / income) * 100)) : pending > 0 ? 100 : 0;
                 const monthKey = `${period.year}-${period.month}`;
                 const isExpanded = expandedMonth === monthKey;
+                const startingEvents = period.events.filter((event) => event.type === "STARTING");
+                const endingEvents = period.events.filter((event) => event.type === "ENDING");
                 return (
                   <article className={`forecast-month${isExpanded ? " expanded" : ""}${freeBalance < 0 ? " deficit" : ""}`} key={monthKey}>
                     <button className="forecast-month-toggle" type="button" aria-expanded={isExpanded} onClick={() => setExpandedMonth(isExpanded ? null : monthKey)}>
-                      <span className="forecast-month-position">{index === 0 ? "AGORA" : `+${index}`}</span>
                       <span className="forecast-month-name"><strong>{monthName(period.year, period.month)}</strong><small>{balanceStatus(freeBalance)}</small></span>
                       <span className="forecast-free"><small>Saldo previsto</small><strong className={freeBalance < 0 ? "negative" : ""}>{freeBalance < 0 ? "- " : ""}{formatCurrency(freeBalance)}</strong></span>
                       <span className="forecast-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m8 10 4 4 4-4" /></svg></span>
@@ -1811,11 +1779,25 @@ function RadarScreen({ onHome, onFinance, onGoals, onWork, showWorkFeatures = tr
                           ? `${signedCurrency(expenseChange)} em gastos comparado ao mês anterior.`
                           : `${formatCurrency(expenseChange)} a menos em gastos que no mês anterior.`}
                       </p>
-                      {period.events.length > 0 && <div className="forecast-events">{period.events.map((event) => (
-                        <div className={`forecast-event ${event.type === "ENDING" ? "ending" : "starting"}`} key={`${event.type}-${event.source}-${event.name}-${event.date}`}>
-                          <span>{event.type === "ENDING" ? "Termina" : "Começa"}</span><strong>{event.name}</strong><b>{formatCurrency(Number(event.amount))}</b>
-                        </div>
-                      ))}</div>}
+                      {period.events.length > 0 && <div className="forecast-events">
+                        {startingEvents.length > 0 && <section className="forecast-event-group">
+                          <header><strong>O que começa neste mês</strong><span>{startingEvents.length} {startingEvents.length === 1 ? "item" : "itens"}</span></header>
+                          {startingEvents.map((event) => (
+                            <div className="forecast-event starting" key={`${event.type}-${event.source}-${event.name}-${event.date}`}>
+                              <span>Começa</span><div><strong>{event.name}</strong><small>Primeira parcela</small></div><b>{formatCurrency(Number(event.amount))}</b>
+                            </div>
+                          ))}
+                        </section>}
+                        {endingEvents.length > 0 && <section className="forecast-event-group ending">
+                          <header><strong>O que termina neste mês</strong><span>{endingEvents.length} {endingEvents.length === 1 ? "item" : "itens"}</span></header>
+                          {endingEvents.map((event) => (
+                            <div className="forecast-event ending" key={`${event.type}-${event.source}-${event.name}-${event.date}`}>
+                              <span>Termina</span><div><strong>{event.name}</strong><small>Última parcela</small></div><b>{formatCurrency(Number(event.amount))}</b>
+                            </div>
+                          ))}
+                        </section>}
+                        <button type="button" className="forecast-events-link" onClick={() => onFinance({ year: period.year, month: period.month })}>Ver todas as despesas do mês <Icon name="forward" /></button>
+                      </div>}
                     </div>}
                   </article>
                 );
@@ -1825,7 +1807,7 @@ function RadarScreen({ onHome, onFinance, onGoals, onWork, showWorkFeatures = tr
         )}
       </div>
 
-      <BottomNavigation active="radar" onHome={onHome} onFinance={onFinance} onRadar={() => {}} onGoals={onGoals} onWork={onWork} showWorkFeatures={showWorkFeatures} />
+      <BottomNavigation active="radar" loading={isLoading} onHome={onHome} onFinance={() => onFinance()} onRadar={() => {}} onGoals={onGoals} onWork={onWork} showWorkFeatures={showWorkFeatures} />
     </main>
   );
 }
@@ -1869,12 +1851,13 @@ const customGoalPeriodLabels: Record<ApiCustomGoalPeriod, string> = {
 };
 const customGoalPeriodOptions = (Object.keys(customGoalPeriodLabels) as ApiCustomGoalPeriod[]).map((value) => ({ value, label: customGoalPeriodLabels[value] }));
 
-function CustomGoalsPanel({ referenceDate, schedule, onScheduleUpdated, primaryGoalType, onPrimaryChange }: {
+function CustomGoalsPanel({ referenceDate, schedule, onScheduleUpdated, primaryGoalType, onPrimaryChange, onLoadingChange }: {
   referenceDate: string;
   schedule: ApiGoal | null;
   onScheduleUpdated: (goal: ApiGoal) => void;
   primaryGoalType: ApiPrimaryGoalType;
   onPrimaryChange: (type: ApiPrimaryGoalType) => Promise<void>;
+  onLoadingChange: (loading: boolean) => void;
 }) {
   const [customGoal, setCustomGoal] = useState<ApiCustomGoal | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -1900,6 +1883,7 @@ function CustomGoalsPanel({ referenceDate, schedule, onScheduleUpdated, primaryG
   }, [referenceDate]);
 
   useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
+  useEffect(() => { onLoadingChange(isLoading); }, [isLoading, onLoadingChange]);
 
   function openEditor() {
     setName(customGoal?.name ?? "");
@@ -1978,7 +1962,7 @@ function CustomGoalsPanel({ referenceDate, schedule, onScheduleUpdated, primaryG
   const remainingDays = schedule ? remainingGoalDays(schedule.year, schedule.month, referenceDate) : [];
   const remainingDaysSet = new Set(remainingDays);
 
-  if (isLoading) return <div className="goals-loading" role="status"><div className="loader" aria-hidden="true" /><span>Carregando sua meta personalizada</span></div>;
+  if (isLoading) return null;
 
   return <div className="custom-goals-panel">
     {error && <p className="auth-error" role="alert">{error}</p>}
@@ -2045,6 +2029,7 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, initialMode }: { onHo
   const [nextGoal, setNextGoal] = useState<ApiGoal | null>(null);
   const [isNextGoalExpanded, setIsNextGoalExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCustomLoading, setIsCustomLoading] = useState(false);
   const [isLoadingNextGoal, setIsLoadingNextGoal] = useState(false);
   const [isSavingDays, setIsSavingDays] = useState(false);
   const [error, setError] = useState("");
@@ -2124,6 +2109,7 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, initialMode }: { onHo
   async function chooseGoalMode(mode: "expenses" | "custom") {
     setGoalMode(mode);
     if (mode === "expenses") {
+      setIsCustomLoading(false);
       await selectPrimaryGoal("EXPENSES");
       return;
     }
@@ -2269,11 +2255,9 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, initialMode }: { onHo
         {error && <p className="auth-error" role="alert">{error}</p>}
 
         {goalMode === "custom" ? (
-          <CustomGoalsPanel referenceDate={referenceDate} schedule={goal} onScheduleUpdated={setGoal} primaryGoalType={primaryGoalType} onPrimaryChange={selectPrimaryGoal} />
+          <CustomGoalsPanel referenceDate={referenceDate} schedule={goal} onScheduleUpdated={setGoal} primaryGoalType={primaryGoalType} onPrimaryChange={selectPrimaryGoal} onLoadingChange={setIsCustomLoading} />
         ) : <>
-        {isLoading ? (
-          <div className="goals-loading" role="status"><div className="loader" aria-hidden="true" /><span>Calculando sua meta</span></div>
-        ) : goal && !hasGoalFinancialData ? (
+        {isLoading ? null : goal && !hasGoalFinancialData ? (
           <section className="goal-setup-empty">
             <span className="goal-setup-empty-icon"><Icon name="wallet" /></span>
             <span>PRIMEIRO PASSO</span>
@@ -2338,7 +2322,7 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, initialMode }: { onHo
         </>}
       </div>
 
-      <BottomNavigation active="goals" onHome={onHome} onFinance={onFinance} onRadar={onRadar} onGoals={() => {}} onWork={onWork} />
+      <BottomNavigation active="goals" loading={isLoading || isCustomLoading} onHome={onHome} onFinance={onFinance} onRadar={onRadar} onGoals={() => {}} onWork={onWork} />
     </main>
   );
 }
@@ -2625,7 +2609,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
       <div className="daily-home-account"><time className="daily-home-date" dateTime={today}>{dateLabel}</time><AccountMenu onLogout={onLogout} usageProfile={usageProfile} onChangeProfile={onChangeProfile} /></div>
     </AppHeader>
     <div className="daily-home-content">
-      {loading ? <div className="daily-home-loading"><div className="loader" /><span>Atualizando seu progresso</span></div> : error ?
+      {loading ? null : error ?
         <div className="daily-home-error"><p>{error}</p><button type="button" onClick={() => void load()}>Tentar novamente</button></div> : summary && <>
           {showEmptyState ? <section className="home-empty-state" aria-label="Começar a usar o AMCash">
             <div className="home-empty-icon"><Icon name="target" /></div>
@@ -2712,7 +2696,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
           </>}
         </>}
     </div>
-    <BottomNavigation active="home" onHome={() => {}} onFinance={onFinance} onRadar={onRadar} onGoals={onGoals} onWork={onWork} showWorkFeatures={usageProfile !== "PERSONAL"} />
+    <BottomNavigation active="home" loading={loading} onHome={() => {}} onFinance={onFinance} onRadar={onRadar} onGoals={onGoals} onWork={onWork} showWorkFeatures={usageProfile !== "PERSONAL"} />
   </main>;
 }
 
@@ -2912,12 +2896,18 @@ export default function Home() {
   const showWorkFeatures = usageProfile !== "PERSONAL";
   const openWork = () => setActiveTab("work");
   const openGoals = (mode?: "expenses" | "custom") => { setGoalInitialMode(mode); setActiveTab("goals"); };
-  if (activeTab === "radar") return <RadarScreen onHome={() => setActiveTab("home")} onFinance={() => setActiveTab("finance")} onGoals={() => openGoals()} onWork={() => openWork()} showWorkFeatures={showWorkFeatures} />;
-  if (activeTab === "goals") return <GoalsScreen initialMode={goalInitialMode} onHome={() => setActiveTab("home")} onFinance={() => setActiveTab("finance")} onRadar={() => setActiveTab("radar")} onWork={() => openWork()} />;
+  const openFinance = (targetPeriod?: { year: number; month: number }) => {
+    const today = new Date();
+    const nextPeriod = targetPeriod ?? { year: today.getFullYear(), month: today.getMonth() + 1 };
+    changeMonth(nextPeriod.year, nextPeriod.month);
+    setActiveTab("finance");
+  };
+  if (activeTab === "radar") return <RadarScreen onHome={() => setActiveTab("home")} onFinance={openFinance} onGoals={() => openGoals()} onWork={() => openWork()} showWorkFeatures={showWorkFeatures} />;
+  if (activeTab === "goals") return <GoalsScreen initialMode={goalInitialMode} onHome={() => setActiveTab("home")} onFinance={() => openFinance()} onRadar={() => setActiveTab("radar")} onWork={() => openWork()} />;
   if (activeTab === "work") {
     return (
-      <WorkScreen navigation={(
-        <BottomNavigation active="work" onHome={() => setActiveTab("home")} onFinance={() => setActiveTab("finance")} onRadar={() => setActiveTab("radar")} onGoals={() => openGoals()} onWork={() => {}} />
+      <WorkScreen navigation={(loading) => (
+        <BottomNavigation active="work" loading={loading} onHome={() => setActiveTab("home")} onFinance={() => openFinance()} onRadar={() => setActiveTab("radar")} onGoals={() => openGoals()} onWork={() => {}} />
       )} />
     );
   }
@@ -2933,5 +2923,5 @@ export default function Home() {
   }
 
   if (activeTab === "finance") return <Dashboard items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onHome={() => setActiveTab("home")} onRadar={() => setActiveTab("radar")} onGoals={() => openGoals()} onWork={() => openWork()} showWorkFeatures={showWorkFeatures} onMonthChange={changeMonth} initialPeriod={period} initialCreateOpen={financeCreateRequested} onInitialCreateHandled={() => setFinanceCreateRequested(false)} error={error} isLoading={isLoading} />;
-  return <HomeDashboard onFinance={() => setActiveTab("finance")} onCreateExpense={() => { setFinanceCreateRequested(true); setActiveTab("finance"); }} onRadar={() => setActiveTab("radar")} onGoals={() => openGoals()} onWork={() => openWork()} onCreateCustomGoal={() => openGoals("custom")} onLogout={logout} usageProfile={usageProfile} onChangeProfile={() => setProfilePickerOpen(true)} />;
+  return <HomeDashboard onFinance={() => openFinance()} onCreateExpense={() => { setFinanceCreateRequested(true); openFinance(); }} onRadar={() => setActiveTab("radar")} onGoals={() => openGoals()} onWork={() => openWork()} onCreateCustomGoal={() => openGoals("custom")} onLogout={logout} usageProfile={usageProfile} onChangeProfile={() => setProfilePickerOpen(true)} />;
 }
