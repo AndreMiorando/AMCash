@@ -66,7 +66,7 @@ function periodTitle(overview: ApiWorkOverview | null, period: ApiWorkPeriod, re
 }
 
 export default function WorkScreen({ navigation }: {
-  navigation: ReactNode;
+  navigation: (loading: boolean) => ReactNode;
 }) {
   const [period, setPeriod] = useState<ApiWorkPeriod>("WEEK");
   const [referenceDate, setReferenceDate] = useState(() => dateToInputValue(new Date()));
@@ -123,9 +123,6 @@ export default function WorkScreen({ navigation }: {
 
   async function selectWorkDate(date: string) {
     const currentRequest = ++workDateRequestId.current;
-    setDraft(emptyDraft(date));
-    setDraftMode("create");
-    setEditingCostKey(null);
     setCheckingDate(true);
     setError("");
     try {
@@ -133,13 +130,20 @@ export default function WorkScreen({ navigation }: {
       const day = response.days.find((item) => item.date === date);
       if (currentRequest !== workDateRequestId.current) return;
       const costs = response.costs.filter((cost) => cost.date === date);
-      if (day || costs.length) openRecord(date, day, costs);
+      if (day || costs.length) {
+        openRecord(date, day, costs);
+      } else {
+        setDraft(emptyDraft(date));
+        setDraftMode("create");
+        setEditingCostKey(null);
+      }
     } catch (requestError) {
       if (currentRequest === workDateRequestId.current) setError(messageFrom(requestError));
     } finally { if (currentRequest === workDateRequestId.current) setCheckingDate(false); }
   }
 
   function openCreateRecord() {
+    if (checkingDate) return;
     void selectWorkDate(dateToInputValue(new Date()));
   }
 
@@ -218,7 +222,7 @@ export default function WorkScreen({ navigation }: {
   const draftCosts = draft?.costs.reduce((total, cost) => total + numberFromInput(cost.amount), 0) ?? 0;
   const draftNet = draftGross - draftCosts;
   return <main className="work-screen">
-    <AppHeader className="work-header"><div className="work-header-actions"><span className="work-header-label">TRABALHO</span><button type="button" className="header-add-button work-register-button" onClick={openCreateRecord} aria-label="Registrar dia" title="Registrar dia"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M8 3v4M16 3v4M3.5 9.5h17M12 13v5M9.5 15.5h5" /></svg></button></div></AppHeader>
+    <AppHeader className="work-header"><div className="work-header-actions"><span className="work-header-label">TRABALHO</span><button type="button" className="header-add-button work-register-button" onClick={openCreateRecord} disabled={checkingDate} aria-label={checkingDate ? "Verificando registro" : "Registrar dia"} title={checkingDate ? "Verificando registro" : "Registrar dia"}>{checkingDate ? <span className="work-register-loader" aria-hidden="true" /> : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M8 3v4M16 3v4M3.5 9.5h17M12 13v5M9.5 15.5h5" /></svg>}</button></div></AppHeader>
     <div className="work-content">
       {error && !draft && <p className="work-error" role="alert">{error}</p>}
       {overview && <>
@@ -239,7 +243,7 @@ export default function WorkScreen({ navigation }: {
       <SegmentedControl className="work-period-tabs" ariaLabel="Período do resumo" value={period} options={periodOptions} onChange={setPeriod} />
       <div className="work-period-selector"><button type="button" onClick={() => movePeriod(-1)} aria-label="Período anterior">‹</button>
         <strong>{periodTitle(overview, period, referenceDate)}</strong><button type="button" onClick={() => movePeriod(1)} aria-label="Próximo período">›</button></div>
-      {loading ? <div className="work-loading"><div className="loader" /><span>Calculando seus resultados</span></div> : <>
+      {loading ? null : <>
         <section className="work-days-section work-records-section"><div className="work-section-title"><div><span>HISTÓRICO</span><h2>Registros do período</h2></div><b>{records.length}</b></div>
           {!records.length ? <div className="work-empty"><strong>Nenhum registro no período</strong><span>Os resultados e custos atualizados pela Home aparecerão aqui.</span></div> : records.map((record) => {
             const gross = Number(record.day?.grossEarnings ?? 0);
@@ -254,14 +258,13 @@ export default function WorkScreen({ navigation }: {
               <span className="work-day-values"><b className={net < 0 ? "negative" : ""}>{net < 0 ? "- " : ""}{currency(Math.abs(net))}</b><small>líquido</small></span><span aria-hidden="true">›</span></button>;
           })}</section>
       </>}
-    </div>{navigation}
+    </div>{navigation(loading)}
 
     {draft && <section className="work-record-screen" aria-labelledby="work-record-title">
       <header className="work-record-page-header"><button type="button" onClick={() => { if (!saving) setDraft(null); }} aria-label="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg></button><h2 id="work-record-title">{draftMode === "create" ? "Registrar trabalho" : "Editar trabalho"}</h2><span aria-hidden="true" /></header>
       <div className="work-form-scroll">
         {error && <p className="work-error" role="alert">{error}</p>}
-        <div className="work-record-date-field"><DatePickerInput label="Data do trabalho" value={draft.date} max={dateToInputValue(new Date())} onChange={(date) => void selectWorkDate(date)} /></div>
-        {checkingDate && <p className="work-date-loading" role="status">Carregando dados da data selecionada...</p>}
+        <div className="work-record-date-field"><DatePickerInput label="Data do trabalho" value={draft.date} max={dateToInputValue(new Date())} onChange={selectWorkDate} /></div>
         <label className="work-record-kilometers"><span>Quilômetros rodados</span><div><span className="work-record-road-icon"><Image src="/road-icon.png" alt="" width={1254} height={1254} /></span><span className="work-record-kilometers-input"><b>km</b><input inputMode="decimal" aria-label="Quilômetros rodados" placeholder="0" value={draft.kilometers} onChange={(event) => setDraft({ ...draft, kilometers: numberInput(event.target.value) })} /></span></div></label>
         <div className="work-record-section-title"><h3>Faturamento</h3></div><div className="work-form-grid">
           <BrandedMoneyField label="Uber" logo="/uber-logo.jpeg" value={draft.uber} onChange={(value) => setDraft({ ...draft, uber: value })} /><BrandedMoneyField label="99" logo="/99-logo.png" value={draft.ninetyNine} onChange={(value) => setDraft({ ...draft, ninetyNine: value })} /></div>

@@ -14,13 +14,14 @@ function formatDate(value: string) {
 export default function DatePickerInput({ label, value, onChange, min, max }: {
   label: string;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (value: string) => void | Promise<void>;
   min?: string;
   max?: string;
 }) {
   const selectedDate = new Date(`${value}T12:00:00`);
   const initialDate = Number.isNaN(selectedDate.getTime()) ? new Date() : selectedDate;
   const [isOpen, setIsOpen] = useState(false);
+  const [pendingValue, setPendingValue] = useState<string | null>(null);
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(initialDate.getFullYear(), initialDate.getMonth(), 1));
   const monthLabel = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(visibleMonth);
   const firstGridDate = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1 - visibleMonth.getDay());
@@ -38,11 +39,16 @@ export default function DatePickerInput({ label, value, onChange, min, max }: {
     setIsOpen(true);
   }
 
-  function chooseDate(date: Date) {
+  async function chooseDate(date: Date) {
     const nextValue = dateToInputValue(date);
-    if ((min && nextValue < min) || (max && nextValue > max)) return;
-    onChange(nextValue);
-    setIsOpen(false);
+    if (pendingValue || (min && nextValue < min) || (max && nextValue > max)) return;
+    setPendingValue(nextValue);
+    try {
+      await onChange(nextValue);
+      setIsOpen(false);
+    } finally {
+      setPendingValue(null);
+    }
   }
 
   return <div className="field date-picker-field">
@@ -52,21 +58,22 @@ export default function DatePickerInput({ label, value, onChange, min, max }: {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M8 3v4M16 3v4M3.5 9.5h17" /></svg>
     </button>
 
-    {isOpen && createPortal(<div className="date-picker-backdrop" role="presentation" onMouseDown={(event) => { event.stopPropagation(); setIsOpen(false); }}>
+    {isOpen && createPortal(<div className="date-picker-backdrop" role="presentation" onMouseDown={(event) => { event.stopPropagation(); if (!pendingValue) setIsOpen(false); }}>
       <section className="date-picker-dialog" role="dialog" aria-modal="true" aria-label="Selecionar data" onMouseDown={(event) => event.stopPropagation()}>
         <div className="date-picker-header">
-          <button type="button" onClick={() => setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))} aria-label="Mês anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg></button>
+          <button type="button" disabled={Boolean(pendingValue)} onClick={() => setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))} aria-label="Mês anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg></button>
           <strong>{monthLabel}</strong>
-          <button type="button" onClick={() => setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))} aria-label="Próximo mês"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg></button>
+          <button type="button" disabled={Boolean(pendingValue)} onClick={() => setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))} aria-label="Próximo mês"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg></button>
         </div>
         <div className="date-picker-weekdays" aria-hidden="true">{["D", "S", "T", "Q", "Q", "S", "S"].map((weekday, index) => <span key={`${weekday}-${index}`}>{weekday}</span>)}</div>
         <div className="date-picker-days">{days.map((date) => {
           const dateValue = dateToInputValue(date);
           const outside = date.getMonth() !== visibleMonth.getMonth();
           const disabled = Boolean((min && dateValue < min) || (max && dateValue > max));
-          return <button type="button" key={dateValue} disabled={disabled} className={`${outside ? "outside " : ""}${dateValue === value ? "selected " : ""}${dateValue === todayValue ? "today" : ""}`} onClick={() => chooseDate(date)} aria-pressed={dateValue === value}>{date.getDate()}</button>;
+          const isPending = dateValue === pendingValue;
+          return <button type="button" key={dateValue} disabled={disabled || Boolean(pendingValue)} className={`${outside ? "outside " : ""}${dateValue === value ? "selected " : ""}${dateValue === todayValue ? "today " : ""}${isPending ? "loading" : ""}`} onClick={() => void chooseDate(date)} aria-pressed={dateValue === value} aria-busy={isPending}>{isPending ? <span className="date-day-loader" aria-label="Carregando data" /> : date.getDate()}</button>;
         })}</div>
-        <div className="date-picker-actions"><button type="button" onClick={() => setIsOpen(false)}>Cancelar</button><button type="button" disabled={Boolean((min && todayValue < min) || (max && todayValue > max))} onClick={() => chooseDate(new Date())}>Hoje</button></div>
+        <div className="date-picker-actions"><button type="button" disabled={Boolean(pendingValue)} onClick={() => setIsOpen(false)}>Cancelar</button><button type="button" disabled={Boolean(pendingValue || (min && todayValue < min) || (max && todayValue > max))} onClick={() => void chooseDate(new Date())}>Hoje</button></div>
       </section>
     </div>, document.body)}
   </div>;
