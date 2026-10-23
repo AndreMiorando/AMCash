@@ -1,0 +1,28 @@
+package br.com.amcash.vehicle.service;
+
+import br.com.amcash.shared.exception.*; import br.com.amcash.user.entity.*; import br.com.amcash.user.repository.UserRepository;
+import br.com.amcash.vehicle.dto.request.*; import br.com.amcash.vehicle.entity.*; import br.com.amcash.vehicle.repository.*;
+import org.junit.jupiter.api.*; import java.math.BigDecimal; import java.time.LocalDate; import java.util.*; import java.util.concurrent.atomic.AtomicReference;
+import static org.junit.jupiter.api.Assertions.*; import static org.mockito.ArgumentMatchers.*; import static org.mockito.Mockito.*;
+
+class VehicleServiceTests {
+    private final VehicleRepository vehicles=mock(VehicleRepository.class); private final VehicleFinanceRepository finances=mock(VehicleFinanceRepository.class);
+    private final OdometerReadingRepository readings=mock(OdometerReadingRepository.class); private final VehicleMaintenanceRepository maintenances=mock(VehicleMaintenanceRepository.class);
+    private final VehiclePhotoRepository photos=mock(VehiclePhotoRepository.class); private final UserRepository users=mock(UserRepository.class);
+    private final MaintenanceAlertService alerts=mock(MaintenanceAlertService.class); private final VehicleService service=new VehicleService(vehicles,finances,readings,maintenances,photos,users,alerts);
+    private User user;
+
+    @BeforeEach void setUp(){user=new User("subject","driver@example.com","Driver",null);user.setId(UUID.randomUUID());user.updateUsageProfile(UsageProfile.RIDE_DRIVER);when(users.findById(user.getId())).thenReturn(Optional.of(user));when(readings.findAllByVehicleIdOrderByReadingDateDescCreatedAtDesc(any())).thenReturn(List.of());when(maintenances.findAllByVehicleIdOrderByDateDescCreatedAtDesc(any())).thenReturn(List.of());}
+
+    @Test void shouldCreateAndEditVehicleWithoutDroppingItsIdentity(){AtomicReference<VehicleFinance> storedFinance=new AtomicReference<>();when(finances.findById(any())).thenAnswer(i->Optional.ofNullable(storedFinance.get()));when(finances.save(any())).thenAnswer(i->{storedFinance.set(i.getArgument(0));return i.getArgument(0);});when(vehicles.save(any())).thenAnswer(i->i.getArgument(0));var created=service.create(user.getId(),request("Honda","Fit",new BigDecimal("85420")));assertEquals("Honda",created.brand());
+        var vehicleCaptor=org.mockito.ArgumentCaptor.forClass(Vehicle.class);verify(vehicles).save(vehicleCaptor.capture());Vehicle entity=vehicleCaptor.getValue();when(vehicles.findByIdAndUserId(entity.getId(),user.getId())).thenReturn(Optional.of(entity));var updated=service.update(user.getId(),entity.getId(),request("Honda","City",new BigDecimal("86000")));assertEquals("City",updated.model());verify(readings,times(2)).save(any());}
+
+    @Test void shouldKeepVehiclesIsolatedByUser(){UUID otherVehicle=UUID.randomUUID();when(vehicles.findByIdAndUserId(otherVehicle,user.getId())).thenReturn(Optional.empty());assertThrows(NotFoundException.class,()->service.get(user.getId(),otherVehicle));verify(vehicles).findByIdAndUserId(otherVehicle,user.getId());}
+
+    @Test void shouldRejectInvalidMaintenanceForecast(){Vehicle vehicle=vehicle();when(vehicles.findByIdAndUserId(vehicle.getId(),user.getId())).thenReturn(Optional.of(vehicle));MaintenanceRequest request=new MaintenanceRequest(MaintenanceType.OIL_CHANGE,null,LocalDate.of(2026,10,20),new BigDecimal("1000"),BigDecimal.TEN,null,new BigDecimal("900"),LocalDate.of(2026,10,19));assertThrows(BadRequestException.class,()->service.addMaintenance(user.getId(),vehicle.getId(),request));verify(maintenances,never()).save(any());}
+
+    @Test void shouldAppendOdometerReadingAndReconcileAlerts(){Vehicle vehicle=vehicle();when(vehicles.findByIdAndUserId(vehicle.getId(),user.getId())).thenReturn(Optional.of(vehicle));when(readings.save(any())).thenAnswer(i->i.getArgument(0));service.updateOdometer(user.getId(),vehicle.getId(),new OdometerRequest(new BigDecimal("10100"),LocalDate.of(2026,10,23),true));assertEquals(new BigDecimal("10100"),vehicle.getCurrentMileage());verify(readings).save(any(OdometerReading.class));verify(alerts).reconcile(vehicle);}
+
+    private Vehicle vehicle(){Vehicle v=new Vehicle(user);v.update(VehicleType.CAR,"Honda","Fit",2015,2016,null,null,null,FuelType.FLEX,new BigDecimal("10000"),LocalDate.of(2026,10,20),new BigDecimal("11"),new BigDecimal("8"),null,null);return v;}
+    private VehicleRequest request(String brand,String model,BigDecimal mileage){return new VehicleRequest(VehicleType.CAR,brand,model,2015,2016,null,"Meu carro",null,FuelType.FLEX,mileage,LocalDate.of(2026,10,23),new BigDecimal("11"),new BigDecimal("8"),null,FinancialStatus.PAID_OFF,null,null,null,null,null);}
+}

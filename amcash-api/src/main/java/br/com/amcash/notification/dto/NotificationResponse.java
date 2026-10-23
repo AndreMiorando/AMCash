@@ -13,4 +13,13 @@ public record NotificationResponse(
         BigDecimal amount,
         LocalDate dueDate,
         OffsetDateTime createdAt,
-        OffsetDateTime readAt) {}
+        OffsetDateTime readAt,
+        String source,
+        UUID vehicleId,
+        String message) {
+    public NotificationResponse(UUID id, String type, UUID entryId, String expenseName, BigDecimal amount,
+                                LocalDate dueDate, OffsetDateTime createdAt, OffsetDateTime readAt) {
+        this(id, type, entryId, expenseName, amount, dueDate, createdAt, readAt,
+                "FINANCIAL", null, null);
+    }
+}

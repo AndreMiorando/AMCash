@@ -221,12 +221,44 @@ export type ApiHome = {
 export type ApiFinancialNotification = {
   id: string;
   type: "UPCOMING" | "OVERDUE";
-  entryId: string;
+  entryId: string | null;
   expenseName: string;
-  amount: number;
+  amount: number | null;
   dueDate: string;
   createdAt: string;
   readAt: string | null;
+  source: "FINANCIAL" | "VEHICLE";
+  vehicleId: string | null;
+  message: string | null;
+};
+
+export type ApiVehicleType = "CAR" | "MOTORCYCLE";
+export type ApiFuelType = "GASOLINE" | "ETHANOL" | "FLEX" | "DIESEL" | "ELECTRIC" | "HYBRID";
+export type ApiFinancialStatus = "PAID_OFF" | "FINANCED" | "RENTED";
+export type ApiMaintenanceType = "OIL_CHANGE" | "FILTERS" | "TIRES" | "BRAKES" | "INSPECTION" | "ALIGNMENT_BALANCING" | "OTHER";
+
+export type VehiclePayload = {
+  type: ApiVehicleType; brand: string; model: string; manufactureYear: number; modelYear: number;
+  version: string | null; nickname: string | null; licensePlate: string | null; fuelType: ApiFuelType;
+  currentMileage: number; mileageReadingDate: string; gasolineConsumption: number | null;
+  ethanolConsumption: number | null; electricConsumption: number | null; financialStatus: ApiFinancialStatus;
+  monthlyAmount: number | null; totalInstallments: number | null; paidInstallments: number | null;
+  nextDueDate: string | null; acquisitionDate: string | null;
+};
+
+export type MaintenancePayload = {
+  type: ApiMaintenanceType; customName: string | null; date: string; mileage: number; amount: number;
+  description: string | null; nextMileage: number | null; nextDate: string | null;
+};
+
+export type ApiVehicleMaintenance = MaintenancePayload & { id: string };
+export type ApiVehicle = Omit<VehiclePayload, "financialStatus" | "monthlyAmount" | "totalInstallments" | "paidInstallments" | "nextDueDate"> & {
+  id: string; hasPhoto: boolean;
+  finance: { status: ApiFinancialStatus; monthlyAmount: number | null; totalInstallments: number | null;
+    paidInstallments: number | null; nextDueDate: string | null; remainingInstallments: number | null;
+    projectedRemainingInstallments: number | null; projectedEndDate: string | null };
+  odometerReadings: { id: string; mileage: number; readingDate: string; correction: boolean }[];
+  maintenances: ApiVehicleMaintenance[];
 };
 
 export type ApiWorkPeriod = "DAY" | "WEEK" | "MONTH";
@@ -319,7 +351,7 @@ async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
     const response = await fetch(`${apiUrl}${path}`, {
       ...init,
       headers: {
-        ...(init.body ? { "Content-Type": "application/json" } : {}),
+        ...(init.body && !(init.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...init.headers,
       },
@@ -371,6 +403,23 @@ export const financeApi = {
 
   markNotificationsRead() {
     return apiRequest<ApiFinancialNotification[]>("/api/v1/notifications/read", { method: "PATCH" });
+  },
+
+  vehicles() { return apiRequest<ApiVehicle[]>("/api/v1/vehicles"); },
+  vehicle(id: string) { return apiRequest<ApiVehicle>(`/api/v1/vehicles/${id}`); },
+  createVehicle(payload: VehiclePayload) { return apiRequest<ApiVehicle>("/api/v1/vehicles", { method: "POST", body: JSON.stringify(payload) }); },
+  updateVehicle(id: string, payload: VehiclePayload) { return apiRequest<ApiVehicle>(`/api/v1/vehicles/${id}`, { method: "PUT", body: JSON.stringify(payload) }); },
+  updateOdometer(id: string, payload: { mileage: number; readingDate: string; correction: boolean }) { return apiRequest(`/api/v1/vehicles/${id}/odometer`, { method: "POST", body: JSON.stringify(payload) }); },
+  createMaintenance(vehicleId: string, payload: MaintenancePayload) { return apiRequest<ApiVehicleMaintenance>(`/api/v1/vehicles/${vehicleId}/maintenances`, { method: "POST", body: JSON.stringify(payload) }); },
+  updateMaintenance(vehicleId: string, maintenanceId: string, payload: MaintenancePayload) { return apiRequest<ApiVehicleMaintenance>(`/api/v1/vehicles/${vehicleId}/maintenances/${maintenanceId}`, { method: "PUT", body: JSON.stringify(payload) }); },
+  deleteMaintenance(vehicleId: string, maintenanceId: string) { return apiRequest<void>(`/api/v1/vehicles/${vehicleId}/maintenances/${maintenanceId}`, { method: "DELETE" }); },
+  uploadVehiclePhoto(vehicleId: string, file: Blob) { const body = new FormData(); body.append("file", file, file.type === "image/webp" ? "vehicle.webp" : "vehicle.jpg"); return apiRequest<void>(`/api/v1/vehicles/${vehicleId}/photo`, { method: "PUT", body }); },
+  deleteVehiclePhoto(vehicleId: string) { return apiRequest<void>(`/api/v1/vehicles/${vehicleId}/photo`, { method: "DELETE" }); },
+  async vehiclePhoto(vehicleId: string) {
+    const token = window.localStorage.getItem("amcash.accessToken");
+    const response = await fetch(`${apiUrl}/api/v1/vehicles/${vehicleId}/photo`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!response.ok) throw new ApiError("Não foi possível carregar a foto.", response.status);
+    return response.blob();
   },
 
   listMonth(year: number, month: number) {
