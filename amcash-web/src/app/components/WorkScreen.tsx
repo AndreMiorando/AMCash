@@ -6,6 +6,7 @@ import { ApiWorkCost, ApiWorkCostCategory, ApiWorkDay, ApiWorkOverview, ApiWorkP
 import AppHeader from "@/app/components/AppHeader";
 import { CostCategoryGrid, CostCategoryIcon, workCostCategoryLabels } from "@/app/components/CostCategoryGrid";
 import DatePickerInput, { dateToInputValue } from "@/app/components/DatePickerInput";
+import MonthPickerInput from "@/app/components/MonthPickerInput";
 import Button from "@/app/components/ui/Button";
 import { InputField } from "@/app/components/ui/Input";
 import SegmentedControl from "@/app/components/ui/SegmentedControl";
@@ -257,7 +258,9 @@ export default function WorkScreen({ navigation, onReady }: {
       <div className="work-period-selector"><button type="button" onClick={() => movePeriod(-1)} aria-label="Período anterior">‹</button>
         {period === "DAY"
           ? <div className="work-period-date-picker"><DatePickerInput label="Selecionar dia do histórico" value={referenceDate} displayValue={periodTitle(overview, period, referenceDate)} onChange={setReferenceDate} /></div>
-          : <strong>{periodTitle(overview, period, referenceDate)}</strong>}
+          : period === "MONTH"
+            ? <div className="work-period-date-picker"><MonthPickerInput label="Selecionar mês do histórico" value={referenceDate} displayValue={periodTitle(overview, period, referenceDate)} onChange={setReferenceDate} /></div>
+            : <strong>{periodTitle(overview, period, referenceDate)}</strong>}
         <button type="button" onClick={() => movePeriod(1)} aria-label="Próximo período">›</button></div>
       {loading ? null : <>
         <section className="work-days-section work-records-section"><div className="work-section-title"><div><span>HISTÓRICO</span><h2>Registros do período</h2></div><b>{records.length}</b></div>
