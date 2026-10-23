@@ -20,6 +20,7 @@ import {
   financeApi,
 } from "@/lib/api";
 import DatePickerInput, { dateToInputValue } from "@/app/components/DatePickerInput";
+import { MonthPickerDialog } from "@/app/components/MonthPickerInput";
 import WorkScreen from "@/app/components/WorkScreen";
 import AppHeader from "@/app/components/AppHeader";
 import { CostCategoryGrid, CostCategoryIcon, workCostCategoryLabels } from "@/app/components/CostCategoryGrid";
@@ -1076,7 +1077,6 @@ function Dashboard({
   });
   const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
   const [createType, setCreateType] = useState<"expense" | "income" | null>(initialCreateOpen ? "expense" : null);
-  const [pickerYear, setPickerYear] = useState(selectedMonth.getFullYear());
   const [pendingDelete, setPendingDelete] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -1091,9 +1091,6 @@ function Dashboard({
     year: "numeric",
   });
   const monthFormatter = new Intl.DateTimeFormat("pt-BR", { month: "long" });
-  const monthNames = Array.from({ length: 12 }, (_, month) => (
-    new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(new Date(2024, month, 1))
-  ));
   const monthLabel = `${monthFormatter.format(selectedMonth)} / ${selectedMonth.getFullYear()}`;
   const previousMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() - 1, 1);
   const nextMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 1);
@@ -1134,27 +1131,15 @@ function Dashboard({
     onMonthChange(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1);
   }, [onMonthChange, selectedMonth]);
 
-  useEffect(() => {
-    if (!isMonthPickerOpen) return;
-
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setIsMonthPickerOpen(false);
-    }
-
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [isMonthPickerOpen]);
-
   function changeMonth(offset: number) {
     setSelectedMonth((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
   }
 
   function openMonthPicker() {
-    setPickerYear(selectedMonth.getFullYear());
     setIsMonthPickerOpen(true);
   }
 
-  function selectMonth(month: number, year = pickerYear) {
+  function selectMonth(month: number, year: number) {
     setSelectedMonth(new Date(year, month, 1));
     setIsMonthPickerOpen(false);
   }
@@ -1195,7 +1180,7 @@ function Dashboard({
         <button type="button" className="month-arrow" onClick={() => changeMonth(-1)} aria-label={`Ir para ${periodFormatter.format(previousMonth)}`}><Icon name="back" /></button>
         <button type="button" className="month-current" onClick={openMonthPicker} aria-haspopup="dialog" aria-expanded={isMonthPickerOpen}>
           {monthLabel}
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
+          <Icon name="calendar" />
         </button>
         <button type="button" className="month-arrow" onClick={() => changeMonth(1)} aria-label={`Ir para ${periodFormatter.format(nextMonth)}`}><Icon name="forward" /></button>
       </section>
@@ -1242,48 +1227,13 @@ function Dashboard({
 
       <BottomNavigation active="finance" loading={isLoading} onHome={onHome} onFinance={() => {}} onRadar={onRadar} onGoals={onGoals} onWork={onWork} showWorkFeatures={showWorkFeatures} />
 
-      {isMonthPickerOpen && (
-        <div className="month-picker-backdrop" role="presentation" onMouseDown={() => setIsMonthPickerOpen(false)}>
-          <section className="month-picker" role="dialog" aria-modal="true" aria-labelledby="month-picker-title" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="month-picker-heading">
-              <div>
-                <span>PERÍODO</span>
-                <h2 id="month-picker-title">Selecionar mês</h2>
-              </div>
-              <button type="button" className="month-picker-close" onClick={() => setIsMonthPickerOpen(false)} aria-label="Fechar seletor">×</button>
-            </div>
-
-            <div className="year-selector" aria-label="Selecionar ano">
-              <button type="button" onClick={() => setPickerYear((year) => year - 1)} aria-label={`Ir para ${pickerYear - 1}`}><Icon name="back" /></button>
-              <strong aria-live="polite">{pickerYear}</strong>
-              <button type="button" onClick={() => setPickerYear((year) => year + 1)} aria-label={`Ir para ${pickerYear + 1}`}><Icon name="forward" /></button>
-            </div>
-
-            <div className="month-grid">
-              {monthNames.map((monthName, month) => {
-                const isSelected = selectedMonth.getFullYear() === pickerYear && selectedMonth.getMonth() === month;
-                const isCurrent = today.getFullYear() === pickerYear && today.getMonth() === month;
-                return (
-                  <button
-                    type="button"
-                    key={monthName}
-                    className={`${isSelected ? "selected" : ""}${isCurrent ? " current" : ""}`}
-                    onClick={() => selectMonth(month)}
-                    aria-pressed={isSelected}
-                  >
-                    {monthName}
-                    {isCurrent && <span>Hoje</span>}
-                  </button>
-                );
-              })}
-            </div>
-
-            <button type="button" className="go-to-current-month" onClick={() => selectMonth(today.getMonth(), today.getFullYear())}>
-              Voltar para o mês atual
-            </button>
-          </section>
-        </div>
-      )}
+      <MonthPickerDialog
+        open={isMonthPickerOpen}
+        selectedYear={selectedMonth.getFullYear()}
+        selectedMonth={selectedMonth.getMonth()}
+        onClose={() => setIsMonthPickerOpen(false)}
+        onSelect={(year, month) => selectMonth(month, year)}
+      />
 
       {createType && (
         <CreateTransactionSheet
