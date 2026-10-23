@@ -19,7 +19,7 @@ public record HomeResponse(
     }
 
     public record GoalSummary(PrimaryGoalType type, String name, CustomGoalPeriod period,
-                              BigDecimal dailyTarget, BigDecimal periodRemaining,
+                              BigDecimal targetAmount, BigDecimal dailyTarget, BigDecimal periodRemaining,
                               boolean covered, boolean todaySelected) {
     }
 

@@ -3,6 +3,7 @@ package br.com.amcash.goal.controller;
 import br.com.amcash.config.AuthenticatedUser;
 import br.com.amcash.config.CurrentUser;
 import br.com.amcash.goal.dto.request.UpdateGoalPreferencesRequest;
+import br.com.amcash.goal.dto.request.UpdateGoalConfigurationRequest;
 import br.com.amcash.goal.dto.request.CustomGoalRequest;
 import br.com.amcash.goal.dto.request.UpdatePrimaryGoalRequest;
 import br.com.amcash.goal.dto.response.CustomGoalResponse;
@@ -57,6 +58,14 @@ public class GoalController {
             @RequestParam(required = false) Integer month,
             @Valid @RequestBody UpdateGoalPreferencesRequest request) {
         return goalService.updatePreferences(user.userId(), date, targetMonth(date, year, month), request);
+    }
+
+    @PutMapping("/configuration")
+    public GoalResponse updateConfiguration(
+            @CurrentUser AuthenticatedUser user,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @Valid @RequestBody UpdateGoalConfigurationRequest request) {
+        return goalService.updateConfiguration(user.userId(), date, request);
     }
 
     @GetMapping("/custom")

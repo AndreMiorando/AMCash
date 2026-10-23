@@ -32,7 +32,6 @@ const periodOptions = (Object.keys(periodLabels) as ApiWorkPeriod[]).map((value)
 function parseDate(value: string) { return new Date(`${value}T12:00:00`); }
 function currency(value: number) { return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value); }
 function decimal(value: number) { return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 }).format(value); }
-function dayAndMonth(value: string) { return new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "long" }).format(parseDate(value)); }
 function inputMoney(value: string) {
   const digits = value.replace(/\D/g, "");
   if (!digits) return "";
@@ -55,6 +54,18 @@ function costDescription(cost: ApiWorkCost) {
   }
   if (cost.description === legacyHomeCostDescription) return "";
   return cost.description || "";
+}
+function earningPriority(source: string) {
+  const normalized = source.trim().toLowerCase();
+  if (normalized === "uber") return 0;
+  if (normalized === "99") return 1;
+  return 2;
+}
+function orderedEarnings(day: ApiWorkDay | undefined) {
+  return day?.earnings
+    .map((earning, index) => ({ earning, index }))
+    .sort((first, second) => earningPriority(first.earning.source) - earningPriority(second.earning.source) || first.index - second.index)
+    .map(({ earning }) => earning) ?? [];
 }
 function messageFrom(error: unknown) { return error instanceof Error ? error.message : "Não foi possível concluir a operação."; }
 function periodTitle(overview: ApiWorkOverview | null, period: ApiWorkPeriod, referenceDate: string) {
@@ -244,20 +255,46 @@ export default function WorkScreen({ navigation, onReady }: {
       </>}
       <SegmentedControl className="work-period-tabs" ariaLabel="Período do resumo" value={period} options={periodOptions} onChange={setPeriod} />
       <div className="work-period-selector"><button type="button" onClick={() => movePeriod(-1)} aria-label="Período anterior">‹</button>
-        <strong>{periodTitle(overview, period, referenceDate)}</strong><button type="button" onClick={() => movePeriod(1)} aria-label="Próximo período">›</button></div>
+        {period === "DAY"
+          ? <div className="work-period-date-picker"><DatePickerInput label="Selecionar dia do histórico" value={referenceDate} displayValue={periodTitle(overview, period, referenceDate)} onChange={setReferenceDate} /></div>
+          : <strong>{periodTitle(overview, period, referenceDate)}</strong>}
+        <button type="button" onClick={() => movePeriod(1)} aria-label="Próximo período">›</button></div>
       {loading ? null : <>
         <section className="work-days-section work-records-section"><div className="work-section-title"><div><span>HISTÓRICO</span><h2>Registros do período</h2></div><b>{records.length}</b></div>
           {!records.length ? <div className="work-empty"><strong>Nenhum registro no período</strong><span>Os resultados e custos atualizados pela Home aparecerão aqui.</span></div> : records.map((record) => {
             const gross = Number(record.day?.grossEarnings ?? 0);
             const costs = record.costs.reduce((total, cost) => total + Number(cost.amount), 0);
             const net = gross - costs;
-            return <button type="button" className="work-day-row" key={record.date} onClick={() => openRecord(record.date, record.day, record.costs)}><DateBadge date={record.date} />
-              <span className="work-day-main"><strong>{dayAndMonth(record.date)}</strong><span className="work-day-meta">
-                <span><Image src="/road-icon.png" alt="" width={1254} height={1254} />{decimal(Number(record.day?.kilometers ?? 0))} km</span><i aria-hidden="true">•</i>
-                <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /><path d="M7 9.5h.01M17 14.5h.01" /></svg>{currency(gross)} bruto</span><i aria-hidden="true">•</i>
-                <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18M7 14h5" /></svg>{currency(costs)} custos</span>
-              </span></span>
-              <span className="work-day-values"><b className={net < 0 ? "negative" : ""}>{net < 0 ? "- " : ""}{currency(Math.abs(net))}</b><small>líquido</small></span><span aria-hidden="true">›</span></button>;
+            const earnings = orderedEarnings(record.day);
+            return <button type="button" className="work-day-row" key={record.date} onClick={() => openRecord(record.date, record.day, record.costs)}>
+              <span className="work-day-overview">
+                <span className="work-day-summary-half left"><DateBadge date={record.date} />
+                  <span className="work-day-summary-item"><span><b>{decimal(Number(record.day?.kilometers ?? 0))}</b><small>km</small></span></span>
+                  <span className="work-day-summary-item"><span><b>{currency(costs)}</b><small>custos</small></span></span>
+                </span>
+                <span className="work-day-summary-half right">
+                  <span className="work-day-summary-item"><span><b>{currency(gross)}</b><small>bruto</small></span></span>
+                  <span className={`work-day-summary-item net${net < 0 ? " negative" : ""}`}><span><b>{net < 0 ? "- " : ""}{currency(Math.abs(net))}</b><small>líquido</small></span></span>
+                  <span className="work-day-chevron" aria-hidden="true">›</span>
+                </span>
+              </span>
+              {earnings.length > 0 && <span className="work-day-earnings" aria-label="Faturamento por plataforma">
+                {earnings.map((earning) => {
+                  const source = earning.source.trim();
+                  const normalizedSource = source.toLowerCase();
+                  const isUber = normalizedSource === "uber";
+                  const isNinetyNine = normalizedSource === "99";
+                  return <span className="work-day-earning" key={earning.id}>
+                    <span className="work-day-earning-source">
+                      {isUber && <><Image className="work-day-platform-logo uber" src="/uber-logo.jpeg" alt="" width={96} height={96} /><span className="sr-only">Uber</span></>}
+                      {isNinetyNine && <><Image className="work-day-platform-logo ninety-nine" src="/99-logo.png" alt="" width={96} height={96} /><span className="sr-only">99</span></>}
+                      {!isUber && !isNinetyNine && <><span className="work-day-source-mark" aria-hidden="true">{source.charAt(0).toUpperCase() || "+"}</span><span className="work-day-source-name" title={source}>{source}</span></>}
+                    </span>
+                    <b>{currency(Number(earning.amount))}</b>
+                  </span>;
+                })}
+              </span>}
+            </button>;
           })}</section>
       </>}
     </div>{navigation(loading)}

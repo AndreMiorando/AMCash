@@ -11,12 +11,13 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat("pt-BR").format(new Date(`${value}T12:00:00`));
 }
 
-export default function DatePickerInput({ label, value, onChange, min, max }: {
+export default function DatePickerInput({ label, value, onChange, min, max, displayValue }: {
   label: string;
   value: string;
   onChange: (value: string) => void | Promise<void>;
   min?: string;
   max?: string;
+  displayValue?: string;
 }) {
   const selectedDate = new Date(`${value}T12:00:00`);
   const initialDate = Number.isNaN(selectedDate.getTime()) ? new Date() : selectedDate;
@@ -53,8 +54,8 @@ export default function DatePickerInput({ label, value, onChange, min, max }: {
 
   return <div className="field date-picker-field">
     <span>{label}</span>
-    <button type="button" className="date-input-button" onClick={openCalendar} aria-haspopup="dialog" aria-expanded={isOpen}>
-      <span>{value ? formatDate(value) : "Selecionar data"}</span>
+    <button type="button" className="date-input-button" onClick={openCalendar} aria-label={label} aria-haspopup="dialog" aria-expanded={isOpen}>
+      <span>{value ? displayValue || formatDate(value) : "Selecionar data"}</span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M8 3v4M16 3v4M3.5 9.5h17" /></svg>
     </button>
 
