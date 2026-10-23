@@ -3148,7 +3148,7 @@ a {
 .detail-content {
   height: 100dvh;
   overflow-y: auto;
-  padding: calc(env(safe-area-inset-top) + 1rem) 0.9rem calc(2rem + env(safe-area-inset-bottom));
+  padding: calc(1rem + env(safe-area-inset-top)) 0.9rem calc(2rem + env(safe-area-inset-bottom));
 }
 
 .detail-hero {
