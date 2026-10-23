@@ -193,7 +193,7 @@ type Subexpense = {
   seriesId?: string;
 };
 
-type IconName = Transaction["kind"] | "search" | "more" | "back" | "forward" | "home" | "radar" | "target" | "work" | "edit" | "trash" | "plus" | "check" | "logout" | "clock" | "calendar" | "income" | "expense";
+type IconName = Transaction["kind"] | "search" | "more" | "back" | "forward" | "home" | "radar" | "target" | "work" | "edit" | "trash" | "plus" | "check" | "save" | "logout" | "clock" | "calendar" | "income" | "expense";
 
 function Icon({ name }: { name: IconName }) {
   if (name === "more") {
@@ -218,6 +218,7 @@ function Icon({ name }: { name: IconName }) {
     trash: <><path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6" /></>,
     plus: <path d="M12 5v14M5 12h14" />,
     check: <path d="m5 12 4.5 4.5L19 7" />,
+    save: <><path d="M5 3h12l2 2v16H5V3Z" /><path d="M8 3v6h8V3M8 21v-7h8v7" /></>,
     logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>,
     clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
     calendar: <><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M8 3v4M16 3v4M3.5 9.5h17" /></>,
@@ -1607,7 +1608,21 @@ function DetailScreen({
     <main className="detail-screen">
       <div className="detail-content">
         <section className="detail-card edit-card">
-          <div className="section-title detail-main-title"><button type="button" onClick={onBack} aria-label="Voltar"><Icon name="back" /></button><h1>Editar lançamento</h1></div>
+          <div className="section-title detail-main-title">
+            <button type="button" className="detail-back-button" onClick={onBack} aria-label="Voltar"><Icon name="back" /></button>
+            <h1>Editar lançamento</h1>
+            <button
+              type="button"
+              className="detail-save-button"
+              disabled={!hasParentChanges || !parentFormIsValid || isSaving}
+              aria-label={isSaving ? "Salvando lançamento" : "Salvar alterações"}
+              aria-busy={isSaving || undefined}
+              title="Salvar alterações"
+              onClick={saveDetails}
+            >
+              {isSaving ? <span className="detail-save-spinner" aria-hidden="true" /> : <Icon name="save" />}
+            </button>
+          </div>
 
           <div className="type-switch" aria-label="Tipo do lançamento">
             <button type="button" className={type === "expense" ? "active expense" : ""} onClick={() => { setType("expense"); if (type !== "expense") setCategory(""); }}>Despesa</button>
