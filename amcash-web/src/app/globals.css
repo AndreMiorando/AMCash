@@ -1422,6 +1422,10 @@ a {
 .account-menu { position: relative; }
 .account-menu-trigger { display: grid; position: relative; z-index: 2; width: 2.15rem; height: 2.15rem; padding: 0; place-items: center; border: 1px solid #d7e4f8; border-radius: 50%; background: linear-gradient(145deg, #e9f2ff, #f7faff); color: #075cf4; font: inherit; font-size: 0.72rem; font-weight: 800; cursor: pointer; }
 .account-menu-trigger[aria-expanded="true"] { border-color: #8db8fa; box-shadow: 0 0 0 3px rgb(8 108 243 / 9%); }
+.notification-dot { display: block; width: 0.48rem; height: 0.48rem; flex: 0 0 auto; border-radius: 50%; background: #075cf4; }
+.notification-dot.overdue { background: #f24f68; }
+.notification-dot.today { background: #f5a623; }
+.account-menu-trigger > .notification-dot { position: absolute; top: -0.02rem; right: -0.02rem; width: 0.55rem; height: 0.55rem; border: 2px solid #fff; }
 .account-menu-dismiss { position: fixed; z-index: 30; inset: 0; border: 0; background: transparent; }
 .account-menu-popover { position: absolute; z-index: 31; top: calc(100% + 0.55rem); right: 0; width: min(14.5rem, calc(100vw - 2rem)); padding: 0.4rem; border: 1px solid #dfe7f2; border-radius: 0.9rem; background: #fff; box-shadow: 0 0.9rem 2.4rem rgb(25 54 91 / 18%); }
 .account-menu-user { display: flex; min-width: 0; padding: 0.65rem; align-items: center; gap: 0.55rem; border-bottom: 1px solid #edf1f6; }
@@ -1434,6 +1438,8 @@ a {
 .account-menu-profile:hover, .account-menu-profile:focus-visible { background: #f2f6fc; outline: none; }
 .account-menu-profile > svg { width: 1.05rem; flex: 0 0 auto; color: #086cf3; }
 .account-menu-profile > span { display: grid; gap: 0.05rem; }
+.account-menu-notifications > span { min-width: 0; flex: 1; }
+.account-menu-notifications > .notification-dot { margin-left: auto; }
 .account-menu-profile strong { font-size: 0.64rem; }
 .account-menu-profile small { color: #8294a9; font-size: 0.52rem; }
 .account-menu-logout { display: flex; width: 100%; min-height: 3.2rem; margin-top: 0.3rem; padding: 0.65rem; align-items: center; gap: 0.62rem; border: 0; border-radius: 0.65rem; background: transparent; color: #e65369; font: inherit; text-align: left; cursor: pointer; transition: background 0.18s ease, transform 0.18s ease; }
@@ -1443,6 +1449,44 @@ a {
 .account-menu-logout > span { display: grid; gap: 0.05rem; }
 .account-menu-logout strong { font-size: 0.64rem; }
 .account-menu-logout small { color: #9a7a83; font-size: 0.52rem; }
+
+.notifications-screen { display: flex; width: min(100%, var(--app-shell-width)); height: 100vh; height: 100dvh; min-height: 36rem; margin-inline: auto; flex-direction: column; overflow: hidden; background: var(--app-page-background); color: var(--text-primary); font-family: var(--font-geist-sans), Arial, sans-serif; }
+.notifications-header { position: relative; justify-content: flex-start; border-bottom: 1px solid var(--border-subtle); background: #fff; }
+.notifications-header .header-brand { display: none; }
+.notifications-header h1 { position: absolute; left: 50%; margin: 0; font-size: 1rem; letter-spacing: -0.02em; transform: translateX(-50%); }
+.notifications-back { display: grid; width: 2.1rem; height: 2.1rem; padding: 0; place-items: center; border: 0; border-radius: 50%; background: #f1f5fa; color: #54708d; }
+.notifications-back svg { width: 1rem; }
+.notifications-content { width: min(100%, 48rem); margin-inline: auto; padding: 1rem 1rem 2rem; overflow-y: auto; }
+.notifications-content.empty { display: grid; flex: 1; place-items: center; }
+.notification-group + .notification-group { margin-top: 1.15rem; }
+.notification-group > h2 { margin: 0 0 0.5rem 0.2rem; color: #71859b; font-size: 0.72rem; font-weight: 720; }
+.notification-group-list { display: grid; gap: 0.55rem; }
+.notification-row { display: grid; width: 100%; min-height: 4.65rem; padding: 0.72rem 0.7rem; grid-template-columns: 0.42rem 2.15rem minmax(0, 1fr) auto; align-items: center; gap: 0.65rem; border: 1px solid #dfe9f8; border-radius: 0.75rem; background: #f8fbff; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.notification-row.today { border-color: #f6e6c9; background: #fffaf2; }
+.notification-row.overdue { border-color: #f8d9df; background: #fff7f8; }
+.notification-row:hover, .notification-row:focus-visible { outline: none; box-shadow: 0 0.35rem 1rem rgb(38 68 104 / 7%); transform: translateY(-1px); }
+.notification-icon { display: grid; width: 2.15rem; height: 2.15rem; place-items: center; border-radius: 0.65rem; background: #eaf2ff; color: #075cf4; }
+.notification-row.today .notification-icon { background: #fff1d8; color: #f5a623; }
+.notification-row.overdue .notification-icon { background: #ffe2e7; color: #f24f68; }
+.notification-icon svg { width: 1rem; }
+.notification-copy { display: grid; min-width: 0; gap: 0.1rem; }
+.notification-copy > strong { overflow: hidden; font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
+.notification-copy > time { color: var(--text-muted); font-size: 0.56rem; }
+.notification-row.overdue .notification-copy > time { color: #ef5368; }
+.notification-copy > b { overflow: hidden; color: #71859b; font-size: 0.6rem; font-weight: 520; text-overflow: ellipsis; white-space: nowrap; }
+.notification-value { display: flex; align-self: start; align-items: center; gap: 0.45rem; }
+.notification-value strong { font-size: 0.66rem; white-space: nowrap; }
+.notification-value svg { width: 0.7rem; color: #8da0b5; }
+.notifications-empty { display: flex; max-width: 25rem; padding: 2rem 1rem; align-items: center; flex-direction: column; text-align: center; }
+.notifications-empty > span { display: grid; width: 3.5rem; height: 3.5rem; place-items: center; border-radius: 50%; background: #eaf2ff; color: #075cf4; }
+.notifications-empty svg { width: 1.45rem; }
+.notifications-empty h2 { margin: 0.8rem 0 0; font-size: 1.15rem; }
+.notifications-empty p { margin: 0.35rem 0 0; color: var(--text-muted); font-size: 0.75rem; line-height: 1.5; }
+@media (max-width: 24rem) {
+  .notification-row { padding-inline: 0.6rem; grid-template-columns: 0.38rem 2rem minmax(0, 1fr) auto; gap: 0.5rem; }
+  .notification-icon { width: 2rem; height: 2rem; }
+  .notification-value { gap: 0.25rem; }
+}
 
 .usage-profile-screen { display: flex; width: min(100%, var(--app-shell-width)); height: 100vh; height: 100dvh; min-height: 36rem; margin-inline: auto; flex-direction: column; overflow: hidden; background: var(--app-page-background); color: #183253; }
 .usage-profile-screen > header { justify-content: space-between; border-bottom: 1px solid #edf2f8; background: #fff; }
