@@ -153,9 +153,16 @@ export type ApiGoal = {
   totalExpenses: number;
   paidExpenses: number;
   pendingExpenses: number;
+  includeExpenses: boolean;
+  consideredExpenses: number;
+  additionalAmount: number;
+  targetAmount: number;
+  realizedAmount: number;
   remainingAmount: number;
   weeklyTarget: number;
   dailyTarget: number;
+  todayTarget: number;
+  todayRemaining: number;
   availableDays: number;
   progressPercentage: number;
   covered: boolean;
@@ -202,6 +209,7 @@ export type ApiHome = {
     type: ApiPrimaryGoalType;
     name: string;
     period: ApiCustomGoalPeriod | null;
+    targetAmount: number;
     dailyTarget: number;
     periodRemaining: number;
     covered: boolean;
@@ -366,6 +374,13 @@ export const financeApi = {
     return apiRequest<ApiGoal>(`/api/v1/goals/preferences?date=${date}${target}`, {
       method: "PUT",
       body: JSON.stringify({ selectedDays }),
+    });
+  },
+
+  updateGoalConfiguration(date: string, payload: { includeExpenses: boolean; additionalAmount: number }) {
+    return apiRequest<ApiGoal>(`/api/v1/goals/configuration?date=${date}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
     });
   },
 

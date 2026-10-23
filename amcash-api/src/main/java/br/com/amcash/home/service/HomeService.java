@@ -4,9 +4,8 @@ import br.com.amcash.entry.entity.EntryType;
 import br.com.amcash.entry.entity.FinancialEntry;
 import br.com.amcash.entry.repository.FinancialEntryRepository;
 import br.com.amcash.goal.dto.response.GoalResponse;
-import br.com.amcash.goal.dto.response.CustomGoalResponse;
+import br.com.amcash.goal.entity.CustomGoalPeriod;
 import br.com.amcash.goal.entity.PrimaryGoalType;
-import br.com.amcash.goal.service.CustomGoalService;
 import br.com.amcash.goal.service.GoalService;
 import br.com.amcash.home.dto.HomeResponse;
 import org.springframework.stereotype.Service;
@@ -21,13 +20,10 @@ import java.util.UUID;
 @Service
 public class HomeService {
     private final GoalService goalService;
-    private final CustomGoalService customGoalService;
     private final FinancialEntryRepository entryRepository;
 
-    public HomeService(GoalService goalService, CustomGoalService customGoalService,
-                       FinancialEntryRepository entryRepository) {
+    public HomeService(GoalService goalService, FinancialEntryRepository entryRepository) {
         this.goalService = goalService;
-        this.customGoalService = customGoalService;
         this.entryRepository = entryRepository;
     }
 
@@ -45,23 +41,15 @@ public class HomeService {
                 .orElse(null);
         long pendingExpenseCount = entryRepository.countByUserIdAndTypeAndPaidFalseAndDueDateBetween(
                 userId, EntryType.EXPENSE, monthStart, monthEnd);
-        HomeResponse.GoalSummary goalSummary = customGoalService.currentForHome(userId, date)
-                .map(this::toGoalSummary)
-                .orElseGet(() -> new HomeResponse.GoalSummary(
-                        PrimaryGoalType.EXPENSES, "Despesas pendentes", null,
-                        goal.dailyTarget(), goal.remainingAmount(), goal.covered(), goal.todaySelected()));
+        HomeResponse.GoalSummary goalSummary = new HomeResponse.GoalSummary(
+                PrimaryGoalType.EXPENSES, "Meta mensal", CustomGoalPeriod.MONTHLY,
+                goal.targetAmount(), goal.todayTarget(), goal.remainingAmount(), goal.covered(), goal.todaySelected());
         return new HomeResponse(date, hasFinancialEntries,
                 new HomeResponse.FinancialSummary(
                         goal.income(), goal.pendingExpenses(), pendingExpenseCount,
                         money(goal.income().subtract(goal.pendingExpenses()))),
                 goalSummary,
                 nextExpense);
-    }
-
-    private HomeResponse.GoalSummary toGoalSummary(CustomGoalResponse goal) {
-        return new HomeResponse.GoalSummary(
-                PrimaryGoalType.CUSTOM, goal.name(), goal.period(), goal.todayTarget(),
-                goal.remainingAmount(), goal.achieved(), goal.todaySelected());
     }
 
     private HomeResponse.NextExpense toNextExpense(FinancialEntry entry) {
