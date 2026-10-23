@@ -12,6 +12,7 @@ import br.com.amcash.entry.dto.response.MonthlyEntriesResponse;
 import br.com.amcash.entry.dto.response.SubexpenseResponse;
 import br.com.amcash.entry.entity.SeriesScope;
 import br.com.amcash.entry.service.EntryService;
+import br.com.amcash.notification.service.FinancialNotificationService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,9 +34,11 @@ import java.util.UUID;
 public class EntryController {
 
     private final EntryService entryService;
+    private final FinancialNotificationService notificationService;
 
-    public EntryController(EntryService entryService) {
+    public EntryController(EntryService entryService, FinancialNotificationService notificationService) {
         this.entryService = entryService;
+        this.notificationService = notificationService;
     }
 
     @GetMapping
@@ -62,8 +65,9 @@ public class EntryController {
             @CurrentUser AuthenticatedUser user,
             @Valid @RequestBody CreateEntryRequest request) {
 
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(entryService.create(user.userId(), request));
+        CreatedEntriesResponse created = entryService.create(user.userId(), request);
+        notificationService.synchronize(user.userId());
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     @GetMapping("/{entryId}")
@@ -81,7 +85,9 @@ public class EntryController {
             @RequestParam(defaultValue = "CURRENT") SeriesScope scope,
             @Valid @RequestBody UpdateEntryRequest request) {
 
-        return entryService.update(user.userId(), entryId, request, scope);
+        EntryResponse updated = entryService.update(user.userId(), entryId, request, scope);
+        notificationService.synchronize(user.userId());
+        return updated;
     }
 
     @PatchMapping("/{entryId}/paid")
@@ -90,7 +96,9 @@ public class EntryController {
             @PathVariable UUID entryId,
             @RequestParam(defaultValue = "true") boolean paid) {
 
-        return entryService.setPaid(user.userId(), entryId, paid);
+        EntryResponse updated = entryService.setPaid(user.userId(), entryId, paid);
+        notificationService.synchronize(user.userId());
+        return updated;
     }
 
     @DeleteMapping("/{entryId}")
@@ -100,6 +108,7 @@ public class EntryController {
             @RequestParam(defaultValue = "CURRENT") SeriesScope scope) {
 
         entryService.delete(user.userId(), entryId, scope);
+        notificationService.synchronize(user.userId());
         return ResponseEntity.noContent().build();
     }
 
@@ -109,8 +118,9 @@ public class EntryController {
             @PathVariable UUID entryId,
             @Valid @RequestBody SubexpenseRequest request) {
 
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(entryService.addSubexpense(user.userId(), entryId, request));
+        SubexpenseResponse created = entryService.addSubexpense(user.userId(), entryId, request);
+        notificationService.synchronize(user.userId());
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     @PutMapping("/{entryId}/subexpenses/{subexpenseId}")
@@ -121,7 +131,9 @@ public class EntryController {
             @RequestParam(defaultValue = "CURRENT") SeriesScope scope,
             @Valid @RequestBody SubexpenseRequest request) {
 
-        return entryService.updateSubexpense(user.userId(), entryId, subexpenseId, request, scope);
+        SubexpenseResponse updated = entryService.updateSubexpense(user.userId(), entryId, subexpenseId, request, scope);
+        notificationService.synchronize(user.userId());
+        return updated;
     }
 
     @DeleteMapping("/{entryId}/subexpenses/{subexpenseId}")
@@ -132,6 +144,7 @@ public class EntryController {
             @RequestParam(defaultValue = "CURRENT") SeriesScope scope) {
 
         entryService.deleteSubexpense(user.userId(), entryId, subexpenseId, scope);
+        notificationService.synchronize(user.userId());
         return ResponseEntity.noContent().build();
     }
 }

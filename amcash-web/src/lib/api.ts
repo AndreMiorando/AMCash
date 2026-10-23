@@ -218,6 +218,17 @@ export type ApiHome = {
   nextExpense: { id: string; name: string; dueDate: string; amount: number } | null;
 };
 
+export type ApiFinancialNotification = {
+  id: string;
+  type: "UPCOMING" | "OVERDUE";
+  entryId: string;
+  expenseName: string;
+  amount: number;
+  dueDate: string;
+  createdAt: string;
+  readAt: string | null;
+};
+
 export type ApiWorkPeriod = "DAY" | "WEEK" | "MONTH";
 
 export type ApiWorkEarning = {
@@ -352,6 +363,14 @@ export const financeApi = {
 
   home(date: string) {
     return apiRequest<ApiHome>(`/api/v1/home?date=${date}`);
+  },
+
+  notifications() {
+    return apiRequest<ApiFinancialNotification[]>("/api/v1/notifications");
+  },
+
+  markNotificationsRead() {
+    return apiRequest<ApiFinancialNotification[]>("/api/v1/notifications/read", { method: "PATCH" });
   },
 
   listMonth(year: number, month: number) {

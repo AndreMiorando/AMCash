@@ -7,6 +7,7 @@ import {
   ApiEntry,
   ApiEntryCategory,
   ApiError,
+  ApiFinancialNotification,
   ApiForecast,
   ApiGoal,
   ApiHome,
@@ -194,7 +195,7 @@ type Subexpense = {
   seriesId?: string;
 };
 
-type IconName = Transaction["kind"] | "search" | "more" | "back" | "forward" | "home" | "radar" | "target" | "work" | "edit" | "trash" | "plus" | "check" | "save" | "logout" | "clock" | "calendar" | "income" | "expense";
+type IconName = Transaction["kind"] | "search" | "more" | "back" | "forward" | "home" | "radar" | "target" | "work" | "edit" | "trash" | "plus" | "check" | "save" | "logout" | "clock" | "calendar" | "income" | "expense" | "bell" | "warning";
 
 function Icon({ name }: { name: IconName }) {
   if (name === "more") {
@@ -225,6 +226,8 @@ function Icon({ name }: { name: IconName }) {
     calendar: <><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M8 3v4M16 3v4M3.5 9.5h17" /></>,
     income: <><path d="M17 7 7 17M7 9v8h8" /></>,
     expense: <><path d="m7 17 10-10M9 7h8v8" /></>,
+    bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></>,
+    warning: <><path d="M10.3 3.7 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.7a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4M12 17h.01" /></>,
   };
 
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
@@ -303,17 +306,6 @@ function formatCurrency(value: number) {
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat("pt-BR").format(new Date(`${date}T12:00:00`));
-}
-
-function formatDueSummary(dueDate: string, referenceDate: string) {
-  const due = new Date(`${dueDate}T12:00:00`);
-  const reference = new Date(`${referenceDate}T12:00:00`);
-  const days = Math.round((due.getTime() - reference.getTime()) / 86_400_000);
-  if (days === 0) return `Vence hoje · ${formatDate(dueDate)}`;
-  if (days === 1) return `Vencimento amanhã · ${formatDate(dueDate)}`;
-  if (days > 1) return `Vencimento em ${days} dias · ${formatDate(dueDate)}`;
-  const overdueDays = Math.abs(days);
-  return `Vencida há ${overdueDays} ${overdueDays === 1 ? "dia" : "dias"} · ${formatDate(dueDate)}`;
 }
 
 function formatTransactionGroupDate(date: string) {
@@ -2215,7 +2207,13 @@ function UsageProfileScreen({ onSelect, onCancel }: { onSelect: (profile: ApiUsa
   </main>;
 }
 
-function AccountMenu({ onLogout, usageProfile, onChangeProfile }: { onLogout: () => void; usageProfile: ApiUsageProfile; onChangeProfile: () => void }) {
+function notificationIndicator(notifications: ApiFinancialNotification[]) {
+  const unread = notifications.filter((item) => item.readAt === null);
+  if (unread.some((item) => item.type === "OVERDUE")) return "overdue";
+  return unread.length > 0 ? "upcoming" : null;
+}
+
+function AccountMenu({ onLogout, usageProfile, onChangeProfile, notifications, onNotifications }: { onLogout: () => void; usageProfile: ApiUsageProfile; onChangeProfile: () => void; notifications: ApiFinancialNotification[]; onNotifications: () => void }) {
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
 
@@ -2232,12 +2230,14 @@ function AccountMenu({ onLogout, usageProfile, onChangeProfile }: { onLogout: ()
   }, []);
 
   const initial = user?.name?.trim().charAt(0).toLocaleUpperCase("pt-BR") || "U";
+  const indicator = notificationIndicator(notifications);
   return <div className="account-menu">
-    <button type="button" className="account-menu-trigger" aria-label="Abrir menu da conta" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((current) => !current)}>{initial}</button>
+    <button type="button" className="account-menu-trigger" aria-label="Abrir menu da conta" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((current) => !current)}>{initial}{indicator && <i className={`notification-dot ${indicator}`} aria-label="Novos alertas financeiros" />}</button>
     {open && <>
       <button type="button" className="account-menu-dismiss" aria-label="Fechar menu da conta" onClick={() => setOpen(false)} />
       <section className="account-menu-popover" role="menu">
         <div className="account-menu-user"><span>{initial}</span><div><strong>{user?.name || "Sua conta"}</strong>{user?.email && <small>{user.email}</small>}</div></div>
+        <button type="button" className="account-menu-profile account-menu-notifications" role="menuitem" onClick={() => { setOpen(false); onNotifications(); }}><Icon name="bell" /><span><strong>Notificações</strong><small>Consulte seus alertas.</small></span>{indicator && <i className={`notification-dot ${indicator}`} aria-hidden="true" />}</button>
         <button type="button" className="account-menu-profile" role="menuitem" onClick={() => { setOpen(false); onChangeProfile(); }}><Icon name="target" /><span><strong>Modo de uso</strong><small>{usageProfileLabels[usageProfile]}</small></span></button>
         <button type="button" className="account-menu-logout" role="menuitem" onClick={onLogout}><Icon name="logout" /><span><strong>Sair da conta</strong><small>Encerrar sessão</small></span></button>
       </section>
@@ -2245,7 +2245,7 @@ function AccountMenu({ onLogout, usageProfile, onChangeProfile }: { onLogout: ()
   </div>;
 }
 
-function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, onCreateCustomGoal, onLogout, onReady, usageProfile, onChangeProfile }: {
+function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, onCreateCustomGoal, onLogout, onReady, usageProfile, onChangeProfile, notifications, onNotifications }: {
   onFinance: () => void;
   onCreateExpense: () => void;
   onRadar: () => void;
@@ -2256,6 +2256,8 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   onReady?: () => void;
   usageProfile: ApiUsageProfile;
   onChangeProfile: () => void;
+  notifications: ApiFinancialNotification[];
+  onNotifications: () => void;
 }) {
   const [summary, setSummary] = useState<ApiHome | null>(null);
   const [workOverview, setWorkOverview] = useState<ApiWorkOverview | null>(null);
@@ -2412,7 +2414,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
 
   return <main className="daily-home-screen">
     <AppHeader className="daily-home-header">
-      <div className="daily-home-account"><time className="daily-home-date" dateTime={today}>{dateLabel}</time><AccountMenu onLogout={onLogout} usageProfile={usageProfile} onChangeProfile={onChangeProfile} /></div>
+      <div className="daily-home-account"><time className="daily-home-date" dateTime={today}>{dateLabel}</time><AccountMenu onLogout={onLogout} usageProfile={usageProfile} onChangeProfile={onChangeProfile} notifications={notifications} onNotifications={onNotifications} /></div>
     </AppHeader>
     <div className="daily-home-content">
       {loading ? null : error ?
@@ -2482,24 +2484,41 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
           </>}
           </>}
 
-          <button type="button" className="home-month-expenses" onClick={onFinance} aria-label="Ver despesas pendentes do mês">
-            <span className="home-month-expenses-icon"><Icon name="wallet" /></span>
-            <span className="home-next-expense-main"><small>Despesas do mês</small><strong>{Number(summary.financial.pendingExpenseCount)}</strong><span>Pendentes</span></span>
-            <strong className="home-next-expense-value expense">- {formatCurrency(summary.financial.pendingExpenses)}</strong>
-            <span className="home-card-forward"><Icon name="forward" /></span>
-          </button>
-
-          <button type="button" className="home-next-expense" onClick={onFinance} aria-label={summary.nextExpense ? `Ver próxima despesa: ${summary.nextExpense.name}` : "Ver finanças"}>
-            <span className="home-next-expense-icon"><Icon name="calendar" /></span>
-            <span className="home-next-expense-main"><small>Próxima despesa</small><strong>{summary.nextExpense?.name ?? "Nenhuma despesa pendente"}</strong>
-              <span>{summary.nextExpense ? formatDueSummary(summary.nextExpense.dueDate, today) : "Você não possui outra despesa para pagar neste mês."}</span></span>
-            {summary.nextExpense && <strong className="home-next-expense-value">{formatCurrency(summary.nextExpense.amount)}</strong>}
-            <span className="home-card-forward"><Icon name="forward" /></span>
-          </button>
           </>}
         </>}
     </div>
     <BottomNavigation active="home" loading={loading} onHome={() => {}} onFinance={onFinance} onRadar={onRadar} onGoals={onGoals} onWork={onWork} showWorkFeatures={usageProfile !== "PERSONAL"} />
+  </main>;
+}
+
+function NotificationsScreen({ notifications, onBack, onOpen, error }: { notifications: ApiFinancialNotification[]; onBack: () => void; onOpen: (item: ApiFinancialNotification) => void; error: string }) {
+  const today = dateToInputValue(new Date());
+  const dayDifference = (date: string) => Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000);
+  const groups = [
+    { key: "today", label: "Hoje", items: notifications.filter((item) => dayDifference(item.dueDate) === 0) },
+    { key: "upcoming", label: "Próximos dias", items: notifications.filter((item) => dayDifference(item.dueDate) > 0) },
+    { key: "overdue", label: "Vencidas", items: notifications.filter((item) => item.type === "OVERDUE") },
+  ].filter((group) => group.items.length > 0);
+  return <main className="notifications-screen">
+    <AppHeader className="notifications-header"><button type="button" className="notifications-back" onClick={onBack} aria-label="Voltar"><Icon name="back" /></button><h1>Notificações</h1></AppHeader>
+    <section className={`notifications-content${notifications.length === 0 ? " empty" : ""}`} aria-label="Alertas financeiros">
+      {error && <p className="auth-error" role="alert">{error}</p>}
+      {!error && notifications.length === 0 ? <div className="notifications-empty"><span><Icon name="check" /></span><h2>Tudo em dia!</h2><p>Você não possui alertas financeiros no momento.</p></div> : groups.map((group) => <section className="notification-group" key={group.key} aria-labelledby={`notification-group-${group.key}`}>
+        <h2 id={`notification-group-${group.key}`}>{group.label}</h2>
+        <div className="notification-group-list">{group.items.map((item) => {
+          const days = dayDifference(item.dueDate);
+          const overdue = item.type === "OVERDUE";
+          const tone = overdue ? "overdue" : days === 0 ? "today" : "upcoming";
+          const title = overdue ? "Conta vencida" : days === 0 ? "Sua conta vence hoje" : `Conta vence em ${days} ${days === 1 ? "dia" : "dias"}`;
+          return <button type="button" className={`notification-row ${tone}`} key={item.id} onClick={() => onOpen(item)}>
+            <i className={`notification-dot ${tone}`} aria-hidden="true" />
+            <span className="notification-icon"><Icon name={overdue ? "warning" : "calendar"} /></span>
+            <span className="notification-copy"><strong>{title}</strong><b>{item.expenseName}</b><time dateTime={item.dueDate}>Vencimento {formatDate(item.dueDate)}</time></span>
+            <span className="notification-value"><strong>{formatCurrency(item.amount)}</strong><Icon name="forward" /></span>
+          </button>;
+        })}</div>
+      </section>)}
+    </section>
   </main>;
 }
 
@@ -2512,6 +2531,9 @@ export default function Home() {
   const [profilePickerOpen, setProfilePickerOpen] = useState(false);
   const [goalInitialMode, setGoalInitialMode] = useState<"expenses" | "custom" | undefined>(undefined);
   const [financeCreateRequested, setFinanceCreateRequested] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<ApiFinancialNotification[]>([]);
+  const [notificationsError, setNotificationsError] = useState("");
   const [items, setItems] = useState<Transaction[]>([]);
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -2523,6 +2545,15 @@ export default function Home() {
   const lastLoadedPeriod = useRef("");
   const requestedPeriod = useRef("");
   const requestId = useRef(0);
+
+  const refreshNotifications = useCallback(async () => {
+    try {
+      setNotifications(await financeApi.notifications());
+      setNotificationsError("");
+    } catch (requestError) {
+      if (!(requestError instanceof ApiError && requestError.status === 401)) setNotificationsError(messageFromError(requestError));
+    }
+  }, []);
 
   const logout = useCallback(() => {
     window.localStorage.removeItem("amcash.accessToken");
@@ -2536,6 +2567,8 @@ export default function Home() {
     setUsageProfile(undefined);
     setProfilePickerOpen(false);
     setFinanceCreateRequested(false);
+    setNotificationsOpen(false);
+    setNotifications([]);
     lastLoadedPeriod.current = "";
     requestedPeriod.current = "";
     setScreen("auth");
@@ -2634,6 +2667,12 @@ export default function Home() {
     };
   }, [screen]);
 
+  useEffect(() => {
+    if (screen !== "app" || !usageProfile) return;
+    const timer = window.setTimeout(() => void refreshNotifications(), 0);
+    return () => window.clearTimeout(timer);
+  }, [screen, usageProfile, refreshNotifications]);
+
   const changeMonth = useCallback((year: number, month: number) => {
     const periodKey = `${year}-${month}`;
     setPeriod({ year, month });
@@ -2664,12 +2703,14 @@ export default function Home() {
       })),
     });
     await loadMonth(period.year, period.month);
+    await refreshNotifications();
   }
 
   async function deleteTransaction(entryId: string, scope: ApiSeriesScope) {
     await financeApi.delete(entryId, scope);
     setSelected(null);
     await loadMonth(period.year, period.month);
+    await refreshNotifications();
   }
 
   async function deleteDashboardTransaction(transaction: Transaction, scope: ApiSeriesScope) {
@@ -2679,10 +2720,12 @@ export default function Home() {
   async function markTransactionPaid(transaction: Transaction) {
     await financeApi.setPaid(transaction.id, !transaction.paid);
     await loadMonth(period.year, period.month);
+    await refreshNotifications();
   }
 
   async function refreshCurrentMonth() {
     await loadMonth(period.year, period.month);
+    await refreshNotifications();
   }
 
   async function chooseUsageProfile(profile: ApiUsageProfile) {
@@ -2711,6 +2754,26 @@ export default function Home() {
     changeMonth(nextPeriod.year, nextPeriod.month);
     navigateTo("finance");
   };
+  const openNotifications = async () => {
+    setNotificationsOpen(true);
+    setNotifications((current) => current.map((item) => ({ ...item, readAt: item.readAt ?? new Date().toISOString() })));
+    try {
+      setNotifications(await financeApi.markNotificationsRead());
+      setNotificationsError("");
+    } catch (requestError) {
+      setNotificationsError(messageFromError(requestError));
+    }
+  };
+  const openNotificationEntry = async (notification: ApiFinancialNotification) => {
+    try {
+      const entry = await financeApi.get(notification.entryId);
+      setNotificationsOpen(false);
+      setSelected(mapEntries([entry])[0]);
+    } catch (requestError) {
+      setNotificationsError(messageFromError(requestError));
+    }
+  };
+  if (notificationsOpen) return <NotificationsScreen notifications={notifications} error={notificationsError} onBack={() => setNotificationsOpen(false)} onOpen={(item) => void openNotificationEntry(item)} />;
   if (selected) {
     return (
       <DetailScreen
@@ -2728,7 +2791,7 @@ export default function Home() {
     if (tab === "goals") return <GoalsScreen onReady={onReady} initialMode={goalInitialMode} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onWork={openWork} />;
     if (tab === "work") return <WorkScreen onReady={onReady} navigation={(loading) => <BottomNavigation active="work" loading={loading} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={() => {}} />} />;
     if (tab === "finance") return <Dashboard onReady={onReady} items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onHome={() => navigateTo("home")} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} showWorkFeatures={showWorkFeatures} onMonthChange={changeMonth} initialPeriod={period} initialCreateOpen={financeCreateRequested} onInitialCreateHandled={() => setFinanceCreateRequested(false)} error={error} isLoading={isLoading} />;
-    return <HomeDashboard onReady={onReady} onFinance={() => openFinance()} onCreateExpense={() => { setFinanceCreateRequested(true); openFinance(); }} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} onCreateCustomGoal={() => openGoals("custom")} onLogout={logout} usageProfile={usageProfile} onChangeProfile={() => setProfilePickerOpen(true)} />;
+    return <HomeDashboard onReady={onReady} onFinance={() => openFinance()} onCreateExpense={() => { setFinanceCreateRequested(true); openFinance(); }} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} onCreateCustomGoal={() => openGoals("custom")} onLogout={logout} usageProfile={usageProfile} onChangeProfile={() => setProfilePickerOpen(true)} notifications={notifications} onNotifications={() => void openNotifications()} />;
   };
   const renderedTabs = pendingTab && pendingTab !== activeTab ? [activeTab, pendingTab] : [activeTab];
   return <NavigationLoadingContext.Provider value={pendingTab}>
