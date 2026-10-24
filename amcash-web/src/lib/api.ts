@@ -409,6 +409,7 @@ export const financeApi = {
   vehicle(id: string) { return apiRequest<ApiVehicle>(`/api/v1/vehicles/${id}`); },
   createVehicle(payload: VehiclePayload) { return apiRequest<ApiVehicle>("/api/v1/vehicles", { method: "POST", body: JSON.stringify(payload) }); },
   updateVehicle(id: string, payload: VehiclePayload) { return apiRequest<ApiVehicle>(`/api/v1/vehicles/${id}`, { method: "PUT", body: JSON.stringify(payload) }); },
+  deleteVehicle(id: string) { return apiRequest<void>(`/api/v1/vehicles/${id}`, { method: "DELETE" }); },
   updateOdometer(id: string, payload: { mileage: number; readingDate: string; correction: boolean }) { return apiRequest(`/api/v1/vehicles/${id}/odometer`, { method: "POST", body: JSON.stringify(payload) }); },
   createMaintenance(vehicleId: string, payload: MaintenancePayload) { return apiRequest<ApiVehicleMaintenance>(`/api/v1/vehicles/${vehicleId}/maintenances`, { method: "POST", body: JSON.stringify(payload) }); },
   updateMaintenance(vehicleId: string, maintenanceId: string, payload: MaintenancePayload) { return apiRequest<ApiVehicleMaintenance>(`/api/v1/vehicles/${vehicleId}/maintenances/${maintenanceId}`, { method: "PUT", body: JSON.stringify(payload) }); },

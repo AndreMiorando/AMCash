@@ -13,6 +13,23 @@
 - **Hierarquia compacta:** rótulos pequenos em caixa alta e com espaçamento entre letras precedem títulos e valores.
 - **Ícones lineares:** SVGs usam traço arredondado; logos de plataformas e dois indicadores de trabalho usam imagens existentes.
 
+### 1.1 Seções contínuas e cards
+
+**Seções contínuas**
+
+- Utilizar a mesma margem lateral da Home.
+- Separar itens com divisórias finas.
+- Manter espaçamentos uniformes.
+- Evitar sombras e bordas externas desnecessárias.
+- Não adicionar um card apenas para agrupar informações simples.
+
+**Cards**
+
+- Utilizar quando o contêiner acrescentar significado visual ou funcional.
+- Manter o arredondamento e o estilo já estabelecidos.
+- Evitar cards dentro de cards.
+- Preservar o destaque azul para KPIs principais.
+
 ## 2. Fontes da verdade
 
 | Área | Localização |
@@ -257,6 +274,8 @@ Não existe uma escala nomeada. Os valores dominantes encontrados são:
 **Padrão comum:** componentes `Input` e `InputField`, altura `2.7rem`, borda `#dfe6ef`, raio `0.7rem`, fundo branco `#ffffff` e foco `#78aafa` com anel externo de `0.2rem`. Campos digitáveis compostos da Home e Trabalho reutilizam o mesmo token de fundo; seletores e áreas informativas mantêm superfícies próprias.
 
 **Variações:** prefixos `R$` e `km`, logo de fonte, descrição opcional. A Home e a edição de Trabalho permitem fontes de faturamento adicionais.
+
+**Comportamento obrigatório para valores monetários:** todos os inputs de valor devem reproduzir o comportamento dos campos monetários da Home. A digitação aceita apenas números e aplica a máscara brasileira em tempo real, mantendo sempre duas casas decimais e separadores de milhar (por exemplo, `1345070` é exibido como `13.450,70`). O campo deve usar `inputMode="numeric"`, prefixo visual `R$`, `maskCurrencyInput` durante a alteração, `completeCurrencyInput` ao perder o foco e `parseCurrencyInput` antes de enviar o valor para a API. Não devem existir implementações locais com comportamento diferente.
 
 **Componentes existentes:**
 

@@ -19,6 +19,8 @@ class VehicleServiceTests {
 
     @Test void shouldKeepVehiclesIsolatedByUser(){UUID otherVehicle=UUID.randomUUID();when(vehicles.findByIdAndUserId(otherVehicle,user.getId())).thenReturn(Optional.empty());assertThrows(NotFoundException.class,()->service.get(user.getId(),otherVehicle));verify(vehicles).findByIdAndUserId(otherVehicle,user.getId());}
 
+    @Test void shouldDeleteOnlyAnOwnedVehicle(){Vehicle vehicle=vehicle();when(vehicles.findByIdAndUserId(vehicle.getId(),user.getId())).thenReturn(Optional.of(vehicle));service.delete(user.getId(),vehicle.getId());verify(vehicles).delete(vehicle);}
+
     @Test void shouldRejectInvalidMaintenanceForecast(){Vehicle vehicle=vehicle();when(vehicles.findByIdAndUserId(vehicle.getId(),user.getId())).thenReturn(Optional.of(vehicle));MaintenanceRequest request=new MaintenanceRequest(MaintenanceType.OIL_CHANGE,null,LocalDate.of(2026,10,20),new BigDecimal("1000"),BigDecimal.TEN,null,new BigDecimal("900"),LocalDate.of(2026,10,19));assertThrows(BadRequestException.class,()->service.addMaintenance(user.getId(),vehicle.getId(),request));verify(maintenances,never()).save(any());}
 
     @Test void shouldAppendOdometerReadingAndReconcileAlerts(){Vehicle vehicle=vehicle();when(vehicles.findByIdAndUserId(vehicle.getId(),user.getId())).thenReturn(Optional.of(vehicle));when(readings.save(any())).thenAnswer(i->i.getArgument(0));service.updateOdometer(user.getId(),vehicle.getId(),new OdometerRequest(new BigDecimal("10100"),LocalDate.of(2026,10,23),true));assertEquals(new BigDecimal("10100"),vehicle.getCurrentMileage());verify(readings).save(any(OdometerReading.class));verify(alerts).reconcile(vehicle);}

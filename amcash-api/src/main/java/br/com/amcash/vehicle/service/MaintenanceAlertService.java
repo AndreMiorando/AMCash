@@ -26,6 +26,7 @@ public class MaintenanceAlertService {
             if(reachedMileage||reachedDate)alertRepository.findByMaintenanceId(previous.getId()).ifPresent(MaintenanceAlert::resolve);
         }
     }
+    @Transactional public void deleteForVehicle(UUID vehicleId){alertRepository.deleteAllByVehicleId(vehicleId);}
     static MaintenanceAlertType typeFor(VehicleMaintenance item,BigDecimal mileage,LocalDate today){
         boolean overdueMileage=item.getNextMileage()!=null&&mileage.compareTo(item.getNextMileage())>0;
         boolean overdueDate=item.getNextDate()!=null&&item.getNextDate().isBefore(today);
