@@ -220,7 +220,7 @@ export type ApiHome = {
 
 export type ApiFinancialNotification = {
   id: string;
-  type: "UPCOMING" | "OVERDUE";
+  type: "UPCOMING" | "OVERDUE" | "MILEAGE_UPDATE";
   entryId: string | null;
   expenseName: string;
   amount: number | null;
@@ -410,7 +410,8 @@ export const financeApi = {
   createVehicle(payload: VehiclePayload) { return apiRequest<ApiVehicle>("/api/v1/vehicles", { method: "POST", body: JSON.stringify(payload) }); },
   updateVehicle(id: string, payload: VehiclePayload) { return apiRequest<ApiVehicle>(`/api/v1/vehicles/${id}`, { method: "PUT", body: JSON.stringify(payload) }); },
   deleteVehicle(id: string) { return apiRequest<void>(`/api/v1/vehicles/${id}`, { method: "DELETE" }); },
-  updateOdometer(id: string, payload: { mileage: number; readingDate: string; correction: boolean }) { return apiRequest(`/api/v1/vehicles/${id}/odometer`, { method: "POST", body: JSON.stringify(payload) }); },
+  updateOdometer(id: string, payload: { mileage: number; readingDate: string; correction: boolean }) { return apiRequest<{ id: string; mileage: number; readingDate: string; correction: boolean }>(`/api/v1/vehicles/${id}/odometer`, { method: "PUT", body: JSON.stringify(payload) }); },
+  deleteOdometerReading(vehicleId: string, readingId: string) { return apiRequest<void>(`/api/v1/vehicles/${vehicleId}/odometer/${readingId}`, { method: "DELETE" }); },
   createMaintenance(vehicleId: string, payload: MaintenancePayload) { return apiRequest<ApiVehicleMaintenance>(`/api/v1/vehicles/${vehicleId}/maintenances`, { method: "POST", body: JSON.stringify(payload) }); },
   updateMaintenance(vehicleId: string, maintenanceId: string, payload: MaintenancePayload) { return apiRequest<ApiVehicleMaintenance>(`/api/v1/vehicles/${vehicleId}/maintenances/${maintenanceId}`, { method: "PUT", body: JSON.stringify(payload) }); },
   deleteMaintenance(vehicleId: string, maintenanceId: string) { return apiRequest<void>(`/api/v1/vehicles/${vehicleId}/maintenances/${maintenanceId}`, { method: "DELETE" }); },

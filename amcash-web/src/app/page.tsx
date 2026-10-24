@@ -18,6 +18,7 @@ import {
   ApiSeriesScope,
   ApiSubexpense,
   ApiUsageProfile,
+  ApiVehicle,
   financeApi,
 } from "@/lib/api";
 import DatePickerInput, { dateToInputValue } from "@/app/components/DatePickerInput";
@@ -2197,12 +2198,13 @@ function AccountMenu({ onLogout, usageProfile, onChangeProfile, notifications, o
   </div>;
 }
 
-function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, onCreateCustomGoal, onLogout, onReady, usageProfile, onChangeProfile, notifications, onNotifications }: {
+function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, onVehicles, onCreateCustomGoal, onLogout, onReady, usageProfile, onChangeProfile, notifications, onNotifications, onMileageUpdated }: {
   onFinance: () => void;
   onCreateExpense: () => void;
   onRadar: () => void;
   onGoals: () => void;
   onWork: () => void;
+  onVehicles: () => void;
   onCreateCustomGoal: () => void;
   onLogout: () => void;
   onReady?: () => void;
@@ -2210,6 +2212,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   onChangeProfile: () => void;
   notifications: ApiFinancialNotification[];
   onNotifications: () => void;
+  onMileageUpdated: () => Promise<void>;
 }) {
   const [summary, setSummary] = useState<ApiHome | null>(null);
   const [workOverview, setWorkOverview] = useState<ApiWorkOverview | null>(null);
@@ -2218,6 +2221,12 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   const [additionalEarnings, setAdditionalEarnings] = useState<HomeEarningDraft[]>([]);
   const [kilometers, setKilometers] = useState("");
   const [homeCosts, setHomeCosts] = useState<HomeCostDraft[]>([]);
+  const [homeVehicles, setHomeVehicles] = useState<ApiVehicle[]>([]);
+  const [selectedVehicleId, setSelectedVehicleId] = useState("");
+  const [odometerValue, setOdometerValue] = useState("");
+  const [odometerSaving, setOdometerSaving] = useState(false);
+  const [odometerMessage, setOdometerMessage] = useState("");
+  const [odometerError, setOdometerError] = useState("");
   const [initialWorkSignature, setInitialWorkSignature] = useState("");
   const [openCostKey, setOpenCostKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -2232,12 +2241,15 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
     setLoading(true);
     setError("");
     try {
-      const [home, work] = await Promise.all([
+      const [home, work, vehicles] = await Promise.all([
         financeApi.home(today),
         usageProfile === "PERSONAL" ? Promise.resolve(null) : financeApi.workOverview(today, "DAY"),
+        usageProfile === "PERSONAL" ? Promise.resolve([] as ApiVehicle[]) : financeApi.vehicles().catch(() => [] as ApiVehicle[]),
       ]);
       setSummary(home);
       setWorkOverview(work);
+      setHomeVehicles(vehicles);
+      setSelectedVehicleId((current) => vehicles.some((vehicle) => vehicle.id === current) ? current : vehicles[0]?.id ?? "");
       if (!work) return;
       const day = work.days.find((item) => item.date === today);
       const uberEarning = day?.earnings.find((item) => item.source.toLowerCase() === "uber");
@@ -2306,6 +2318,8 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   const showEmptyState = summary?.hasFinancialEntries === false && Number(summary?.goal.targetAmount ?? 0) === 0;
   const additionalEarningsAreValid = additionalEarnings.every((item) => item.source.trim().length > 0 && (parseCurrencyInput(item.amount) || 0) > 0);
   const hasWorkChanges = initialWorkSignature !== "" && initialWorkSignature !== homeWorkSignature({ uber, ninetyNine, kilometers, additionalEarnings, costs: homeCosts });
+  const selectedHomeVehicle = homeVehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
+  const parsedOdometer = parseDecimalInput(odometerValue);
 
   function updateHomeCost(key: string, changes: Partial<Pick<HomeCostDraft, "category" | "amount" | "description">>) {
     setHomeCosts((current) => current.map((item) => item.key === key ? { ...item, ...changes } : item));
@@ -2364,6 +2378,31 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
     }
   }
 
+  async function updateHomeOdometer() {
+    if (!selectedHomeVehicle || !odometerValue.trim() || odometerSaving) return;
+    if (parsedOdometer <= Number(selectedHomeVehicle.currentMileage)) {
+      setOdometerError("A nova quilometragem deve ser maior que a última leitura.");
+      setOdometerMessage("");
+      return;
+    }
+    setOdometerSaving(true);
+    setOdometerError("");
+    setOdometerMessage("");
+    try {
+      const reading = await financeApi.updateOdometer(selectedHomeVehicle.id, { mileage: parsedOdometer, readingDate: today, correction: false });
+      setHomeVehicles((current) => current.map((vehicle) => vehicle.id === selectedHomeVehicle.id
+        ? { ...vehicle, currentMileage: reading.mileage, mileageReadingDate: reading.readingDate }
+        : vehicle));
+      setOdometerValue("");
+      setOdometerMessage("Quilometragem atualizada.");
+      await onMileageUpdated();
+    } catch (requestError) {
+      setOdometerError(messageFromError(requestError));
+    } finally {
+      setOdometerSaving(false);
+    }
+  }
+
   return <main className="daily-home-screen">
     <AppHeader className="daily-home-header">
       <div className="daily-home-account"><time className="daily-home-date" dateTime={today}>{dateLabel}</time><AccountMenu onLogout={onLogout} usageProfile={usageProfile} onChangeProfile={onChangeProfile} notifications={notifications} onNotifications={onNotifications} /></div>
@@ -2400,11 +2439,11 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
           </PrimaryKpiCard>
 
           {summary.goal.todaySelected && <>
-          <section className="home-today-summary" aria-label="Resumo do trabalho de hoje">
-            <article><span>FATURAMENTO HOJE</span><strong>{formatCurrency(projectedGrossEarnings)}</strong></article>
-            <article><span>RESULTADO LÍQUIDO</span><strong className={projectedTodayNet < 0 ? "negative" : ""}>{projectedTodayNet < 0 ? "- " : ""}{formatCurrency(projectedTodayNet)}</strong></article>
-            <article><span>FATURAMENTO POR KM</span><strong>{kilometersValue > 0 ? formatCurrency(earningsPerKilometer) : "—"}</strong></article>
-          </section>
+          <SecondaryKpiGroup columns={3} className="home-today-summary" aria-label="Resumo do trabalho de hoje">
+            <SecondaryKpiItem><KpiLabel>FATURAMENTO HOJE</KpiLabel><KpiValue>{formatCurrency(projectedGrossEarnings)}</KpiValue></SecondaryKpiItem>
+            <SecondaryKpiItem><KpiLabel>RESULTADO LÍQUIDO</KpiLabel><KpiValue className={projectedTodayNet < 0 ? "negative" : ""}>{projectedTodayNet < 0 ? "- " : ""}{formatCurrency(projectedTodayNet)}</KpiValue></SecondaryKpiItem>
+            <SecondaryKpiItem><KpiLabel>FATURAMENTO POR KM</KpiLabel><KpiValue>{kilometersValue > 0 ? formatCurrency(earningsPerKilometer) : "—"}</KpiValue></SecondaryKpiItem>
+          </SecondaryKpiGroup>
           <section className="home-quick-entry" aria-label="Trabalho de hoje">
             <div className="home-work-card-heading"><div><span>TRABALHO DE HOJE</span></div><small>Edite os valores diretamente</small></div>
             <div className="home-work-fields">
@@ -2433,6 +2472,20 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
             </div>
             <Button type="button" fullWidth loading={saving} loadingLabel="Atualizando..." disabled={!hasWorkChanges || !additionalEarningsAreValid} onClick={() => void saveDailyResult()}>Atualizar trabalho de hoje</Button>
           </section>
+          {homeVehicles.length > 0 ? <section className="home-odometer-update" aria-labelledby="home-odometer-title">
+            <header className="home-odometer-heading">
+              <h3 id="home-odometer-title">QUILOMETRAGEM DO VEÍCULO</h3>
+              {homeVehicles.length === 1 && <small>{selectedHomeVehicle?.nickname || `${selectedHomeVehicle?.brand ?? ""} ${selectedHomeVehicle?.model ?? ""}`.trim()}</small>}
+            </header>
+            {homeVehicles.length > 1 && <SelectPickerInput label="Veículo" value={selectedVehicleId} options={homeVehicles.map((vehicle) => ({ value: vehicle.id, label: vehicle.nickname || `${vehicle.brand} ${vehicle.model}` }))} onChange={(vehicleId) => { setSelectedVehicleId(vehicleId); setOdometerValue(""); setOdometerError(""); setOdometerMessage(""); }} className="home-odometer-vehicle" />}
+            <div className="home-odometer-entry">
+              {selectedHomeVehicle && <div className="home-odometer-last"><span>Última leitura</span><strong>{new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(selectedHomeVehicle.currentMileage)} km</strong><time dateTime={selectedHomeVehicle.mileageReadingDate}>{formatDate(selectedHomeVehicle.mileageReadingDate)}</time></div>}
+              <InputField fieldClassName="home-odometer-new" label="Nova leitura" prefix="km" inputMode="decimal" placeholder="0" value={odometerValue} onChange={(event) => { setOdometerValue(maskDecimalInput(event.target.value)); setOdometerError(""); setOdometerMessage(""); }} />
+            </div>
+            <Button type="button" fullWidth loading={odometerSaving} loadingLabel="Atualizando..." disabled={!odometerValue.trim() || parsedOdometer <= Number(selectedHomeVehicle?.currentMileage ?? 0)} onClick={() => void updateHomeOdometer()}>Atualizar quilometragem</Button>
+            {odometerError && <p className="home-odometer-feedback error" role="alert">{odometerError}</p>}
+            {odometerMessage && <p className="home-odometer-feedback success" role="status">{odometerMessage}</p>}
+          </section> : <section className="home-odometer-empty"><h3>QUILOMETRAGEM DO VEÍCULO</h3><p>Cadastre um veículo para registrar o hodômetro e acompanhar quanto você roda.</p><button type="button" onClick={onVehicles}>Cadastrar veículo</button></section>}
           </>}
           </>}
 
@@ -2455,17 +2508,18 @@ function NotificationsScreen({ notifications, onBack, onOpen, error }: { notific
     <AppHeader className="notifications-header"><button type="button" className="notifications-back" onClick={onBack} aria-label="Voltar"><Icon name="back" /></button><h1>Notificações</h1></AppHeader>
     <section className={`notifications-content${notifications.length === 0 ? " empty" : ""}`} aria-label="Alertas">
       {error && <p className="auth-error" role="alert">{error}</p>}
-      {!error && notifications.length === 0 ? <div className="notifications-empty"><span><Icon name="check" /></span><h2>Tudo em dia!</h2><p>Você não possui alertas financeiros no momento.</p></div> : groups.map((group) => <section className="notification-group" key={group.key} aria-labelledby={`notification-group-${group.key}`}>
+      {!error && notifications.length === 0 ? <div className="notifications-empty"><span><Icon name="check" /></span><h2>Tudo em dia!</h2><p>Você não possui alertas no momento.</p></div> : groups.map((group) => <section className="notification-group" key={group.key} aria-labelledby={`notification-group-${group.key}`}>
         <h2 id={`notification-group-${group.key}`}>{group.label}</h2>
         <div className="notification-group-list">{group.items.map((item) => {
           const days = dayDifference(item.dueDate);
           const overdue = item.type === "OVERDUE";
+          const mileageReminder = item.type === "MILEAGE_UPDATE";
           const tone = overdue ? "overdue" : days === 0 ? "today" : "upcoming";
           const title = overdue ? "Conta vencida" : days === 0 ? "Sua conta vence hoje" : `Conta vence em ${days} ${days === 1 ? "dia" : "dias"}`;
           return <button type="button" className={`notification-row ${tone}`} key={item.id} onClick={() => onOpen(item)}>
             <i className={`notification-dot ${tone}`} aria-hidden="true" />
             <span className="notification-icon"><Icon name={overdue ? "warning" : "calendar"} /></span>
-            <span className="notification-copy"><strong>{item.source === "VEHICLE" ? overdue ? "Manutenção vencida" : "Próxima manutenção" : title}</strong><b>{item.expenseName}</b><time dateTime={item.dueDate}>{item.source === "VEHICLE" ? item.message : `Vencimento ${formatDate(item.dueDate)}`}</time></span>
+            <span className="notification-copy"><strong>{item.source === "VEHICLE" ? mileageReminder ? "Atualize a quilometragem" : overdue ? "Manutenção vencida" : "Próxima manutenção" : title}</strong><b>{item.expenseName}</b><time dateTime={item.dueDate}>{item.source === "VEHICLE" ? item.message : `Vencimento ${formatDate(item.dueDate)}`}</time></span>
             <span className="notification-value">{item.amount !== null && <strong>{formatCurrency(item.amount)}</strong>}<Icon name="forward" /></span>
           </button>;
         })}</div>
@@ -2750,7 +2804,7 @@ export default function Home() {
     if (tab === "work") return <WorkScreen onReady={onReady} navigation={(loading) => <BottomNavigation active="work" loading={loading} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={() => {}} />} />;
     if (tab === "vehicles") return <VehicleScreen onReady={onReady} navigation={(loading) => <BottomNavigation active="vehicles" loading={loading} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} />} />;
     if (tab === "finance") return <Dashboard onReady={onReady} items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onHome={() => navigateTo("home")} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} showWorkFeatures={showWorkFeatures} onMonthChange={changeMonth} initialPeriod={period} initialCreateOpen={financeCreateRequested} onInitialCreateHandled={() => setFinanceCreateRequested(false)} error={error} isLoading={isLoading} />;
-    return <HomeDashboard onReady={onReady} onFinance={() => openFinance()} onCreateExpense={() => { setFinanceCreateRequested(true); openFinance(); }} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} onCreateCustomGoal={() => openGoals("custom")} onLogout={logout} usageProfile={usageProfile} onChangeProfile={() => setProfilePickerOpen(true)} notifications={notifications} onNotifications={() => void openNotifications()} />;
+    return <HomeDashboard onReady={onReady} onFinance={() => openFinance()} onCreateExpense={() => { setFinanceCreateRequested(true); openFinance(); }} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} onVehicles={() => navigateTo("vehicles")} onCreateCustomGoal={() => openGoals("custom")} onLogout={logout} usageProfile={usageProfile} onChangeProfile={() => setProfilePickerOpen(true)} notifications={notifications} onNotifications={() => void openNotifications()} onMileageUpdated={refreshNotifications} />;
   };
   const renderedTabs = pendingTab && pendingTab !== activeTab ? [activeTab, pendingTab] : [activeTab];
   return <VehicleNavigationContext.Provider value={() => navigateTo("vehicles")}><NavigationLoadingContext.Provider value={pendingTab}>

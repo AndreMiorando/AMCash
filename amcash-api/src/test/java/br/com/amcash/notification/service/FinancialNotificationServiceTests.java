@@ -3,6 +3,8 @@ package br.com.amcash.notification.service;
 import br.com.amcash.entry.entity.*;
 import br.com.amcash.notification.entity.FinancialAlertType;
 import br.com.amcash.notification.entity.FinancialNotification;
+import br.com.amcash.notification.repository.FinancialNotificationRepository;
+import br.com.amcash.entry.repository.FinancialEntryRepository;
 import br.com.amcash.user.entity.User;
 import org.junit.jupiter.api.Test;
 
@@ -10,8 +12,13 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 class FinancialNotificationServiceTests {
     @Test
@@ -42,5 +49,35 @@ class FinancialNotificationServiceTests {
         notification.activate(FinancialAlertType.OVERDUE);
         assertNull(notification.getReadAt());
         assertEquals(FinancialAlertType.OVERDUE, notification.getAlertType());
+    }
+
+    @Test
+    void shouldKeepOverdueExpenseActiveAfterReadingAndResolveItOnlyWhenNoLongerPending() {
+        FinancialEntryRepository entries = mock(FinancialEntryRepository.class);
+        FinancialNotificationRepository notifications = mock(FinancialNotificationRepository.class);
+        FinancialNotificationService service = new FinancialNotificationService(entries, notifications);
+        User user = new User("subject", "user@example.com", "User", null);
+        user.setId(UUID.randomUUID());
+        FinancialEntry entry = new FinancialEntry(user, "Internet", EntryCategory.BILLS_AND_SERVICES,
+                EntryType.EXPENSE, new BigDecimal("120.00"), LocalDate.now().minusDays(2),
+                RecurrenceFrequency.NONE, 0, 0, null, false);
+        entry.setId(UUID.randomUUID());
+        FinancialNotification notification = new FinancialNotification(user, entry, FinancialAlertType.OVERDUE);
+
+        when(entries.findAllByUserIdAndTypeAndPaidFalseAndDueDateLessThanEqualOrderByDueDateAscCreatedAtAsc(
+                eq(user.getId()), eq(EntryType.EXPENSE), any(LocalDate.class))).thenReturn(List.of(entry));
+        when(notifications.findAllByUserIdAndActiveTrue(user.getId())).thenReturn(List.of(notification));
+        when(notifications.findByUserIdAndEntryId(user.getId(), entry.getId())).thenReturn(Optional.of(notification));
+
+        service.markAllRead(user.getId());
+
+        assertTrue(notification.isActive());
+        assertNotNull(notification.getReadAt());
+
+        when(entries.findAllByUserIdAndTypeAndPaidFalseAndDueDateLessThanEqualOrderByDueDateAscCreatedAtAsc(
+                eq(user.getId()), eq(EntryType.EXPENSE), any(LocalDate.class))).thenReturn(List.of());
+        service.synchronize(user.getId());
+
+        assertFalse(notification.isActive());
     }
 }
