@@ -4,6 +4,8 @@ import br.com.amcash.shared.exception.BadRequestException;
 import br.com.amcash.shared.exception.NotFoundException;
 import br.com.amcash.user.entity.User;
 import br.com.amcash.user.repository.UserRepository;
+import br.com.amcash.vehicle.entity.Vehicle;
+import br.com.amcash.vehicle.repository.VehicleRepository;
 import br.com.amcash.work.dto.request.UpsertWorkDayRequest;
 import br.com.amcash.work.dto.request.WorkCostRequest;
 import br.com.amcash.work.dto.request.WorkEarningRequest;
@@ -47,13 +49,15 @@ public class WorkService {
     private final WorkEarningRepository workEarningRepository;
     private final WorkCostRepository workCostRepository;
     private final UserRepository userRepository;
+    private final VehicleRepository vehicleRepository;
 
     public WorkService(WorkDayRepository workDayRepository, WorkEarningRepository workEarningRepository,
-                       WorkCostRepository workCostRepository, UserRepository userRepository) {
+                       WorkCostRepository workCostRepository, UserRepository userRepository,VehicleRepository vehicleRepository) {
         this.workDayRepository = workDayRepository;
         this.workEarningRepository = workEarningRepository;
         this.workCostRepository = workCostRepository;
         this.userRepository = userRepository;
+        this.vehicleRepository=vehicleRepository;
     }
 
     @Transactional(readOnly = true)
@@ -110,9 +114,11 @@ public class WorkService {
         validateEarnings(request.earnings());
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado"));
+        Vehicle vehicle=request.vehicleId()==null?null:vehicleRepository.findByIdAndUserId(request.vehicleId(),userId)
+                .orElseThrow(()->new NotFoundException("Veículo não encontrado"));
         WorkDay day = workDayRepository.findByUserIdAndDate(userId, date)
-                .orElseGet(() -> new WorkDay(user, date, request.kilometers()));
-        day.update(request.kilometers());
+                .orElseGet(() -> new WorkDay(user,vehicle,date,request.kilometers()));
+        day.update(vehicle,request.kilometers());
         day = workDayRepository.save(day);
         workEarningRepository.deleteAllByWorkDayId(day.getId());
         List<WorkEarning> earnings = new ArrayList<>();
@@ -172,7 +178,7 @@ public class WorkService {
         List<WorkEarningResponse> earningResponses = earnings.stream()
                 .map(earning -> new WorkEarningResponse(earning.getId(), earning.getSource(), earning.getAmount()))
                 .toList();
-        return new WorkDayResponse(day.getId(), day.getDate(), day.getKilometers(), money(gross),
+        return new WorkDayResponse(day.getId(), day.getDate(),day.getVehicle()==null?null:day.getVehicle().getId(), day.getKilometers(), money(gross),
                 perKilometer, earningResponses);
     }
 

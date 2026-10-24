@@ -5,6 +5,7 @@ import br.com.amcash.work.entity.WorkPeriod;
 import br.com.amcash.work.repository.WorkCostRepository;
 import br.com.amcash.work.repository.WorkDayRepository;
 import br.com.amcash.work.repository.WorkEarningRepository;
+import br.com.amcash.vehicle.repository.VehicleRepository;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -35,7 +36,7 @@ class WorkServiceTests {
         WorkEarningRepository earningRepository = mock(WorkEarningRepository.class);
         WorkCostRepository costRepository = mock(WorkCostRepository.class);
         WorkService service = new WorkService(dayRepository, earningRepository, costRepository,
-                mock(UserRepository.class));
+                mock(UserRepository.class),mock(VehicleRepository.class));
         UUID userId = UUID.randomUUID();
         LocalDate date = LocalDate.of(2026, 10, 19);
         when(dayRepository.findAllByUserIdAndDateBetweenOrderByDateDesc(userId, date, date)).thenReturn(List.of());
@@ -58,7 +59,7 @@ class WorkServiceTests {
         WorkEarningRepository earningRepository = mock(WorkEarningRepository.class);
         WorkCostRepository costRepository = mock(WorkCostRepository.class);
         WorkService service = new WorkService(dayRepository, earningRepository, costRepository,
-                mock(UserRepository.class));
+                mock(UserRepository.class),mock(VehicleRepository.class));
         UUID userId = UUID.randomUUID();
         LocalDate currentStart = period == WorkPeriod.DAY ? referenceDate
                 : period == WorkPeriod.WEEK ? LocalDate.of(2026, 10, 19) : LocalDate.of(2026, 10, 1);

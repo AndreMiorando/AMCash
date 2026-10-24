@@ -11,6 +11,8 @@ import {
   ApiForecast,
   ApiGoal,
   ApiHome,
+  ApiMileageSource,
+  ApiMileageSuggestions,
   ApiPaymentMethod,
   ApiWorkCostCategory,
   ApiWorkOverview,
@@ -2255,7 +2257,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
       setSummary(home);
       setWorkOverview(work);
       setHomeVehicles(vehicles);
-      setSelectedVehicleId((current) => vehicles.some((vehicle) => vehicle.id === current) ? current : vehicles[0]?.id ?? "");
+      setSelectedVehicleId(vehicles.find((vehicle) => vehicle.inUse)?.id ?? vehicles[0]?.id ?? "");
       if (!work) return;
       const day = work.days.find((item) => item.date === today);
       const uberEarning = day?.earnings.find((item) => item.source.toLowerCase() === "uber");
@@ -2358,6 +2360,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
     try {
       await financeApi.saveWorkDay(today, {
         kilometers: kilometersValue,
+        vehicleId: selectedHomeVehicle?.id ?? null,
         earnings: [
           { source: "Uber", amount: uberValue },
           { source: "99", amount: ninetyNineValue },
@@ -2483,7 +2486,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
               <h3 id="home-odometer-title">QUILOMETRAGEM DO VEÍCULO</h3>
               {homeVehicles.length === 1 && <small>{selectedHomeVehicle?.nickname || `${selectedHomeVehicle?.brand ?? ""} ${selectedHomeVehicle?.model ?? ""}`.trim()}</small>}
             </header>
-            {homeVehicles.length > 1 && <SelectPickerInput label="Veículo" value={selectedVehicleId} options={homeVehicles.map((vehicle) => ({ value: vehicle.id, label: vehicle.nickname || `${vehicle.brand} ${vehicle.model}` }))} onChange={(vehicleId) => { setSelectedVehicleId(vehicleId); setOdometerValue(""); setOdometerError(""); setOdometerMessage(""); }} className="home-odometer-vehicle" />}
+            {homeVehicles.length > 1 && selectedHomeVehicle && <p className="home-odometer-active-vehicle">Veículo em uso: <strong>{selectedHomeVehicle.nickname||`${selectedHomeVehicle.brand} ${selectedHomeVehicle.model}`}</strong></p>}
             <div className="home-odometer-entry">
               {selectedHomeVehicle && <div className="home-odometer-last"><span>Última leitura</span><strong>{new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(selectedHomeVehicle.currentMileage)} km</strong><time dateTime={selectedHomeVehicle.mileageReadingDate}>{formatDate(selectedHomeVehicle.mileageReadingDate)}</time></div>}
               <InputField fieldClassName="home-odometer-new" label="Nova leitura" prefix="km" inputMode="decimal" placeholder="0" value={odometerValue} onChange={(event) => { setOdometerValue(maskDecimalInput(event.target.value)); setOdometerError(""); setOdometerMessage(""); }} />
@@ -2520,18 +2523,33 @@ function NotificationsScreen({ notifications, onBack, onOpen, error }: { notific
           const days = dayDifference(item.dueDate);
           const overdue = item.type === "OVERDUE";
           const mileageReminder = item.type === "MILEAGE_UPDATE";
+          const operationalSuggestion = item.type === "MILEAGE_SUGGESTION";
           const tone = overdue ? "overdue" : days === 0 ? "today" : "upcoming";
           const title = overdue ? "Conta vencida" : days === 0 ? "Sua conta vence hoje" : `Conta vence em ${days} ${days === 1 ? "dia" : "dias"}`;
           return <button type="button" className={`notification-row ${tone}`} key={item.id} onClick={() => onOpen(item)}>
             <i className={`notification-dot ${tone}`} aria-hidden="true" />
-            <span className="notification-icon"><Icon name={overdue ? "warning" : "calendar"} /></span>
-            <span className="notification-copy"><strong>{item.source === "VEHICLE" ? mileageReminder ? "Atualize a quilometragem" : overdue ? "Manutenção vencida" : "Próxima manutenção" : title}</strong><b>{item.expenseName}</b><time dateTime={item.dueDate}>{item.source === "VEHICLE" ? item.message : `Vencimento ${formatDate(item.dueDate)}`}</time></span>
+            <span className="notification-icon">{operationalSuggestion?<Image src="/vehicle-menu-icon.svg" width={20} height={20} alt=""/>:<Icon name={overdue ? "warning" : "calendar"} />}</span>
+            <span className="notification-copy"><strong>{operationalSuggestion?"Revise a quilometragem mensal":item.source === "VEHICLE" ? mileageReminder ? "Atualize a quilometragem" : overdue ? "Manutenção vencida" : "Próxima manutenção" : title}</strong><b>{item.expenseName}</b><time dateTime={item.dueDate}>{item.source !== "FINANCIAL" ? item.message : `Vencimento ${formatDate(item.dueDate)}`}</time></span>
             <span className="notification-value">{item.amount !== null && <strong>{formatCurrency(item.amount)}</strong>}<Icon name="forward" /></span>
           </button>;
         })}</div>
       </section>)}
     </section>
   </main>;
+}
+
+function MileageSuggestionDialog({vehicleName,data,preferredSource,loading,error,onClose,onUpdate,onReview,onDismiss}:{vehicleName:string;data:ApiMileageSuggestions;preferredSource:ApiMileageSource|null;loading:boolean;error:string;onClose:()=>void;onUpdate:(mileage:number,source:ApiMileageSource)=>void;onReview:()=>void;onDismiss:(source:Exclude<ApiMileageSource,"MANUAL">)=>void}){
+  const[selectedSource,setSelectedSource]=useState<ApiMileageSource>(preferredSource??data.options.find(option=>option.available)?.source??"MANUAL");
+  const selected=data.options.find(item=>item.source===selectedSource);
+  return <div className="sheet-backdrop mileage-suggestion-backdrop" role="presentation" onMouseDown={()=>!loading&&onClose()}><section className="mileage-suggestion-dialog" role="dialog" aria-modal="true" aria-labelledby="mileage-suggestion-title" onMouseDown={event=>event.stopPropagation()}>
+    <div className="mileage-suggestion-icon"><Image src="/vehicle-menu-icon.svg" width={28} height={28} alt=""/></div>
+    <span>QUILOMETRAGEM MENSAL</span><h2 id="mileage-suggestion-title">Atualizar {vehicleName}?</h2><p>Configurado atualmente: <strong>{new Intl.NumberFormat("pt-BR",{maximumFractionDigits:0}).format(data.configuredMileage)} km/mês</strong></p>
+    <div className="mileage-suggestion-options">{data.options.map(option=><button type="button" disabled={!option.available} className={selectedSource===option.source?"selected":""} aria-pressed={selectedSource===option.source} key={option.source} onClick={()=>setSelectedSource(option.source)}><span><strong>{option.source==="ODOMETER"?"Uso total do veículo":"Somente trabalho"}</strong><small>{option.available&&option.periodStart&&option.periodEnd?`${new Date(`${option.periodStart}T12:00:00`).toLocaleDateString("pt-BR")} a ${new Date(`${option.periodEnd}T12:00:00`).toLocaleDateString("pt-BR")}`:option.unavailableReason}</small></span><b>{option.monthlyMileage==null?"Indisponível":`${new Intl.NumberFormat("pt-BR",{maximumFractionDigits:0}).format(option.monthlyMileage)} km`}</b></button>)}</div>
+    {error&&<p className="work-error" role="alert">{error}</p>}
+    <Button type="button" fullWidth loading={loading} disabled={!selected?.available||selected.monthlyMileage==null} onClick={()=>selected?.monthlyMileage!=null&&onUpdate(selected.monthlyMileage,selected.source)}>Atualizar quilometragem</Button>
+    <button type="button" className="mileage-review" disabled={loading} onClick={onReview}>Revisar configuração</button>
+    <button type="button" className="mileage-dismiss" disabled={loading||preferredSource==null||preferredSource==="MANUAL"} onClick={()=>preferredSource&&preferredSource!=="MANUAL"&&onDismiss(preferredSource)}>Desconsiderar sugestão</button>
+  </section></div>;
 }
 
 export default function Home() {
@@ -2546,6 +2564,10 @@ export default function Home() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<ApiFinancialNotification[]>([]);
   const [notificationsError, setNotificationsError] = useState("");
+  const [mileageSuggestion, setMileageSuggestion] = useState<{ notification: ApiFinancialNotification; data: ApiMileageSuggestions } | null>(null);
+  const [mileageSuggestionLoading, setMileageSuggestionLoading] = useState(false);
+  const [mileageSuggestionError, setMileageSuggestionError] = useState("");
+  const [operationalEditVehicleId, setOperationalEditVehicleId] = useState<string | null>(null);
   const [items, setItems] = useState<Transaction[]>([]);
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -2777,6 +2799,19 @@ export default function Home() {
     }
   };
   const openNotificationEntry = async (notification: ApiFinancialNotification) => {
+    if (notification.source === "OPERATIONAL_COST" && notification.vehicleId) {
+      setMileageSuggestionLoading(true);
+      setMileageSuggestionError("");
+      try {
+        const data = await financeApi.operationalMileageSuggestions(notification.vehicleId);
+        setMileageSuggestion({ notification, data });
+      } catch (requestError) {
+        setNotificationsError(messageFromError(requestError));
+      } finally {
+        setMileageSuggestionLoading(false);
+      }
+      return;
+    }
     if (notification.source === "VEHICLE") {
       setNotificationsOpen(false);
       setPendingTab("vehicles");
@@ -2791,7 +2826,24 @@ export default function Home() {
       setNotificationsError(messageFromError(requestError));
     }
   };
-  if (notificationsOpen) return <NotificationsScreen notifications={notifications} error={notificationsError} onBack={() => setNotificationsOpen(false)} onOpen={(item) => void openNotificationEntry(item)} />;
+  const updateSuggestedMileage = async (mileage: number, source: ApiMileageSource) => {
+    if (!mileageSuggestion?.notification.vehicleId) return;
+    setMileageSuggestionLoading(true);setMileageSuggestionError("");
+    try { await financeApi.updateOperationalMileage(mileageSuggestion.notification.vehicleId,mileage,source);setMileageSuggestion(null);await refreshNotifications(); }
+    catch(requestError){setMileageSuggestionError(messageFromError(requestError));}
+    finally{setMileageSuggestionLoading(false);}
+  };
+  const dismissSuggestedMileage = async (source:Exclude<ApiMileageSource,"MANUAL">) => {
+    if (!mileageSuggestion?.notification.vehicleId) return;
+    setMileageSuggestionLoading(true);setMileageSuggestionError("");
+    try { await financeApi.dismissOperationalMileageSuggestion(mileageSuggestion.notification.vehicleId,source);setMileageSuggestion(null);await refreshNotifications(); }
+    catch(requestError){setMileageSuggestionError(messageFromError(requestError));}
+    finally{setMileageSuggestionLoading(false);}
+  };
+  const reviewSuggestedMileage = () => {
+    const vehicleId=mileageSuggestion?.notification.vehicleId;if(!vehicleId)return;setOperationalEditVehicleId(vehicleId);setMileageSuggestion(null);setNotificationsOpen(false);navigateTo("operational-cost");
+  };
+  if (notificationsOpen) return <><NotificationsScreen notifications={notifications} error={notificationsError} onBack={() => setNotificationsOpen(false)} onOpen={(item) => void openNotificationEntry(item)} />{mileageSuggestion&&<MileageSuggestionDialog vehicleName={mileageSuggestion.notification.expenseName} data={mileageSuggestion.data} preferredSource={mileageSuggestion.notification.suggestionSource} loading={mileageSuggestionLoading} error={mileageSuggestionError} onClose={()=>setMileageSuggestion(null)} onUpdate={(mileage,source)=>void updateSuggestedMileage(mileage,source)} onReview={reviewSuggestedMileage} onDismiss={(source)=>void dismissSuggestedMileage(source)}/>}</>;
   if (selected) {
     return (
       <DetailScreen
@@ -2809,7 +2861,7 @@ export default function Home() {
     if (tab === "goals") return <GoalsScreen onReady={onReady} initialMode={goalInitialMode} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onWork={openWork} />;
     if (tab === "work") return <WorkScreen onReady={onReady} navigation={(loading) => <BottomNavigation active="work" loading={loading} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={() => {}} />} />;
     if (tab === "vehicles") return <VehicleScreen onReady={onReady} navigation={(loading) => <BottomNavigation active="vehicles" loading={loading} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} />} />;
-    if (tab === "operational-cost") return <OperationalCostScreen onReady={onReady} onVehicles={() => navigateTo("vehicles")} navigation={(loading) => <BottomNavigation active="operational-cost" loading={loading} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} />} />;
+    if (tab === "operational-cost") return <OperationalCostScreen onReady={onReady} initialEditVehicleId={operationalEditVehicleId} onInitialEditHandled={()=>setOperationalEditVehicleId(null)} onVehicles={() => navigateTo("vehicles")} navigation={(loading) => <BottomNavigation active="operational-cost" loading={loading} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} />} />;
     if (tab === "finance") return <Dashboard onReady={onReady} items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onHome={() => navigateTo("home")} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} showWorkFeatures={showWorkFeatures} onMonthChange={changeMonth} initialPeriod={period} initialCreateOpen={financeCreateRequested} onInitialCreateHandled={() => setFinanceCreateRequested(false)} error={error} isLoading={isLoading} />;
     return <HomeDashboard onReady={onReady} onFinance={() => openFinance()} onCreateExpense={() => { setFinanceCreateRequested(true); openFinance(); }} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} onVehicles={() => navigateTo("vehicles")} onCreateCustomGoal={() => openGoals("custom")} onLogout={logout} usageProfile={usageProfile} onChangeProfile={() => setProfilePickerOpen(true)} notifications={notifications} onNotifications={() => void openNotifications()} onMileageUpdated={refreshNotifications} />;
   };

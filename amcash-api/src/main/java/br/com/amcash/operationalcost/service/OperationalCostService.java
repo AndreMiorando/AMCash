@@ -1,6 +1,7 @@
 package br.com.amcash.operationalcost.service;
 
 import br.com.amcash.operationalcost.dto.request.OperationalCostRequest;
+import br.com.amcash.operationalcost.dto.request.OperationalMileageUpdateRequest;
 import br.com.amcash.operationalcost.dto.response.OperationalCostResponse;
 import br.com.amcash.operationalcost.entity.*;
 import br.com.amcash.operationalcost.repository.OperationalCostConfigurationRepository;
@@ -30,14 +31,15 @@ public class OperationalCostService {
 
     @Transactional(readOnly=true) public List<OperationalCostResponse> list(UUID userId){requireMobility(userId);return configurations.findAllByUserIdOrderByUpdatedAtDesc(userId).stream().map(this::response).toList();}
     @Transactional(readOnly=true) public OperationalCostResponse get(UUID userId,UUID vehicleId){requireMobility(userId);return response(findConfiguration(userId,vehicleId));}
-    @Transactional public OperationalCostResponse create(UUID userId,UUID vehicleId,OperationalCostRequest request){User user=requireMobility(userId);Vehicle vehicle=findVehicle(userId,vehicleId);if(configurations.existsByVehicleId(vehicleId))throw new ConflictException("Este veículo já possui uma configuração de custo operacional");OperationalCostConfiguration configuration=new OperationalCostConfiguration(user,vehicle);apply(configuration,vehicle,request);return response(configurations.save(configuration));}
+    @Transactional public OperationalCostResponse create(UUID userId,UUID vehicleId,OperationalCostRequest request){User user=requireMobility(userId);Vehicle vehicle=findVehicle(userId,vehicleId);if(configurations.existsByVehicleId(vehicleId))throw new ConflictException("Este veículo já possui uma configuração de custo operacional");if(request.mileageSource()!=MileageSource.MANUAL)throw new BadRequestException("Informe manualmente a quilometragem no primeiro cálculo");OperationalCostConfiguration configuration=new OperationalCostConfiguration(user,vehicle);apply(configuration,vehicle,request);return response(configurations.save(configuration));}
     @Transactional public OperationalCostResponse update(UUID userId,UUID vehicleId,OperationalCostRequest request){requireMobility(userId);Vehicle vehicle=findVehicle(userId,vehicleId);OperationalCostConfiguration configuration=findConfiguration(userId,vehicleId);apply(configuration,vehicle,request);return response(configuration);}
+    @Transactional public OperationalCostResponse updateMileage(UUID userId,UUID vehicleId,OperationalMileageUpdateRequest request){requireMobility(userId);OperationalCostConfiguration configuration=findConfiguration(userId,vehicleId);configuration.updateMileage(request.monthlyMileage(),request.mileageSource());return response(configuration);}
     @Transactional public void delete(UUID userId,UUID vehicleId){requireMobility(userId);configurations.delete(findConfiguration(userId,vehicleId));}
 
     private void apply(OperationalCostConfiguration configuration,Vehicle vehicle,OperationalCostRequest request){
         validate(vehicle,request);
         List<OperationalCustomFixedCost> custom=request.customFixedCosts().stream().map(item->new OperationalCustomFixedCost(item.title().trim(),item.amount(),item.period())).toList();
-        configuration.update(request.monthlyMileage(),request.fuelType(),request.fuelPrice(),request.includeFinance(),request.annualIpva(),request.annualFees(),request.insuranceAmount(),request.insurancePeriod(),request.maintenanceMethod(),request.maintenanceMethod()==MaintenanceCalculationMethod.MANUAL?request.annualMaintenanceEstimate():null,request.includeDepreciation(),request.includeDepreciation()?request.currentVehicleValue():null,request.includeDepreciation()?request.annualDepreciationRate():null,custom,request.maintenanceMethod()==MaintenanceCalculationMethod.HISTORY?request.selectedMaintenanceIds():Set.of());
+        configuration.update(request.monthlyMileage(),request.mileageSource(),request.fuelType(),request.fuelPrice(),request.includeFinance(),request.annualIpva(),request.annualFees(),request.insuranceAmount(),request.insurancePeriod(),request.maintenanceMethod(),request.maintenanceMethod()==MaintenanceCalculationMethod.MANUAL?request.annualMaintenanceEstimate():null,request.includeDepreciation(),request.includeDepreciation()?request.currentVehicleValue():null,request.includeDepreciation()?request.annualDepreciationRate():null,custom,request.maintenanceMethod()==MaintenanceCalculationMethod.HISTORY?request.selectedMaintenanceIds():Set.of());
     }
 
     private void validate(Vehicle vehicle,OperationalCostRequest request){
@@ -73,7 +75,7 @@ public class OperationalCostService {
         var calculation=new OperationalCostResponse.CalculationResponse(money(fuelMonthly),money(financeMonthly),money(taxesMonthly),money(insuranceMonthly),money(otherMonthly),money(maintenanceMonthly),money(total),perKm(total,mileage),money(depreciationAnnual),money(depreciationMonthly),perKm(depreciationMonthly,mileage));
         List<OperationalCostResponse.CustomFixedCostResponse> custom=configuration.getCustomFixedCosts().stream().map(item->new OperationalCostResponse.CustomFixedCostResponse(item.getTitle(),item.getAmount(),item.getPeriod())).toList();
         String name=vehicle.getNickname()!=null?vehicle.getNickname():vehicle.getBrand()+" "+vehicle.getModel();
-        return new OperationalCostResponse(configuration.getId(),vehicle.getId(),name,configuration.getFuelType(),configuration.getMonthlyMileage(),configuration.getFuelPrice(),configuration.isIncludeFinance(),configuration.getAnnualIpva(),configuration.getAnnualFees(),configuration.getInsuranceAmount(),configuration.getInsurancePeriod(),configuration.getMaintenanceMethod(),configuration.getAnnualMaintenanceEstimate(),configuration.isIncludeDepreciation(),configuration.getCurrentVehicleValue(),configuration.getAnnualDepreciationRate(),custom,new LinkedHashSet<>(configuration.getSelectedMaintenanceIds()),calculation);
+        return new OperationalCostResponse(configuration.getId(),vehicle.getId(),name,configuration.getFuelType(),configuration.getMonthlyMileage(),configuration.getMileageSource(),configuration.getFuelPrice(),configuration.isIncludeFinance(),configuration.getAnnualIpva(),configuration.getAnnualFees(),configuration.getInsuranceAmount(),configuration.getInsurancePeriod(),configuration.getMaintenanceMethod(),configuration.getAnnualMaintenanceEstimate(),configuration.isIncludeDepreciation(),configuration.getCurrentVehicleValue(),configuration.getAnnualDepreciationRate(),custom,new LinkedHashSet<>(configuration.getSelectedMaintenanceIds()),calculation);
     }
 
     private BigDecimal maintenanceMonthly(OperationalCostConfiguration configuration){

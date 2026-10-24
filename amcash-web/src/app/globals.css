@@ -1690,6 +1690,44 @@ a {
 .notification-copy > strong { overflow: hidden; font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
 .notification-copy > time { color: var(--text-muted); font-size: 0.56rem; }
 .notification-row.overdue .notification-copy > time { color: #ef5368; }
+.notification-icon img { width: 1.15rem; height: 1.15rem; object-fit: contain; }
+.mileage-suggestion-backdrop { z-index: 120; align-items: center; padding: 1rem; }
+.mileage-suggestion-dialog { width: min(100%, 27rem); padding: 1.35rem; border-radius: 1.35rem; background: #fff; color: var(--text-primary); box-shadow: 0 1.2rem 3rem rgb(14 31 52 / 24%); }
+.mileage-suggestion-icon { display: grid; width: 3rem; height: 3rem; margin: 0 auto 0.7rem; place-items: center; border: 1px solid #d6e5fa; border-radius: 50%; background: #edf4ff; }
+.mileage-suggestion-dialog > span { display: block; color: var(--text-muted); font-size: 0.54rem; font-weight: 800; letter-spacing: 0.14em; text-align: center; }
+.mileage-suggestion-dialog h2 { margin: 0.3rem 0 0.45rem; font-size: 1.15rem; text-align: center; }
+.mileage-suggestion-dialog > p { margin: 0; color: #71859b; font-size: 0.68rem; text-align: center; }
+.mileage-suggestion-dialog > p strong { color: var(--text-primary); }
+.mileage-suggestion-options { display: grid; margin: 1rem 0; gap: 0.55rem; }
+.mileage-suggestion-options > button { display: flex; width: 100%; min-height: 4rem; padding: 0.7rem 0.8rem; align-items: center; justify-content: space-between; gap: 0.8rem; border: 1px solid var(--border-control); border-radius: 0.8rem; background: #fbfcfe; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.mileage-suggestion-options > button.selected { border-color: #2580f5; background: #f0f6ff; box-shadow: inset 0 0 0 1px rgb(8 108 243 / 12%); }
+.mileage-suggestion-options > button:disabled { cursor: default; opacity: 0.72; }
+.mileage-suggestion-options span { display: flex; min-width: 0; flex-direction: column; gap: 0.15rem; }
+.mileage-suggestion-options strong { font-size: 0.7rem; }
+.mileage-suggestion-options small { color: var(--text-muted); font-size: 0.56rem; }
+.mileage-suggestion-options b { color: var(--brand-blue); font-size: 0.78rem; white-space: nowrap; }
+.mileage-suggestion-dialog .mileage-review, .mileage-suggestion-dialog .mileage-dismiss { display: block; width: 100%; min-height: 2.5rem; border: 0; background: transparent; font: inherit; font-size: 0.65rem; font-weight: 700; cursor: pointer; }
+.mileage-suggestion-dialog .mileage-review { color: var(--brand-blue); }
+.mileage-suggestion-dialog .mileage-dismiss { color: #ef4f69; }
+
+.vehicle-in-use { display: inline-flex; width: fit-content; margin-top: 0.45rem; padding: 0.28rem 0.55rem; border: 1px solid #bcd6ff; border-radius: 999px; background: #edf4ff; color: var(--brand-blue); font-size: 0.58rem; font-weight: 750; }
+.vehicle-card.active { border-color: #bcd6ff; background: #f7faff; }
+.vehicle-card.active .vehicle-card-copy em { color: var(--brand-blue); }
+.vehicle-use-action { width: fit-content; margin-top: 0.45rem; padding: 0.38rem 0.65rem; border: 1px solid #bcd6ff; border-radius: 0.65rem; background: #edf4ff; color: var(--brand-blue); font: inherit; font-size: 0.6rem; font-weight: 750; cursor: pointer; }
+.home-odometer-active-vehicle, .work-record-active-vehicle { margin: 0; color: #71859b; font-size: 0.62rem; }
+.home-odometer-active-vehicle strong, .work-record-active-vehicle { color: var(--text-primary); }
+.work-record-active-vehicle { display: block; margin-top: 0.35rem; }
+.operational-estimates-trigger { margin-top: 0.75rem; border: 0; background: transparent; color: var(--brand-blue); font: inherit; font-size: 0.64rem; font-weight: 750; cursor: pointer; }
+.operational-estimates { margin-top: 0.7rem; border-top: 1px solid var(--border-subtle); }
+.operational-estimates > header, .operational-estimates > div { display: flex; min-height: 3.7rem; align-items: center; gap: 0.7rem; border-bottom: 1px solid var(--border-subtle); }
+.operational-estimates > header { justify-content: space-between; color: #71859b; font-size: 0.65rem; }
+.operational-estimates > header strong { color: var(--text-primary); }
+.operational-estimates > div > span { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 0.15rem; }
+.operational-estimates > div strong { font-size: 0.68rem; }
+.operational-estimates > div small { color: var(--text-muted); font-size: 0.55rem; line-height: 1.35; }
+.operational-estimates > div b { color: var(--text-primary); font-size: 0.7rem; white-space: nowrap; }
+.operational-estimates > div em { color: var(--text-muted); font-size: 0.62rem; font-style: normal; }
+.operational-estimates > div button { padding: 0.38rem 0.6rem; border: 0; border-radius: 0.6rem; background: #edf4ff; color: var(--brand-blue); font: inherit; font-size: 0.58rem; font-weight: 750; cursor: pointer; }
 .notification-copy > b { overflow: hidden; color: #71859b; font-size: 0.6rem; font-weight: 520; text-overflow: ellipsis; white-space: nowrap; }
 .notification-value { display: flex; align-self: start; align-items: center; gap: 0.45rem; }
 .notification-value strong { font-size: 0.66rem; white-space: nowrap; }

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { ApiWorkCost, ApiWorkCostCategory, ApiWorkDay, ApiWorkOverview, ApiWorkPeriod, financeApi } from "@/lib/api";
+import { ApiVehicle, ApiWorkCost, ApiWorkCostCategory, ApiWorkDay, ApiWorkOverview, ApiWorkPeriod, financeApi } from "@/lib/api";
 import AppHeader from "@/app/components/AppHeader";
 import { CostCategoryGrid, CostCategoryIcon, workCostCategoryLabels } from "@/app/components/CostCategoryGrid";
 import DatePickerInput, { dateToInputValue } from "@/app/components/DatePickerInput";
@@ -16,6 +16,7 @@ type EarningDraft = { source: string; amount: string };
 type CostDraft = { key: string; id?: string; category: ApiWorkCostCategory; description: string; amount: string; homeManaged?: boolean };
 type WorkDraft = {
   date: string;
+  vehicleId: string | null;
   kilometers: string;
   uber: string;
   ninetyNine: string;
@@ -84,6 +85,7 @@ export default function WorkScreen({ navigation, onReady }: {
   const [period, setPeriod] = useState<ApiWorkPeriod>("WEEK");
   const [referenceDate, setReferenceDate] = useState(() => dateToInputValue(new Date()));
   const [overview, setOverview] = useState<ApiWorkOverview | null>(null);
+  const [vehicles,setVehicles]=useState<ApiVehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [draft, setDraft] = useState<WorkDraft | null>(null);
@@ -99,8 +101,8 @@ export default function WorkScreen({ navigation, onReady }: {
     const currentRequest = ++requestId.current;
     setLoading(true); setError("");
     try {
-      const response = await financeApi.workOverview(referenceDate, period);
-      if (currentRequest === requestId.current) setOverview(response);
+      const [response,vehicleList] = await Promise.all([financeApi.workOverview(referenceDate, period),financeApi.vehicles().catch(()=>[] as ApiVehicle[])]);
+      if (currentRequest === requestId.current){setOverview(response);setVehicles(vehicleList);}
     } catch (requestError) {
       if (currentRequest === requestId.current) setError(messageFrom(requestError));
     } finally { if (currentRequest === requestId.current) setLoading(false); }
@@ -119,7 +121,7 @@ export default function WorkScreen({ navigation, onReady }: {
   function openRecord(date: string, day: ApiWorkDay | undefined, costs: ApiWorkCost[]) {
     const uber = day?.earnings.find((earning) => earning.source.toLowerCase() === "uber");
     const ninetyNine = day?.earnings.find((earning) => earning.source === "99");
-    setDraft({ date, kilometers: day?.kilometers ? String(day.kilometers).replace(".", ",") : "",
+    setDraft({ date,vehicleId:day?.vehicleId??vehicles.find(vehicle=>vehicle.inUse)?.id??null, kilometers: day?.kilometers ? String(day.kilometers).replace(".", ",") : "",
       uber: moneyForInput(Number(uber?.amount ?? 0)), ninetyNine: moneyForInput(Number(ninetyNine?.amount ?? 0)),
       additional: day?.earnings.filter((earning) => earning !== uber && earning !== ninetyNine)
         .map((earning) => ({ source: earning.source, amount: moneyForInput(Number(earning.amount)) })) ?? [],
@@ -132,7 +134,7 @@ export default function WorkScreen({ navigation, onReady }: {
   }
 
   function emptyDraft(date: string): WorkDraft {
-    return { date, kilometers: "", uber: "", ninetyNine: "", additional: [], costs: [], originalCostIds: [], hadWorkDay: false };
+    return { date,vehicleId:vehicles.find(vehicle=>vehicle.inUse)?.id??null, kilometers: "", uber: "", ninetyNine: "", additional: [], costs: [], originalCostIds: [], hadWorkDay: false };
   }
 
   async function selectWorkDate(date: string) {
@@ -184,6 +186,7 @@ export default function WorkScreen({ navigation, onReady }: {
       const operations: Promise<unknown>[] = [];
       if (draftMode === "create" || draft.hadWorkDay || hasWorkValues) operations.push(financeApi.saveWorkDay(draft.date, {
         kilometers: numberFromInput(draft.kilometers),
+        vehicleId:draft.vehicleId,
         earnings: [
           { source: "Uber", amount: numberFromInput(draft.uber) },
           { source: "99", amount: numberFromInput(draft.ninetyNine) },
@@ -306,7 +309,7 @@ export default function WorkScreen({ navigation, onReady }: {
       <header className="work-record-page-header"><button type="button" onClick={() => { if (!saving) setDraft(null); }} aria-label="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg></button><h2 id="work-record-title">{draftMode === "create" ? "Registrar trabalho" : "Editar trabalho"}</h2><span aria-hidden="true" /></header>
       <div className="work-form-scroll">
         {error && <p className="work-error" role="alert">{error}</p>}
-        <div className="work-record-date-field"><DatePickerInput label="Data do trabalho" value={draft.date} max={dateToInputValue(new Date())} onChange={selectWorkDate} /></div>
+        <div className="work-record-date-field"><DatePickerInput label="Data do trabalho" value={draft.date} max={dateToInputValue(new Date())} onChange={selectWorkDate} />{draft.vehicleId&&<small className="work-record-active-vehicle">Veículo em uso: {vehicles.find(vehicle=>vehicle.id===draft.vehicleId)?.nickname||vehicles.find(vehicle=>vehicle.id===draft.vehicleId)?.model}</small>}</div>
         <label className="work-record-kilometers"><span>Quilômetros rodados</span><div><span className="work-record-road-icon"><Image src="/road-icon.png" alt="" width={1254} height={1254} /></span><span className="work-record-kilometers-input"><b>km</b><input inputMode="decimal" aria-label="Quilômetros rodados" placeholder="0" value={draft.kilometers} onChange={(event) => setDraft({ ...draft, kilometers: numberInput(event.target.value) })} /></span></div></label>
         <div className="work-record-section-title"><h3>Faturamento</h3></div><div className="work-form-grid">
           <BrandedMoneyField label="Uber" logo="/uber-logo.jpeg" value={draft.uber} onChange={(value) => setDraft({ ...draft, uber: value })} /><BrandedMoneyField label="99" logo="/99-logo.png" value={draft.ninetyNine} onChange={(value) => setDraft({ ...draft, ninetyNine: value })} /></div>

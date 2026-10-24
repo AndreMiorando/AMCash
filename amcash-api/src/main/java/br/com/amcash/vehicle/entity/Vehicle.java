@@ -27,6 +27,7 @@ public class Vehicle {
     @Column(name = "diesel_consumption", precision = 7, scale = 2) private BigDecimal dieselConsumption;
     @Column(name = "electric_consumption", precision = 7, scale = 2) private BigDecimal electricConsumption;
     @Column(name = "acquisition_date") private LocalDate acquisitionDate;
+    @Column(name = "in_use", nullable = false) private boolean inUse;
     @Column(name = "created_at", nullable = false) private OffsetDateTime createdAt;
     @Column(name = "updated_at", nullable = false) private OffsetDateTime updatedAt;
 
@@ -43,6 +44,8 @@ public class Vehicle {
         this.dieselConsumption=dieselConsumption; this.electricConsumption=electricConsumption; this.acquisitionDate=acquisitionDate; updatedAt=now();
     }
     public void updateOdometer(BigDecimal mileage, LocalDate readingDate) { currentMileage=mileage; mileageReadingDate=readingDate; updatedAt=now(); }
+    public void selectForUse(){inUse=true;updatedAt=now();}
+    public void deselectForUse(){inUse=false;updatedAt=now();}
     private OffsetDateTime now() { return OffsetDateTime.now(ZoneOffset.UTC); }
     public UUID getId(){return id;} public User getUser(){return user;} public VehicleType getType(){return type;}
     public String getBrand(){return brand;} public String getModel(){return model;} public int getManufactureYear(){return manufactureYear;}
@@ -50,5 +53,5 @@ public class Vehicle {
     public String getLicensePlate(){return licensePlate;} public FuelType getFuelType(){return fuelType;}
     public BigDecimal getCurrentMileage(){return currentMileage;} public LocalDate getMileageReadingDate(){return mileageReadingDate;}
     public BigDecimal getGasolineConsumption(){return gasolineConsumption;} public BigDecimal getEthanolConsumption(){return ethanolConsumption;}
-    public BigDecimal getDieselConsumption(){return dieselConsumption;} public BigDecimal getElectricConsumption(){return electricConsumption;} public LocalDate getAcquisitionDate(){return acquisitionDate;}
+    public BigDecimal getDieselConsumption(){return dieselConsumption;} public BigDecimal getElectricConsumption(){return electricConsumption;} public LocalDate getAcquisitionDate(){return acquisitionDate;} public boolean isInUse(){return inUse;}
 }

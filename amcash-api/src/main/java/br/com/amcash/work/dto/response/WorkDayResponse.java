@@ -8,6 +8,7 @@ import java.util.UUID;
 public record WorkDayResponse(
         UUID id,
         LocalDate date,
+        UUID vehicleId,
         BigDecimal kilometers,
         BigDecimal grossEarnings,
         BigDecimal earningsPerKilometer,

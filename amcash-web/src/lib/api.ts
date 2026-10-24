@@ -220,16 +220,17 @@ export type ApiHome = {
 
 export type ApiFinancialNotification = {
   id: string;
-  type: "UPCOMING" | "OVERDUE" | "MILEAGE_UPDATE";
+  type: "UPCOMING" | "OVERDUE" | "MILEAGE_UPDATE" | "MILEAGE_SUGGESTION";
   entryId: string | null;
   expenseName: string;
   amount: number | null;
   dueDate: string;
   createdAt: string;
   readAt: string | null;
-  source: "FINANCIAL" | "VEHICLE";
+  source: "FINANCIAL" | "VEHICLE" | "OPERATIONAL_COST";
   vehicleId: string | null;
   message: string | null;
+  suggestionSource: ApiMileageSource | null;
 };
 
 export type ApiVehicleType = "CAR" | "MOTORCYCLE";
@@ -253,7 +254,7 @@ export type MaintenancePayload = {
 
 export type ApiVehicleMaintenance = MaintenancePayload & { id: string };
 export type ApiVehicle = Omit<VehiclePayload, "financialStatus" | "monthlyAmount" | "totalInstallments" | "paidInstallments" | "nextDueDate"> & {
-  id: string; hasPhoto: boolean;
+  id: string; inUse: boolean; hasPhoto: boolean;
   finance: { status: ApiFinancialStatus; monthlyAmount: number | null; totalInstallments: number | null;
     paidInstallments: number | null; nextDueDate: string | null; remainingInstallments: number | null;
     projectedRemainingInstallments: number | null; projectedEndDate: string | null };
@@ -263,9 +264,10 @@ export type ApiVehicle = Omit<VehiclePayload, "financialStatus" | "monthlyAmount
 
 export type ApiCostPeriod = "MONTHLY" | "ANNUAL";
 export type ApiMaintenanceCalculationMethod = "MANUAL" | "HISTORY";
+export type ApiMileageSource = "MANUAL" | "ODOMETER" | "WORK";
 export type OperationalCustomFixedCostPayload = { title: string; amount: number; period: ApiCostPeriod };
 export type OperationalCostPayload = {
-  monthlyMileage: number; fuelType: "GASOLINE" | "ETHANOL" | "DIESEL" | "ELECTRIC"; fuelPrice: number;
+  monthlyMileage: number; mileageSource: ApiMileageSource; fuelType: "GASOLINE" | "ETHANOL" | "DIESEL" | "ELECTRIC"; fuelPrice: number;
   includeFinance: boolean; annualIpva: number; annualFees: number; insuranceAmount: number | null;
   insurancePeriod: ApiCostPeriod | null; maintenanceMethod: ApiMaintenanceCalculationMethod;
   annualMaintenanceEstimate: number | null; includeDepreciation: boolean; currentVehicleValue: number | null;
@@ -276,6 +278,11 @@ export type ApiOperationalCost = OperationalCostPayload & {
   calculation: { fuelMonthly: number; financeMonthly: number; taxesMonthly: number; insuranceMonthly: number;
     otherFixedMonthly: number; maintenanceMonthly: number; totalMonthly: number; cashCostPerKm: number;
     depreciationAnnual: number; depreciationMonthly: number; depreciationPerKm: number };
+};
+export type ApiMileageSuggestions = {
+  configuredMileage: number;
+  configuredSource: ApiMileageSource;
+  options: { source: Exclude<ApiMileageSource, "MANUAL">; monthlyMileage: number | null; periodStart: string | null; periodEnd: string | null; sampleDays: number; unavailableReason: string | null; available: boolean }[];
 };
 
 export type ApiWorkPeriod = "DAY" | "WEEK" | "MONTH";
@@ -289,6 +296,7 @@ export type ApiWorkEarning = {
 export type ApiWorkDay = {
   id: string;
   date: string;
+  vehicleId: string | null;
   kilometers: number;
   grossEarnings: number;
   earningsPerKilometer: number;
@@ -333,6 +341,7 @@ export type ApiWorkOverview = {
 
 export type WorkDayPayload = {
   kilometers: number;
+  vehicleId: string | null;
   earnings: { source: string; amount: number }[];
 };
 
@@ -426,6 +435,7 @@ export const financeApi = {
   vehicle(id: string) { return apiRequest<ApiVehicle>(`/api/v1/vehicles/${id}`); },
   createVehicle(payload: VehiclePayload) { return apiRequest<ApiVehicle>("/api/v1/vehicles", { method: "POST", body: JSON.stringify(payload) }); },
   updateVehicle(id: string, payload: VehiclePayload) { return apiRequest<ApiVehicle>(`/api/v1/vehicles/${id}`, { method: "PUT", body: JSON.stringify(payload) }); },
+  selectVehicle(id: string) { return apiRequest<ApiVehicle>(`/api/v1/vehicles/${id}/select`, { method: "PATCH" }); },
   deleteVehicle(id: string) { return apiRequest<void>(`/api/v1/vehicles/${id}`, { method: "DELETE" }); },
   updateOdometer(id: string, payload: { mileage: number; readingDate: string; correction: boolean }) { return apiRequest<{ id: string; mileage: number; readingDate: string; correction: boolean }>(`/api/v1/vehicles/${id}/odometer`, { method: "PUT", body: JSON.stringify(payload) }); },
   deleteOdometerReading(vehicleId: string, readingId: string) { return apiRequest<void>(`/api/v1/vehicles/${vehicleId}/odometer/${readingId}`, { method: "DELETE" }); },
@@ -446,6 +456,9 @@ export const financeApi = {
   createOperationalCost(vehicleId: string, payload: OperationalCostPayload) { return apiRequest<ApiOperationalCost>(`/api/v1/operational-costs/vehicles/${vehicleId}`, { method: "POST", body: JSON.stringify(payload) }); },
   updateOperationalCost(vehicleId: string, payload: OperationalCostPayload) { return apiRequest<ApiOperationalCost>(`/api/v1/operational-costs/vehicles/${vehicleId}`, { method: "PUT", body: JSON.stringify(payload) }); },
   deleteOperationalCost(vehicleId: string) { return apiRequest<void>(`/api/v1/operational-costs/vehicles/${vehicleId}`, { method: "DELETE" }); },
+  operationalMileageSuggestions(vehicleId: string) { return apiRequest<ApiMileageSuggestions>(`/api/v1/operational-costs/vehicles/${vehicleId}/mileage-suggestions`); },
+  updateOperationalMileage(vehicleId: string, monthlyMileage: number, mileageSource: ApiMileageSource) { return apiRequest<ApiOperationalCost>(`/api/v1/operational-costs/vehicles/${vehicleId}/monthly-mileage`, { method: "PATCH", body: JSON.stringify({ monthlyMileage, mileageSource }) }); },
+  dismissOperationalMileageSuggestion(vehicleId: string,source: Exclude<ApiMileageSource,"MANUAL">) { return apiRequest<void>(`/api/v1/operational-costs/vehicles/${vehicleId}/mileage-suggestions/${source}/dismiss`, { method: "PATCH" }); },
 
   listMonth(year: number, month: number) {
     return apiRequest<MonthlyEntries>(`/api/v1/transactions?year=${year}&month=${month}`);

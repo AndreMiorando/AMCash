@@ -10,6 +10,7 @@ public class VehicleController {
     @GetMapping("/{id}") public VehicleResponse get(@CurrentUser AuthenticatedUser user,@PathVariable UUID id){return service.get(user.userId(),id);}
     @PostMapping @ResponseStatus(HttpStatus.CREATED) public VehicleResponse create(@CurrentUser AuthenticatedUser user,@Valid @RequestBody VehicleRequest request){return service.create(user.userId(),request);}
     @PutMapping("/{id}") public VehicleResponse update(@CurrentUser AuthenticatedUser user,@PathVariable UUID id,@Valid @RequestBody VehicleRequest request){return service.update(user.userId(),id,request);}
+    @PatchMapping("/{id}/select") public VehicleResponse select(@CurrentUser AuthenticatedUser user,@PathVariable UUID id){return service.select(user.userId(),id);}
     @DeleteMapping("/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void delete(@CurrentUser AuthenticatedUser user,@PathVariable UUID id){service.delete(user.userId(),id);}
     @PostMapping("/{id}/odometer") @ResponseStatus(HttpStatus.CREATED) public OdometerReadingResponse odometer(@CurrentUser AuthenticatedUser user,@PathVariable UUID id,@Valid @RequestBody OdometerRequest request){return service.updateOdometer(user.userId(),id,request);}
     @PutMapping("/{id}/odometer") public OdometerReadingResponse updateOdometer(@CurrentUser AuthenticatedUser user,@PathVariable UUID id,@Valid @RequestBody OdometerRequest request){return service.updateOdometer(user.userId(),id,request);}

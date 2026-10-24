@@ -1,6 +1,7 @@
 package br.com.amcash.work.entity;
 
 import br.com.amcash.user.entity.User;
+import br.com.amcash.vehicle.entity.Vehicle;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -31,6 +32,10 @@ public class WorkDay {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "vehicle_id")
+    private Vehicle vehicle;
+
     @Column(name = "work_date", nullable = false)
     private LocalDate date;
 
@@ -52,9 +57,10 @@ public class WorkDay {
     protected WorkDay() {
     }
 
-    public WorkDay(User user, LocalDate date, BigDecimal kilometers) {
+    public WorkDay(User user, Vehicle vehicle, LocalDate date, BigDecimal kilometers) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         this.user = user;
+        this.vehicle = vehicle;
         this.date = date;
         this.kilometers = kilometers;
         this.fuelCost = BigDecimal.ZERO;
@@ -63,13 +69,15 @@ public class WorkDay {
         this.updatedAt = now;
     }
 
-    public void update(BigDecimal kilometers) {
+    public void update(Vehicle vehicle, BigDecimal kilometers) {
+        this.vehicle = vehicle;
         this.kilometers = kilometers;
         this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 
     public UUID getId() { return id; }
     public User getUser() { return user; }
+    public Vehicle getVehicle() { return vehicle; }
     public LocalDate getDate() { return date; }
     public BigDecimal getKilometers() { return kilometers; }
 }

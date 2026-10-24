@@ -12,7 +12,7 @@ import java.util.*;
 
 @Service
 public class MileageReminderService {
-    static final int REMINDER_INTERVAL_DAYS = 15;
+    static final int REMINDER_INTERVAL_DAYS = 7;
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("America/Sao_Paulo");
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private final VehicleMileageReminderRepository repository;
@@ -29,10 +29,9 @@ public class MileageReminderService {
             current.ifPresent(VehicleMileageReminder::resolve);
             return;
         }
-        long completedCycles = elapsedDays / REMINDER_INTERVAL_DAYS;
-        LocalDate reminderDate = readingDate.plusDays(completedCycles * REMINDER_INTERVAL_DAYS);
+        LocalDate reminderDate = readingDate.plusDays(REMINDER_INTERVAL_DAYS);
         if (current.isEmpty()) repository.save(new VehicleMileageReminder(vehicle, reminderDate));
-        else current.get().activate(reminderDate);
+        else if (!current.get().isActive()) current.get().activate(reminderDate);
     }
 
     @Transactional public void resolve(Vehicle vehicle) {
