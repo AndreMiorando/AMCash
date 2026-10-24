@@ -12,5 +12,9 @@ public interface WorkDayRepository extends JpaRepository<WorkDay, UUID> {
 
     List<WorkDay> findAllByUserIdAndDateBetweenOrderByDateDesc(UUID userId, LocalDate start, LocalDate end);
 
+    List<WorkDay> findAllByVehicleIdAndDateBetweenOrderByDateDesc(UUID vehicleId, LocalDate start, LocalDate end);
+
+    boolean existsByVehicleIdAndDateLessThanEqual(UUID vehicleId, LocalDate date);
+
     Optional<WorkDay> findByUserIdAndDate(UUID userId, LocalDate date);
 }

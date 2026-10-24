@@ -41,4 +41,5 @@ public class VehicleMileageReminder {
     public LocalDate getReminderDate() { return reminderDate; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getReadAt() { return readAt; }
+    public boolean isActive() { return active; }
 }
