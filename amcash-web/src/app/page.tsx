@@ -296,7 +296,7 @@ function BottomNavigation({ active, loading = false, onHome, onFinance, onRadar,
         <div className="more-menu-handle" aria-hidden="true" />
         <div className="more-menu-actions">
           {showWorkFeatures && <button type="button" className={active === "goals" ? "active" : ""} onClick={() => { setIsMoreOpen(false); onGoals(); }}>
-            <span className="more-menu-icon goals"><Icon name="target" /></span><strong>Metas</strong><Icon name="forward" />
+            <span className="more-menu-icon goals"><Icon name="target" /></span><strong>Objetivos</strong><Icon name="forward" />
           </button>}
           {showWorkFeatures && onVehicles && <button type="button" className={active === "vehicles" ? "active" : ""} onClick={() => { setIsMoreOpen(false); onVehicles(); }}>
             <span className="more-menu-icon vehicles"><Image src="/vehicle-menu-icon.svg" width={24} height={24} alt="" /></span><strong>Veículos</strong><Icon name="forward" />
@@ -1788,7 +1788,7 @@ function remainingGoalDays(year: number, month: number, referenceDate: string) {
     .map((cell) => cell.day);
 }
 
-function GoalsScreen({ onHome, onFinance, onRadar, onWork, onReady, initialMode }: { onHome: () => void; onFinance: () => void; onRadar: () => void; onWork: () => void; onReady?: () => void; initialMode?: "expenses" | "custom" }) {
+function GoalsScreen({ onHome, onFinance, onRadar, onWork, onReady }: { onHome: () => void; onFinance: () => void; onRadar: () => void; onWork: () => void; onReady?: () => void }) {
   const [referenceDate, setReferenceDate] = useState(() => dateToInputValue(new Date()));
   const [goal, setGoal] = useState<ApiGoal | null>(null);
   const [nextGoal, setNextGoal] = useState<ApiGoal | null>(null);
@@ -1796,10 +1796,6 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, onReady, initialMode 
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingNextGoal, setIsLoadingNextGoal] = useState(false);
   const [isSavingDays, setIsSavingDays] = useState(false);
-  const [isSavingConfiguration, setIsSavingConfiguration] = useState(false);
-  const [configurationOpen, setConfigurationOpen] = useState(initialMode === "custom");
-  const [includeExpenses, setIncludeExpenses] = useState(true);
-  const [additionalAmount, setAdditionalAmount] = useState("");
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   useEffect(() => { if (!isLoading) onReady?.(); }, [isLoading, onReady]);
@@ -1830,8 +1826,6 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, onReady, initialMode 
       .then(async (response) => {
         if (!active) return;
         setGoal(response);
-        setIncludeExpenses(response.includeExpenses);
-        setAdditionalAmount(maskCurrencyInput(String(Math.round(Number(response.additionalAmount) * 100))));
         setNextGoal(null);
         setIsNextGoalExpanded(false);
         setIsLoading(false);
@@ -1858,40 +1852,6 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, onReady, initialMode 
       });
     return () => { active = false; };
   }, [referenceDate, refreshKey]);
-
-  function openConfiguration() {
-    setIncludeExpenses(goal?.includeExpenses ?? true);
-    setAdditionalAmount(goal ? maskCurrencyInput(String(Math.round(Number(goal.additionalAmount) * 100))) : "");
-    setError("");
-    setConfigurationOpen(true);
-  }
-
-  async function saveConfiguration() {
-    if (isSavingConfiguration) return;
-    const numericAdditional = parseCurrencyInput(additionalAmount) || 0;
-    const previewTotal = (includeExpenses ? Number(goal?.pendingExpenses ?? 0) : 0) + numericAdditional;
-    if (previewTotal <= 0) {
-      setError("Informe um valor adicional ou mantenha as despesas do mês habilitadas.");
-      return;
-    }
-    setIsSavingConfiguration(true);
-    setError("");
-    try {
-      const updated = await financeApi.updateGoalConfiguration(referenceDate, {
-        includeExpenses,
-        additionalAmount: numericAdditional,
-      });
-      setGoal(updated);
-      setIncludeExpenses(updated.includeExpenses);
-      setAdditionalAmount(maskCurrencyInput(String(Math.round(Number(updated.additionalAmount) * 100))));
-      setNextGoal(null);
-      setConfigurationOpen(false);
-    } catch (requestError) {
-      setError(messageFromError(requestError));
-    } finally {
-      setIsSavingConfiguration(false);
-    }
-  }
 
   async function saveGoalDays(targetGoal: ApiGoal, selectedDays: number[]) {
     if (isSavingDays) return;
@@ -1938,18 +1898,15 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, onReady, initialMode 
   );
   const monthLabel = goal ? goalMonthLabel(goal) : "mês atual";
   const progress = Math.max(0, Math.min(100, Number(goal?.progressPercentage ?? 0)));
-  const configurationPreview = (includeExpenses ? Number(goal?.pendingExpenses ?? 0) : 0)
-    + (parseCurrencyInput(additionalAmount) || 0);
-
   function renderGoalDetails(targetGoal: ApiGoal) {
     const calendarCells = goalCalendarCells(targetGoal.year, targetGoal.month, referenceDate);
     const remainingDays = remainingGoalDays(targetGoal.year, targetGoal.month, referenceDate);
     const remainingDaysSet = new Set(remainingDays);
     return (
       <>
-        <SecondaryKpiGroup className="goal-targets" aria-label={`Metas restantes de ${goalMonthLabel(targetGoal)}`}>
-          <SecondaryKpiItem><KpiLabel>META SEMANAL</KpiLabel><KpiValue>{formatCurrency(Number(targetGoal.weeklyTarget))}</KpiValue></SecondaryKpiItem>
-          <SecondaryKpiItem><KpiLabel>META DIÁRIA</KpiLabel><KpiValue>{formatCurrency(Number(targetGoal.dailyTarget))}</KpiValue></SecondaryKpiItem>
+        <SecondaryKpiGroup className="goal-targets" aria-label={`Objetivos restantes de ${goalMonthLabel(targetGoal)}`}>
+          <SecondaryKpiItem><KpiLabel>OBJETIVO SEMANAL</KpiLabel><KpiValue>{formatCurrency(Number(targetGoal.weeklyTarget))}</KpiValue></SecondaryKpiItem>
+          <SecondaryKpiItem><KpiLabel>OBJETIVO DIÁRIO</KpiLabel><KpiValue>{formatCurrency(Number(targetGoal.dailyTarget))}</KpiValue></SecondaryKpiItem>
         </SecondaryKpiGroup>
 
         <section className="goal-days-card">
@@ -2001,7 +1958,7 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, onReady, initialMode 
   return (
     <main className="dashboard-screen goals-screen">
       <AppHeader className="goals-header">
-        <div className="goals-header-actions"><span className="goals-header-label">METAS</span><button type="button" className="header-add-button goals-edit-button" onClick={openConfiguration} aria-label="Editar meta mensal" title="Editar meta mensal"><Icon name="edit" /></button></div>
+        <span className="goals-header-label">OBJETIVOS</span>
       </AppHeader>
 
       <div className="goals-content">
@@ -2013,14 +1970,14 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, onReady, initialMode 
               {goal.covered && Number(goal.targetAmount) > 0 ? (
                 <>
                   <span className="goal-covered-icon"><Icon name="check" /></span>
-                  <div><span>{monthLabel}</span><h2>Meta atingida</h2><p>Seu resultado líquido já alcançou a meta mensal.</p></div>
+                  <div><span>{monthLabel}</span><h2>Objetivo concluído</h2><p>O saldo financeiro do mês está coberto.</p></div>
                 </>
               ) : (
                 <>
-                  <KpiLabel>{Number(goal.targetAmount) > 0 ? "FALTA PARA A META DO MÊS" : "META MENSAL"}</KpiLabel>
+                  <KpiLabel>{Number(goal.targetAmount) > 0 ? "FALTA PARA O OBJETIVO DO MÊS" : "OBJETIVO MENSAL"}</KpiLabel>
                   <KpiValue>{formatCurrency(Number(goal.remainingAmount))}</KpiValue>
                   <div className="goal-progress-heading"><span>Progresso</span><b>{progress.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%</b></div>
-                  <div className="goal-progress" aria-label={`${progress}% da meta coberta`}><span style={{ width: `${progress}%` }} /></div>
+                  <div className="goal-progress" aria-label={`${progress}% do objetivo coberto`}><span style={{ width: `${progress}%` }} /></div>
                 </>
               )}
             </PrimaryKpiCard>
@@ -2030,7 +1987,7 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, onReady, initialMode 
             {goal.covered && Number(goal.targetAmount) > 0 && isLoadingNextGoal && (
               <div className="goal-next-loading" role="status">
                 <div className="loader" aria-hidden="true" />
-                <span className="goal-next-loading-copy"><strong>Próximo mês</strong><small>Calculando sua meta...</small></span>
+                <span className="goal-next-loading-copy"><strong>Próximo mês</strong><small>Calculando seu objetivo...</small></span>
               </div>
             )}
 
@@ -2045,7 +2002,7 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, onReady, initialMode 
                   <span className="goal-next-copy">
                     <small>PRÓXIMO MÊS · {goalMonthLabel(nextGoal)}</small>
                     <strong>{nextGoal.covered ? "Mês coberto" : `Falta ${formatCurrency(Number(nextGoal.remainingAmount))}`}</strong>
-                    <span>{isNextGoalExpanded ? "Ocultar meta" : "Ver meta do próximo mês"}</span>
+                    <span>{isNextGoalExpanded ? "Ocultar objetivo" : "Ver objetivo do próximo mês"}</span>
                   </span>
                   <span className="goal-next-toggle" aria-hidden="true">{isNextGoalExpanded ? "−" : "+"}</span>
                 </button>
@@ -2053,7 +2010,7 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, onReady, initialMode 
                 {isNextGoalExpanded && (
                   <div className="goal-next-details">
                     {nextGoal.covered && Number(nextGoal.targetAmount) > 0 ? (
-                      <p className="goal-next-covered-message">A meta mensal prevista já está coberta pelo resultado do período.</p>
+                      <p className="goal-next-covered-message">O objetivo mensal previsto já está coberto pelo saldo financeiro.</p>
                     ) : renderGoalDetails(nextGoal)}
                   </div>
                 )}
@@ -2062,21 +2019,6 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, onReady, initialMode 
           </>
         )}
 
-        {configurationOpen && <div className="sheet-backdrop custom-goal-backdrop" role="presentation" onMouseDown={() => !isSavingConfiguration && setConfigurationOpen(false)}>
-          <section className="custom-goal-dialog monthly-goal-dialog" role="dialog" aria-modal="true" aria-labelledby="monthly-goal-title" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="custom-goal-dialog-handle" />
-            <header><div><span>META MENSAL</span><h2 id="monthly-goal-title">Configurar meta</h2></div><button type="button" onClick={() => setConfigurationOpen(false)} aria-label="Fechar">×</button></header>
-            <label className="monthly-goal-toggle"><span><strong>Considerar despesas do mês</strong><small>Inclui automaticamente apenas as despesas pendentes.</small></span><input type="checkbox" checked={includeExpenses} onChange={(event) => setIncludeExpenses(event.target.checked)} /><i aria-hidden="true" /></label>
-            <InputField fieldClassName="field full-field" controlClassName="currency-input" label="Valor adicional desejado" prefix="R$" value={additionalAmount} inputMode="numeric" placeholder="0,00" onChange={(event) => setAdditionalAmount(maskCurrencyInput(event.target.value))} onBlur={() => setAdditionalAmount(completeCurrencyInput(additionalAmount))} />
-            <section className="monthly-goal-preview" aria-label="Prévia da meta mensal">
-              <div><span>Despesas pendentes consideradas</span><strong>{formatCurrency(includeExpenses ? Number(goal?.pendingExpenses ?? 0) : 0)}</strong></div>
-              <div><span>Valor adicional</span><strong>{formatCurrency(parseCurrencyInput(additionalAmount) || 0)}</strong></div>
-              <div className="total"><span>Total da meta mensal</span><strong>{formatCurrency(configurationPreview)}</strong></div>
-            </section>
-            {error && <p className="auth-error" role="alert">{error}</p>}
-            <Button type="button" fullWidth loading={isSavingConfiguration} loadingLabel="Salvando..." onClick={() => void saveConfiguration()}>Salvar configuração</Button>
-          </section>
-        </div>}
       </div>
 
       <BottomNavigation active="goals" loading={isLoading} onHome={onHome} onFinance={onFinance} onRadar={onRadar} onGoals={() => {}} onWork={onWork} />
@@ -2133,8 +2075,8 @@ function UsageProfileScreen({ onSelect, onCancel }: { onSelect: (profile: ApiUsa
   const [profileError, setProfileError] = useState("");
   const options: { profile: ApiUsageProfile; title: string; description: string; icon: IconName }[] = [
     { profile: "PERSONAL", title: "Uso pessoal", description: "Acompanhar receitas, despesas, saldo e próximos pagamentos.", icon: "wallet" },
-    { profile: "RIDE_DRIVER", title: "Motorista de aplicativo", description: "Controlar faturamento, custos, quilômetros e metas diárias.", icon: "work" },
-    { profile: "DELIVERY", title: "Entregador", description: "Usar o controle de trabalho e metas com a configuração atual de motoristas.", icon: "radar" },
+    { profile: "RIDE_DRIVER", title: "Motorista de aplicativo", description: "Controlar faturamento, custos, quilômetros e objetivos diários.", icon: "work" },
+    { profile: "DELIVERY", title: "Entregador", description: "Usar o controle de trabalho e objetivos com a configuração atual de motoristas.", icon: "radar" },
   ];
 
   async function choose(profile: ApiUsageProfile) {
@@ -2206,14 +2148,13 @@ function AccountMenu({ onLogout, usageProfile, onChangeProfile, notifications, o
   </div>;
 }
 
-function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, onVehicles, onCreateCustomGoal, onLogout, onReady, usageProfile, onChangeProfile, notifications, onNotifications, onMileageUpdated }: {
+function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, onVehicles, onLogout, onReady, usageProfile, onChangeProfile, notifications, onNotifications, onMileageUpdated }: {
   onFinance: () => void;
   onCreateExpense: () => void;
   onRadar: () => void;
   onGoals: () => void;
   onWork: () => void;
   onVehicles: () => void;
-  onCreateCustomGoal: () => void;
   onLogout: () => void;
   onReady?: () => void;
   usageProfile: ApiUsageProfile;
@@ -2423,10 +2364,9 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
             <div className="home-empty-icon"><Icon name="target" /></div>
             <span>PRIMEIROS PASSOS</span>
             <h2>Comece pelas contas do mês</h2>
-            <p>{usageProfile === "PERSONAL" ? "Cadastre suas receitas e despesas para acompanhar o saldo do mês e seus próximos pagamentos." : "Cadastre o que precisa pagar ou configure um valor adicional para o AMCash calcular sua meta diária."}</p>
+            <p>Cadastre suas receitas e despesas para acompanhar o saldo do mês e calcular seus objetivos.</p>
             <div className="home-empty-actions">
               <Button type="button" className="primary" onClick={onCreateExpense}><Icon name="plus" /><span>Cadastrar primeira despesa</span></Button>
-              {usageProfile !== "PERSONAL" && <button type="button" onClick={onCreateCustomGoal}><Icon name="target" /><span>Configurar meta mensal</span></button>}
             </div>
           </section> : <>
           {usageProfile !== "PERSONAL" && <>
@@ -2435,15 +2375,15 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
               <span>DIA DE FOLGA</span>
               <strong>Hoje você não planejou trabalhar</strong>
               <p>Aproveite o descanso. Se os planos mudarem, inclua o dia de hoje no seu planejamento.</p>
-              <button type="button" onClick={onGoals}>Alterar dias em Metas <Icon name="forward" /></button>
+              <button type="button" onClick={onGoals}>Alterar dias em Objetivos <Icon name="forward" /></button>
             </div> : summary.goal.covered ? <>
-              <span>META MENSAL</span>
-              <strong>Você conseguiu!</strong><p>Seu resultado líquido já atingiu a meta deste mês.</p>
+              <span>OBJETIVO MENSAL</span>
+              <strong>Objetivo concluído</strong><p>O saldo financeiro deste mês está coberto.</p>
             </> : <>
-              <div className="daily-goal-title"><span><Icon name="target" />META DE HOJE</span></div>
+              <div className="daily-goal-title"><span><Icon name="target" />OBJETIVO DE HOJE</span></div>
               <div className="daily-goal-values"><strong>{formatCurrency(dailyTarget)}</strong><div><Icon name="clock" /><span><small>Faltam</small><b>{formatCurrency(dailyRemaining)}</b></span></div></div>
               <div className="daily-goal-progress-label"><strong>{dailyProgress}%</strong></div>
-              <div className="daily-progress-track" aria-label={`${dailyProgress}% da meta de hoje`}><i style={{ width: `${dailyProgress}%` }} /></div>
+              <div className="daily-progress-track" aria-label={`${dailyProgress}% do objetivo de hoje`}><i style={{ width: `${dailyProgress}%` }} /></div>
             </>}
           </PrimaryKpiCard>
 
@@ -2559,7 +2499,6 @@ export default function Home() {
   const [pendingTab, setPendingTab] = useState<NavigationTab | null>(null);
   const [usageProfile, setUsageProfile] = useState<ApiUsageProfile | null | undefined>(undefined);
   const [profilePickerOpen, setProfilePickerOpen] = useState(false);
-  const [goalInitialMode, setGoalInitialMode] = useState<"expenses" | "custom" | undefined>(undefined);
   const [financeCreateRequested, setFinanceCreateRequested] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<ApiFinancialNotification[]>([]);
@@ -2597,7 +2536,6 @@ export default function Home() {
     setError("");
     setActiveTab("home");
     setPendingTab(null);
-    setGoalInitialMode(undefined);
     setUsageProfile(undefined);
     setProfilePickerOpen(false);
     setFinanceCreateRequested(false);
@@ -2768,7 +2706,6 @@ export default function Home() {
     setUsageProfile(updatedUser.usageProfile);
     setProfilePickerOpen(false);
     setActiveTab("home");
-    setGoalInitialMode("expenses");
   }
 
   if (isLaunchSplashVisible || screen === "checking" || screen === "refreshing" || screen === "loading") return <LoadingScreen />;
@@ -2781,7 +2718,7 @@ export default function Home() {
     setPendingTab(tab);
   };
   const openWork = () => navigateTo("work");
-  const openGoals = (mode?: "expenses" | "custom") => { setGoalInitialMode(mode); navigateTo("goals"); };
+  const openGoals = () => navigateTo("goals");
   const openFinance = (targetPeriod?: { year: number; month: number }) => {
     const today = new Date();
     const nextPeriod = targetPeriod ?? { year: today.getFullYear(), month: today.getMonth() + 1 };
@@ -2858,12 +2795,12 @@ export default function Home() {
   const renderTab = (tab: NavigationTab, isPending: boolean) => {
     const onReady = isPending ? () => { setActiveTab(tab); setPendingTab(null); } : undefined;
     if (tab === "radar") return <RadarScreen onReady={onReady} onHome={() => navigateTo("home")} onFinance={openFinance} onGoals={() => openGoals()} onWork={openWork} showWorkFeatures={showWorkFeatures} />;
-    if (tab === "goals") return <GoalsScreen onReady={onReady} initialMode={goalInitialMode} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onWork={openWork} />;
+    if (tab === "goals") return <GoalsScreen onReady={onReady} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onWork={openWork} />;
     if (tab === "work") return <WorkScreen onReady={onReady} navigation={(loading) => <BottomNavigation active="work" loading={loading} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={() => {}} />} />;
     if (tab === "vehicles") return <VehicleScreen onReady={onReady} navigation={(loading) => <BottomNavigation active="vehicles" loading={loading} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} />} />;
     if (tab === "operational-cost") return <OperationalCostScreen onReady={onReady} initialEditVehicleId={operationalEditVehicleId} onInitialEditHandled={()=>setOperationalEditVehicleId(null)} onVehicles={() => navigateTo("vehicles")} navigation={(loading) => <BottomNavigation active="operational-cost" loading={loading} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} />} />;
     if (tab === "finance") return <Dashboard onReady={onReady} items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onHome={() => navigateTo("home")} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} showWorkFeatures={showWorkFeatures} onMonthChange={changeMonth} initialPeriod={period} initialCreateOpen={financeCreateRequested} onInitialCreateHandled={() => setFinanceCreateRequested(false)} error={error} isLoading={isLoading} />;
-    return <HomeDashboard onReady={onReady} onFinance={() => openFinance()} onCreateExpense={() => { setFinanceCreateRequested(true); openFinance(); }} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} onVehicles={() => navigateTo("vehicles")} onCreateCustomGoal={() => openGoals("custom")} onLogout={logout} usageProfile={usageProfile} onChangeProfile={() => setProfilePickerOpen(true)} notifications={notifications} onNotifications={() => void openNotifications()} onMileageUpdated={refreshNotifications} />;
+    return <HomeDashboard onReady={onReady} onFinance={() => openFinance()} onCreateExpense={() => { setFinanceCreateRequested(true); openFinance(); }} onRadar={() => navigateTo("radar")} onGoals={openGoals} onWork={openWork} onVehicles={() => navigateTo("vehicles")} onLogout={logout} usageProfile={usageProfile} onChangeProfile={() => setProfilePickerOpen(true)} notifications={notifications} onNotifications={() => void openNotifications()} onMileageUpdated={refreshNotifications} />;
   };
   const renderedTabs = pendingTab && pendingTab !== activeTab ? [activeTab, pendingTab] : [activeTab];
   return <VehicleNavigationContext.Provider value={() => navigateTo("vehicles")}><OperationalCostNavigationContext.Provider value={() => navigateTo("operational-cost")}><NavigationLoadingContext.Provider value={pendingTab}>

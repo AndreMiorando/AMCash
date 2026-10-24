@@ -15,7 +15,6 @@ import br.com.amcash.work.service.WorkService;
 import br.com.amcash.work.service.WorkService.WorkProgressSnapshot;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -26,7 +25,6 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -51,8 +49,7 @@ class GoalServiceTests {
         preferenceRepository = mock(GoalMonthPreferenceRepository.class);
         configurationRepository = mock(MonthlyGoalConfigurationRepository.class);
         workService = mock(WorkService.class);
-        service = new GoalService(financialService, userRepository, preferenceRepository,
-                configurationRepository, workService);
+        service = new GoalService(financialService, userRepository, preferenceRepository, workService);
         userId = UUID.randomUUID();
         user = user(userId);
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
@@ -66,7 +63,7 @@ class GoalServiceTests {
     }
 
     @Test
-    void defaultsToPendingExpensesWithoutPersistingDerivedTotals() {
+    void usesPendingExpensesAndIncomeFromTheFinancialBalance() {
         YearMonth month = YearMonth.of(2026, 10);
         when(financialService.load(userId, month)).thenReturn(financial("3000", "7000", "2000", "5000"));
         var response = service.current(userId, LocalDate.of(2026, 10, 18));
@@ -74,33 +71,41 @@ class GoalServiceTests {
         assertEquals(money("5000"), response.consideredExpenses());
         assertEquals(money("0"), response.additionalAmount());
         assertEquals(money("5000"), response.targetAmount());
-        assertEquals(money("5000"), response.remainingAmount());
+        assertEquals(money("2000"), response.remainingAmount());
     }
 
     @Test
-    void combinesPendingExpensesWithPersistentAdditionalAmount() {
+    void matchesThePendingBalanceShownInFinance() {
+        YearMonth month = YearMonth.of(2026, 10);
+        when(financialService.load(userId, month)).thenReturn(financial("226.15", "8518.20", "8189.20", "329"));
+
+        var response = service.current(userId, LocalDate.of(2026, 10, 24));
+
+        assertEquals(money("102.85"), response.remainingAmount());
+        assertEquals(money("68.74"), response.progressPercentage());
+    }
+
+    @Test
+    void ignoresPreviouslyPersistedCustomConfiguration() {
         YearMonth month = YearMonth.of(2026, 10);
         MonthlyGoalConfiguration configuration = new MonthlyGoalConfiguration(user, true, new BigDecimal("750"));
         when(configurationRepository.findByUserId(userId)).thenReturn(Optional.of(configuration));
         when(financialService.load(userId, month)).thenReturn(financial("0", "2000", "500", "1500"));
         var response = service.current(userId, LocalDate.of(2026, 10, 18));
         assertEquals(money("1500"), response.consideredExpenses());
-        assertEquals(money("750"), response.additionalAmount());
-        assertEquals(money("2250"), response.targetAmount());
+        assertEquals(money("0"), response.additionalAmount());
+        assertEquals(money("1500"), response.targetAmount());
     }
 
     @Test
-    void canCreateGoalWithoutExpensesAndDisableTheirInclusion() {
+    void legacyConfigurationCannotCreateAnIndependentObjective() {
         YearMonth month = YearMonth.of(2026, 10);
         when(financialService.load(userId, month)).thenReturn(financial("0", "0", "0", "0"));
         var response = service.updateConfiguration(userId, LocalDate.of(2026, 10, 18),
                 new UpdateGoalConfigurationRequest(false, new BigDecimal("1200")));
-        assertFalse(response.includeExpenses());
-        assertEquals(money("1200"), response.targetAmount());
-        ArgumentCaptor<MonthlyGoalConfiguration> saved = ArgumentCaptor.forClass(MonthlyGoalConfiguration.class);
-        verify(configurationRepository).save(saved.capture());
-        assertFalse(saved.getValue().isIncludeExpenses());
-        assertEquals(new BigDecimal("1200"), saved.getValue().getAdditionalAmount());
+        assertTrue(response.includeExpenses());
+        assertEquals(money("0"), response.targetAmount());
+        assertEquals(money("0"), response.additionalAmount());
     }
 
     @Test
@@ -113,29 +118,30 @@ class GoalServiceTests {
     }
 
     @Test
-    void rejectsConfigurationWithNoExpensesAndNoAdditionalAmount() {
+    void acceptsLegacyConfigurationWithoutChangingTheFinancialObjective() {
         YearMonth month = YearMonth.of(2026, 10);
         when(financialService.load(userId, month)).thenReturn(financial("0", "0", "0", "0"));
-        assertThrows(BadRequestException.class, () -> service.updateConfiguration(userId,
-                LocalDate.of(2026, 10, 18), new UpdateGoalConfigurationRequest(false, BigDecimal.ZERO)));
+        var response = service.updateConfiguration(userId,
+                LocalDate.of(2026, 10, 18), new UpdateGoalConfigurationRequest(false, BigDecimal.ZERO));
+        assertEquals(money("0"), response.remainingAmount());
     }
 
     @Test
-    void recalculatesWhenPaymentChangesPendingExpensesWithoutChangingAdditionalAmount() {
+    void recalculatesTheObjectiveWhenPaymentChangesPendingExpenses() {
         YearMonth month = YearMonth.of(2026, 10);
         MonthlyGoalConfiguration configuration = new MonthlyGoalConfiguration(user, true, new BigDecimal("200"));
         when(configurationRepository.findByUserId(userId)).thenReturn(Optional.of(configuration));
         when(financialService.load(userId, month)).thenReturn(
                 financial("0", "500", "0", "500"), financial("0", "500", "200", "300"));
         when(workService.progress(userId, LocalDate.of(2026, 10, 18), month)).thenReturn(progress("100", "0"));
-        assertEquals(money("600"), service.current(userId, LocalDate.of(2026, 10, 18)).remainingAmount());
+        assertEquals(money("500"), service.current(userId, LocalDate.of(2026, 10, 18)).remainingAmount());
         var afterPayment = service.current(userId, LocalDate.of(2026, 10, 18));
-        assertEquals(money("400"), afterPayment.remainingAmount());
-        assertEquals(money("200"), afterPayment.additionalAmount());
+        assertEquals(money("300"), afterPayment.remainingAmount());
+        assertEquals(money("0"), afterPayment.additionalAmount());
     }
 
     @Test
-    void usesNetWorkResultAsRealizedAmountAndKeepsTodayTargetStable() {
+    void usesWorkResultOnlyForTodaysProgress() {
         YearMonth month = YearMonth.of(2026, 10);
         when(financialService.load(userId, month)).thenReturn(financial("0", "1000", "0", "1000"));
         selectDays(18, 19);
@@ -143,11 +149,11 @@ class GoalServiceTests {
                 .thenReturn(new WorkProgressSnapshot(money("400"), money("100"), money("300"),
                         money("200"), money("50"), money("150")));
         var response = service.current(userId, LocalDate.of(2026, 10, 18));
-        assertEquals(money("300"), response.realizedAmount());
-        assertEquals(money("700"), response.remainingAmount());
-        assertEquals(money("425"), response.todayTarget());
-        assertEquals(money("275"), response.todayRemaining());
-        assertEquals(money("350"), response.dailyTarget());
+        assertEquals(money("0"), response.realizedAmount());
+        assertEquals(money("1000"), response.remainingAmount());
+        assertEquals(money("500"), response.todayTarget());
+        assertEquals(money("350"), response.todayRemaining());
+        assertEquals(money("500"), response.dailyTarget());
     }
 
     @Test

@@ -49,7 +49,7 @@ class HomeServiceTests {
         var response = service.current(userId, date);
 
         assertEquals(money("182.76"), response.goal().dailyTarget());
-        assertEquals("Meta mensal", response.goal().name());
+        assertEquals("Objetivo mensal", response.goal().name());
         assertEquals(CustomGoalPeriod.MONTHLY, response.goal().period());
         assertEquals(PrimaryGoalType.EXPENSES, response.goal().type());
         assertTrue(response.hasFinancialEntries());
