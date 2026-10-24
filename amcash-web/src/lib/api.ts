@@ -241,7 +241,7 @@ export type VehiclePayload = {
   type: ApiVehicleType; brand: string; model: string; manufactureYear: number; modelYear: number;
   version: string | null; nickname: string | null; licensePlate: string | null; fuelType: ApiFuelType;
   currentMileage: number; mileageReadingDate: string; gasolineConsumption: number | null;
-  ethanolConsumption: number | null; electricConsumption: number | null; financialStatus: ApiFinancialStatus;
+  ethanolConsumption: number | null; dieselConsumption: number | null; electricConsumption: number | null; financialStatus: ApiFinancialStatus;
   monthlyAmount: number | null; totalInstallments: number | null; paidInstallments: number | null;
   nextDueDate: string | null; acquisitionDate: string | null;
 };
@@ -259,6 +259,23 @@ export type ApiVehicle = Omit<VehiclePayload, "financialStatus" | "monthlyAmount
     projectedRemainingInstallments: number | null; projectedEndDate: string | null };
   odometerReadings: { id: string; mileage: number; readingDate: string; correction: boolean }[];
   maintenances: ApiVehicleMaintenance[];
+};
+
+export type ApiCostPeriod = "MONTHLY" | "ANNUAL";
+export type ApiMaintenanceCalculationMethod = "MANUAL" | "HISTORY";
+export type OperationalCustomFixedCostPayload = { title: string; amount: number; period: ApiCostPeriod };
+export type OperationalCostPayload = {
+  monthlyMileage: number; fuelType: "GASOLINE" | "ETHANOL" | "DIESEL" | "ELECTRIC"; fuelPrice: number;
+  includeFinance: boolean; annualIpva: number; annualFees: number; insuranceAmount: number | null;
+  insurancePeriod: ApiCostPeriod | null; maintenanceMethod: ApiMaintenanceCalculationMethod;
+  annualMaintenanceEstimate: number | null; includeDepreciation: boolean; currentVehicleValue: number | null;
+  annualDepreciationRate: number | null; customFixedCosts: OperationalCustomFixedCostPayload[]; selectedMaintenanceIds: string[];
+};
+export type ApiOperationalCost = OperationalCostPayload & {
+  id: string; vehicleId: string; vehicleName: string;
+  calculation: { fuelMonthly: number; financeMonthly: number; taxesMonthly: number; insuranceMonthly: number;
+    otherFixedMonthly: number; maintenanceMonthly: number; totalMonthly: number; cashCostPerKm: number;
+    depreciationAnnual: number; depreciationMonthly: number; depreciationPerKm: number };
 };
 
 export type ApiWorkPeriod = "DAY" | "WEEK" | "MONTH";
@@ -423,6 +440,12 @@ export const financeApi = {
     if (!response.ok) throw new ApiError("Não foi possível carregar a foto.", response.status);
     return response.blob();
   },
+
+  operationalCosts() { return apiRequest<ApiOperationalCost[]>("/api/v1/operational-costs"); },
+  operationalCost(vehicleId: string) { return apiRequest<ApiOperationalCost>(`/api/v1/operational-costs/vehicles/${vehicleId}`); },
+  createOperationalCost(vehicleId: string, payload: OperationalCostPayload) { return apiRequest<ApiOperationalCost>(`/api/v1/operational-costs/vehicles/${vehicleId}`, { method: "POST", body: JSON.stringify(payload) }); },
+  updateOperationalCost(vehicleId: string, payload: OperationalCostPayload) { return apiRequest<ApiOperationalCost>(`/api/v1/operational-costs/vehicles/${vehicleId}`, { method: "PUT", body: JSON.stringify(payload) }); },
+  deleteOperationalCost(vehicleId: string) { return apiRequest<void>(`/api/v1/operational-costs/vehicles/${vehicleId}`, { method: "DELETE" }); },
 
   listMonth(year: number, month: number) {
     return apiRequest<MonthlyEntries>(`/api/v1/transactions?year=${year}&month=${month}`);

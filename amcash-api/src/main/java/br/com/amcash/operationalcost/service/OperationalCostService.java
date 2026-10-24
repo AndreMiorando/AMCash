@@ -32,6 +32,7 @@ public class OperationalCostService {
     @Transactional(readOnly=true) public OperationalCostResponse get(UUID userId,UUID vehicleId){requireMobility(userId);return response(findConfiguration(userId,vehicleId));}
     @Transactional public OperationalCostResponse create(UUID userId,UUID vehicleId,OperationalCostRequest request){User user=requireMobility(userId);Vehicle vehicle=findVehicle(userId,vehicleId);if(configurations.existsByVehicleId(vehicleId))throw new ConflictException("Este veículo já possui uma configuração de custo operacional");OperationalCostConfiguration configuration=new OperationalCostConfiguration(user,vehicle);apply(configuration,vehicle,request);return response(configurations.save(configuration));}
     @Transactional public OperationalCostResponse update(UUID userId,UUID vehicleId,OperationalCostRequest request){requireMobility(userId);Vehicle vehicle=findVehicle(userId,vehicleId);OperationalCostConfiguration configuration=findConfiguration(userId,vehicleId);apply(configuration,vehicle,request);return response(configuration);}
+    @Transactional public void delete(UUID userId,UUID vehicleId){requireMobility(userId);configurations.delete(findConfiguration(userId,vehicleId));}
 
     private void apply(OperationalCostConfiguration configuration,Vehicle vehicle,OperationalCostRequest request){
         validate(vehicle,request);

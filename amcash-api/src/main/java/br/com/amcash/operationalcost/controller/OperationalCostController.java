@@ -7,4 +7,5 @@ public class OperationalCostController {
     @GetMapping("/vehicles/{vehicleId}") public OperationalCostResponse get(@CurrentUser AuthenticatedUser user,@PathVariable UUID vehicleId){return service.get(user.userId(),vehicleId);}
     @PostMapping("/vehicles/{vehicleId}") @ResponseStatus(HttpStatus.CREATED) public OperationalCostResponse create(@CurrentUser AuthenticatedUser user,@PathVariable UUID vehicleId,@Valid @RequestBody OperationalCostRequest request){return service.create(user.userId(),vehicleId,request);}
     @PutMapping("/vehicles/{vehicleId}") public OperationalCostResponse update(@CurrentUser AuthenticatedUser user,@PathVariable UUID vehicleId,@Valid @RequestBody OperationalCostRequest request){return service.update(user.userId(),vehicleId,request);}
+    @DeleteMapping("/vehicles/{vehicleId}") @ResponseStatus(HttpStatus.NO_CONTENT) public void delete(@CurrentUser AuthenticatedUser user,@PathVariable UUID vehicleId){service.delete(user.userId(),vehicleId);}
 }

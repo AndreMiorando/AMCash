@@ -25,6 +25,7 @@ import DatePickerInput, { dateToInputValue } from "@/app/components/DatePickerIn
 import { MonthPickerDialog } from "@/app/components/MonthPickerInput";
 import WorkScreen from "@/app/components/WorkScreen";
 import VehicleScreen from "@/app/components/VehicleScreen";
+import OperationalCostScreen from "@/app/components/OperationalCostScreen";
 import AppHeader from "@/app/components/AppHeader";
 import { CostCategoryGrid, CostCategoryIcon, workCostCategoryLabels } from "@/app/components/CostCategoryGrid";
 import Button from "@/app/components/ui/Button";
@@ -237,9 +238,10 @@ function Icon({ name }: { name: IconName }) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-type NavigationTab = "home" | "finance" | "radar" | "goals" | "work" | "vehicles";
+type NavigationTab = "home" | "finance" | "radar" | "goals" | "work" | "vehicles" | "operational-cost";
 const NavigationLoadingContext = createContext<NavigationTab | null>(null);
 const VehicleNavigationContext = createContext<(() => void) | null>(null);
+const OperationalCostNavigationContext = createContext<(() => void) | null>(null);
 
 function BottomNavigation({ active, loading = false, onHome, onFinance, onRadar, onGoals, onWork, showWorkFeatures = true }: {
   active: NavigationTab;
@@ -254,9 +256,10 @@ function BottomNavigation({ active, loading = false, onHome, onFinance, onRadar,
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const pendingTab = useContext(NavigationLoadingContext);
   const onVehicles = useContext(VehicleNavigationContext);
+  const onOperationalCost = useContext(OperationalCostNavigationContext);
   const loadingTab = pendingTab ?? (loading ? active : null);
-  const moreIsActive = active === "goals" || active === "radar" || active === "vehicles";
-  const moreIsLoading = loadingTab === "goals" || loadingTab === "radar" || loadingTab === "vehicles";
+  const moreIsActive = active === "goals" || active === "radar" || active === "vehicles" || active === "operational-cost";
+  const moreIsLoading = loadingTab === "goals" || loadingTab === "radar" || loadingTab === "vehicles" || loadingTab === "operational-cost";
   const navigationIcon = (tab: "home" | "finance" | "radar" | "goals" | "work", icon: IconName) => (
     loadingTab === tab ? <span className="nav-icon-loader" role="status" aria-label="Carregando página" /> : <Icon name={icon} />
   );
@@ -294,7 +297,10 @@ function BottomNavigation({ active, loading = false, onHome, onFinance, onRadar,
             <span className="more-menu-icon goals"><Icon name="target" /></span><strong>Metas</strong><Icon name="forward" />
           </button>}
           {showWorkFeatures && onVehicles && <button type="button" className={active === "vehicles" ? "active" : ""} onClick={() => { setIsMoreOpen(false); onVehicles(); }}>
-            <span className="more-menu-icon vehicles"><Icon name="work" /></span><strong>Veículos</strong><Icon name="forward" />
+            <span className="more-menu-icon vehicles"><Image src="/vehicle-menu-icon.svg" width={24} height={24} alt="" /></span><strong>Veículos</strong><Icon name="forward" />
+          </button>}
+          {showWorkFeatures && onOperationalCost && <button type="button" className={active === "operational-cost" ? "active" : ""} onClick={() => { setIsMoreOpen(false); onOperationalCost(); }}>
+            <span className="more-menu-icon operational-cost"><Icon name="wallet" /></span><strong>Custo operacional</strong><Icon name="forward" />
           </button>}
           <button type="button" className={active === "radar" ? "active" : ""} onClick={() => { setIsMoreOpen(false); onRadar(); }}>
             <span className="more-menu-icon radar"><Icon name="radar" /></span><strong>Projeção</strong><Icon name="forward" />
@@ -2803,11 +2809,12 @@ export default function Home() {
     if (tab === "goals") return <GoalsScreen onReady={onReady} initialMode={goalInitialMode} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onWork={openWork} />;
     if (tab === "work") return <WorkScreen onReady={onReady} navigation={(loading) => <BottomNavigation active="work" loading={loading} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={() => {}} />} />;
     if (tab === "vehicles") return <VehicleScreen onReady={onReady} navigation={(loading) => <BottomNavigation active="vehicles" loading={loading} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} />} />;
+    if (tab === "operational-cost") return <OperationalCostScreen onReady={onReady} onVehicles={() => navigateTo("vehicles")} navigation={(loading) => <BottomNavigation active="operational-cost" loading={loading} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} />} />;
     if (tab === "finance") return <Dashboard onReady={onReady} items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onHome={() => navigateTo("home")} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} showWorkFeatures={showWorkFeatures} onMonthChange={changeMonth} initialPeriod={period} initialCreateOpen={financeCreateRequested} onInitialCreateHandled={() => setFinanceCreateRequested(false)} error={error} isLoading={isLoading} />;
     return <HomeDashboard onReady={onReady} onFinance={() => openFinance()} onCreateExpense={() => { setFinanceCreateRequested(true); openFinance(); }} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} onVehicles={() => navigateTo("vehicles")} onCreateCustomGoal={() => openGoals("custom")} onLogout={logout} usageProfile={usageProfile} onChangeProfile={() => setProfilePickerOpen(true)} notifications={notifications} onNotifications={() => void openNotifications()} onMileageUpdated={refreshNotifications} />;
   };
   const renderedTabs = pendingTab && pendingTab !== activeTab ? [activeTab, pendingTab] : [activeTab];
-  return <VehicleNavigationContext.Provider value={() => navigateTo("vehicles")}><NavigationLoadingContext.Provider value={pendingTab}>
+  return <VehicleNavigationContext.Provider value={() => navigateTo("vehicles")}><OperationalCostNavigationContext.Provider value={() => navigateTo("operational-cost")}><NavigationLoadingContext.Provider value={pendingTab}>
     {renderedTabs.map((tab) => <div className={`app-tab-stage${tab === activeTab ? " active" : " pending"}`} key={tab} aria-hidden={tab !== activeTab}>{renderTab(tab, tab === pendingTab)}</div>)}
-  </NavigationLoadingContext.Provider></VehicleNavigationContext.Provider>;
+  </NavigationLoadingContext.Provider></OperationalCostNavigationContext.Provider></VehicleNavigationContext.Provider>;
 }

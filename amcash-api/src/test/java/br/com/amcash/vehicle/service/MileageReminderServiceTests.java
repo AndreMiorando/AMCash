@@ -51,7 +51,7 @@ class MileageReminderServiceTests {
         Vehicle vehicle = new Vehicle(user);
         vehicle.update(VehicleType.CAR, "Honda", "Fit", 2015, 2016, null, "Meu Fit", null,
                 FuelType.FLEX, new BigDecimal("94000"), readingDate, new BigDecimal("10"),
-                new BigDecimal("8"), null, null);
+                new BigDecimal("8"), null, null, null);
         return vehicle;
     }
 }
