@@ -122,6 +122,26 @@
 .vehicle-finance-detail h2 { margin: 0 0 0.65rem; font-size: 0.82rem; } .vehicle-finance-detail > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
 .vehicle-finance-detail span { display: flex; flex-direction: column; gap: 0.2rem; } .vehicle-finance-detail span + span { padding-left: 0.5rem; border-left: 1px solid var(--border-subtle); } .vehicle-finance-detail small { color: var(--text-muted); font-size: 0.5rem; line-height: 1.4; } .vehicle-finance-detail b { color: var(--text-primary); font-size: 0.68rem; }
 .vehicle-finance-detail > small { display: block; margin-top: 0.7rem; }
+.vehicle-odometer-history { padding: 1rem; margin-top: var(--section-stack-gap); overflow: hidden; border: 1px solid #e2eaf4; border-radius: 1.15rem; background: #fff; }
+.vehicle-odometer-history > header { display: flex; padding-bottom: 0.7rem; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-subtle); }
+.vehicle-odometer-history > header small { color: var(--text-muted); font-size: 0.5rem; font-weight: 800; letter-spacing: 0.1em; }
+.vehicle-odometer-history h2 { margin: 0.1rem 0 0; font-size: 0.82rem; }
+.vehicle-odometer-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-bottom: 1px solid var(--border-subtle); }
+.vehicle-odometer-kpis > span { display: flex; min-width: 0; padding: 0.8rem 0.6rem; flex-direction: column; gap: 0.2rem; }
+.vehicle-odometer-kpis > span:first-child { padding-left: 0; }
+.vehicle-odometer-kpis > span:last-child { padding-right: 0; }
+.vehicle-odometer-kpis > span + span { border-left: 1px solid var(--border-subtle); }
+.vehicle-odometer-kpis small { color: var(--text-muted); font-size: 0.5rem; }
+.vehicle-odometer-kpis b { overflow: hidden; color: var(--text-primary); font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
+.vehicle-odometer-help { margin: 0; padding: 0.7rem 0; border-bottom: 1px solid var(--border-subtle); color: var(--text-muted); font-size: 0.55rem; }
+.vehicle-odometer-list > div { display: grid; min-height: 3.3rem; padding: 0.65rem 0; grid-template-columns: 4.5rem minmax(0, 1fr) auto; align-items: center; gap: 0.1rem 0.65rem; border-bottom: 1px solid var(--border-subtle); }
+.vehicle-odometer-list > div:last-child { border-bottom: 0; }
+.vehicle-odometer-list time { grid-row: 1 / 3; color: var(--text-muted); font-size: 0.55rem; }
+.vehicle-odometer-list strong { color: var(--text-primary); font-size: 0.68rem; }
+.vehicle-odometer-list small { grid-column: 2; color: var(--text-muted); font-size: 0.53rem; }
+.vehicle-odometer-remove { display: flex; min-height: 2rem; padding: 0 0.55rem; grid-column: 3; grid-row: 1 / 3; align-items: center; gap: 0.3rem; border: 0; border-radius: 0.6rem; background: #fff7f8; color: #ef4f69; font: inherit; font-size: 0.56rem; font-weight: 700; cursor: pointer; }
+.vehicle-odometer-remove svg { width: 0.85rem; height: 0.85rem; }
+.vehicle-odometer-remove:disabled { opacity: 0.45; cursor: default; }
 .vehicle-maintenance-history { padding: 1rem; margin-top: var(--section-stack-gap); overflow: hidden; border: 1px solid #e2eaf4; border-radius: 1.15rem; background: #fff; }
 .vehicle-maintenance-history > header { display: flex; padding: 0 0 0.7rem; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-subtle); }
 .vehicle-maintenance-history h2 { margin: 0.1rem 0 0; font-size: 0.82rem; } .vehicle-maintenance-history header small { color: #8a9caf; font-size: 0.5rem; font-weight: 800; letter-spacing: 0.1em; }
@@ -1848,6 +1868,23 @@ a {
 .home-cost-remove:hover { background: #ffedf0; }
 .home-add-cost { display: flex; width: 100%; min-height: 2.5rem; margin-top: 0.65rem; align-items: center; justify-content: center; gap: 0.4rem; border: 1px solid #cfe0f8; border-radius: 0.7rem; background: #f7faff; color: #086cf3; font: inherit; font-size: 0.68rem; font-weight: 700; }
 .home-add-cost svg { width: 0.95rem; }
+.home-odometer-update, .home-odometer-empty { padding: 1rem 0 0; margin-top: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.home-odometer-update > header { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.home-odometer-update h3, .home-odometer-empty h3 { margin: 0; overflow: hidden; color: var(--text-muted); font-size: 0.6rem; font-weight: 800; letter-spacing: 0.14em; text-overflow: ellipsis; white-space: nowrap; }
+.home-odometer-update > header small { overflow: hidden; color: var(--text-muted); font-size: 0.62rem; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.home-odometer-vehicle { margin-top: 0.75rem; }
+.home-odometer-entry { display: grid; margin-top: 0.85rem; grid-template-columns: minmax(0, 1fr) minmax(7rem, 0.65fr); align-items: end; gap: 0.85rem; }
+.home-odometer-last { display: flex; min-height: var(--control-height); flex-direction: column; justify-content: center; gap: 0.12rem; }
+.home-odometer-last span { color: #71859b; font-size: 0.61rem; font-weight: 650; }
+.home-odometer-last time { color: var(--text-muted); font-size: 0.6rem; }
+.home-odometer-last strong { color: var(--text-primary); font-size: 1.05rem; letter-spacing: -0.03em; }
+.home-odometer-new input { font-weight: 700; text-align: right; }
+.home-odometer-update > .ui-button { margin-top: 0.8rem; }
+.home-odometer-feedback { margin: 0.55rem 0 0; font-size: 0.62rem; }
+.home-odometer-feedback.error { color: #d9435b; }
+.home-odometer-feedback.success { color: #0c9961; }
+.home-odometer-empty p { margin: 0.75rem 0 0.7rem; color: var(--text-muted); font-size: 0.67rem; line-height: 1.45; }
+.home-odometer-empty button { padding: 0; border: 0; background: transparent; color: var(--brand-blue); font: inherit; font-size: 0.68rem; font-weight: 700; }
 .home-quick-entry > .ui-button { margin-top: 0.75rem; }
 
 @media (max-width: 25rem) {
@@ -1860,6 +1897,7 @@ a {
   .home-work-card-heading { align-items: flex-start; flex-direction: column; gap: 0.25rem; }
   .home-work-fields > label { grid-template-columns: 1.85rem minmax(0, 1fr) minmax(6.2rem, 0.7fr); gap: 0.45rem; }
   .home-costs-heading { align-items: flex-start; flex-direction: column; }
+  .home-odometer-entry { gap: 0.55rem; }
   .cost-category-grid { gap: 0.35rem; }
   .home-cost-remove { width: 2.4rem; }
   .home-empty-state { min-height: 21rem; padding: 1.5rem 1rem; }
