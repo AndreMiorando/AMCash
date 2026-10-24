@@ -29,7 +29,9 @@ import { CostCategoryGrid, CostCategoryIcon, workCostCategoryLabels } from "@/ap
 import Button from "@/app/components/ui/Button";
 import { Input, InputField } from "@/app/components/ui/Input";
 import SegmentedControl from "@/app/components/ui/SegmentedControl";
+import SelectPickerInput from "@/app/components/ui/SelectPickerInput";
 import { KpiLabel, KpiValue, PrimaryKpiCard, SecondaryKpiGroup, SecondaryKpiItem } from "@/app/components/ui/Kpi";
+import { completeCurrencyInput, maskCurrencyInput, parseCurrencyInput } from "@/lib/currency";
 
 type GoogleCredentialResponse = {
   credential?: string;
@@ -325,30 +327,8 @@ function formatTransactionGroupDate(date: string) {
   return { calendarDate, weekday };
 }
 
-function maskCurrencyInput(value: string) {
-  const digits = value.replace(/\D/g, "");
-  if (!digits) return "";
-
-  const normalized = digits.replace(/^0+(?=\d)/, "");
-  const padded = normalized.padStart(3, "0");
-  const rawInteger = padded.slice(0, -2);
-  const integer = (rawInteger.replace(/^0+(?=\d)/, "") || "0")
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  const decimal = padded.slice(-2);
-
-  return `${integer},${decimal}`;
-}
-
 function maskRepetitionCount(value: string) {
   return value.replace(/\D/g, "").slice(0, 3);
-}
-
-function completeCurrencyInput(value: string) {
-  return maskCurrencyInput(value);
-}
-
-function parseCurrencyInput(value: string) {
-  return Number(value.replace(/\./g, "").replace(",", "."));
 }
 
 function maskDecimalInput(value: string) {
@@ -551,41 +531,7 @@ function PaymentMethodPickerInput({
   options: { value: ApiPaymentMethod; label: string }[];
   onChange: (value: ApiPaymentMethod | "") => void;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const selectedLabel = options.find((option) => option.value === value)?.label;
-
-  useEffect(() => {
-    if (!isOpen) return;
-    function closeOnOutsideClick(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) setIsOpen(false);
-    }
-    document.addEventListener("mousedown", closeOnOutsideClick);
-    return () => document.removeEventListener("mousedown", closeOnOutsideClick);
-  }, [isOpen]);
-
-  return (
-    <div className="field full-field transaction-method-field" ref={containerRef}>
-      <span>{label}</span>
-      <div className="payment-picker-control">
-        <button type="button" className={`category-input-button${value ? "" : " placeholder"}`} onClick={() => setIsOpen((current) => !current)} aria-haspopup="listbox" aria-expanded={isOpen}>
-          <span>{selectedLabel ?? "Selecione uma opção"}</span>
-          <Icon name="forward" />
-        </button>
-        {isOpen && (
-          <div className="payment-method-options" role="listbox" aria-label={label}>
-            {options.map((option) => (
-              <button type="button" role="option" aria-selected={option.value === value} className={option.value === value ? "selected" : ""} key={option.value} onClick={() => { onChange(option.value); setIsOpen(false); }}>
-                <span>{option.label}</span>
-                {option.value === value && <Icon name="check" />}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      <small className="field-hint">Informação registrada apenas para consulta e auditoria.</small>
-    </div>
-  );
+  return <SelectPickerInput label={label} value={value} options={options} onChange={onChange} className="transaction-method-field" hint="Informação registrada apenas para consulta e auditoria." />;
 }
 
 function LoadingScreen() {
@@ -854,10 +800,11 @@ function CreateTransactionSheet({
   return (
     <div className="create-transaction-screen">
       <section className="subexpense-sheet create-transaction-sheet" aria-labelledby="create-transaction-title">
-        <div className="sheet-heading create-sheet-heading">
+        <header className="form-page-header">
           <button type="button" className="create-sheet-back" onClick={onClose} aria-label="Voltar"><Icon name="back" /></button>
           <h2 id="create-transaction-title">{type === "expense" ? "Nova despesa" : "Nova receita"}</h2>
-        </div>
+          <span aria-hidden="true" />
+        </header>
 
         <form onSubmit={submit}>
           <InputField fieldClassName="field full-field" label="Descrição" maxLength={40} value={name} onChange={(event) => setName(event.target.value)} placeholder={type === "expense" ? "Ex.: Supermercado" : "Ex.: Salário"} />
@@ -1553,25 +1500,24 @@ function DetailScreen({
   }
 
   return (
-    <main className="detail-screen">
+    <main className="detail-screen edit-transaction-screen">
+      <header className="form-page-header edit-transaction-header">
+        <button type="button" className="detail-back-button" onClick={onBack} aria-label="Voltar"><Icon name="back" /></button>
+        <h1>Editar lançamento</h1>
+        <button
+          type="button"
+          className="detail-save-button"
+          disabled={!hasParentChanges || !parentFormIsValid || isSaving}
+          aria-label={isSaving ? "Salvando lançamento" : "Salvar alterações"}
+          aria-busy={isSaving || undefined}
+          title="Salvar alterações"
+          onClick={saveDetails}
+        >
+          {isSaving ? <span className="detail-save-spinner" aria-hidden="true" /> : <Icon name="save" />}
+        </button>
+      </header>
       <div className="detail-content">
         <section className="detail-card edit-card">
-          <div className="section-title detail-main-title">
-            <button type="button" className="detail-back-button" onClick={onBack} aria-label="Voltar"><Icon name="back" /></button>
-            <h1>Editar lançamento</h1>
-            <button
-              type="button"
-              className="detail-save-button"
-              disabled={!hasParentChanges || !parentFormIsValid || isSaving}
-              aria-label={isSaving ? "Salvando lançamento" : "Salvar alterações"}
-              aria-busy={isSaving || undefined}
-              title="Salvar alterações"
-              onClick={saveDetails}
-            >
-              {isSaving ? <span className="detail-save-spinner" aria-hidden="true" /> : <Icon name="save" />}
-            </button>
-          </div>
-
           <div className="type-switch" aria-label="Tipo do lançamento">
             <button type="button" className={type === "expense" ? "active expense" : ""} onClick={() => { setType("expense"); if (type !== "expense") setCategory(""); }}>Despesa</button>
             <button type="button" className={type === "income" ? "active income" : ""} onClick={() => { setType("income"); if (type !== "income") setCategory(""); if (paymentMethod === "DEBIT_CARD" || paymentMethod === "CREDIT_CARD") setPaymentMethod(""); }}>Receita</button>

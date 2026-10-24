@@ -1,3 +1,3 @@
 package br.com.amcash.vehicle.repository;
-import br.com.amcash.vehicle.entity.VehicleMaintenance; import org.springframework.data.jpa.repository.JpaRepository; import java.util.*;
-public interface VehicleMaintenanceRepository extends JpaRepository<VehicleMaintenance,UUID>{List<VehicleMaintenance> findAllByVehicleIdOrderByDateDescCreatedAtDesc(UUID vehicleId);Optional<VehicleMaintenance> findByIdAndVehicleUserId(UUID id,UUID userId);}
+import br.com.amcash.vehicle.entity.VehicleMaintenance; import org.springframework.data.jpa.repository.*; import org.springframework.data.repository.query.Param; import java.util.*;
+public interface VehicleMaintenanceRepository extends JpaRepository<VehicleMaintenance,UUID>{List<VehicleMaintenance> findAllByVehicleIdOrderByDateDescCreatedAtDesc(UUID vehicleId);Optional<VehicleMaintenance> findByIdAndVehicleUserId(UUID id,UUID userId);@Modifying @Query("delete from VehicleMaintenance m where m.vehicle.id=:vehicleId") void deleteAllByVehicleId(@Param("vehicleId") UUID vehicleId);}

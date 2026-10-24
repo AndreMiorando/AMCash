@@ -1,3 +1,3 @@
 package br.com.amcash.vehicle.repository;
-import br.com.amcash.vehicle.entity.MaintenanceAlert; import org.springframework.data.jpa.repository.JpaRepository; import java.util.*;
-public interface MaintenanceAlertRepository extends JpaRepository<MaintenanceAlert,UUID>{List<MaintenanceAlert> findAllByUserIdAndActiveTrue(UUID userId);Optional<MaintenanceAlert> findByMaintenanceId(UUID maintenanceId);}
+import br.com.amcash.vehicle.entity.MaintenanceAlert; import org.springframework.data.jpa.repository.*; import org.springframework.data.repository.query.Param; import java.util.*;
+public interface MaintenanceAlertRepository extends JpaRepository<MaintenanceAlert,UUID>{List<MaintenanceAlert> findAllByUserIdAndActiveTrue(UUID userId);Optional<MaintenanceAlert> findByMaintenanceId(UUID maintenanceId);@Modifying @Query("delete from MaintenanceAlert a where a.maintenance.vehicle.id=:vehicleId") void deleteAllByVehicleId(@Param("vehicleId") UUID vehicleId);}
