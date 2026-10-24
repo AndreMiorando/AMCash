@@ -2,6 +2,11 @@ import type { HTMLAttributes } from "react";
 
 type SecondaryKpiGroupProps = HTMLAttributes<HTMLElement> & {
   columns?: 2 | 3;
+  as?: "section" | "div" | "span";
+};
+
+type SecondaryKpiItemProps = HTMLAttributes<HTMLElement> & {
+  as?: "article" | "div" | "span" | "i";
 };
 
 function classes(...values: Array<string | undefined>) {
@@ -12,12 +17,12 @@ export function PrimaryKpiCard({ className, ...props }: HTMLAttributes<HTMLEleme
   return <section className={classes("ui-primary-kpi", className)} {...props} />;
 }
 
-export function SecondaryKpiGroup({ className, columns = 2, ...props }: SecondaryKpiGroupProps) {
-  return <section className={classes("ui-secondary-kpis", `ui-secondary-kpis--${columns}`, className)} {...props} />;
+export function SecondaryKpiGroup({ as: Component = "section", className, columns = 2, ...props }: SecondaryKpiGroupProps) {
+  return <Component className={classes("ui-secondary-kpis", `ui-secondary-kpis--${columns}`, className)} {...props} />;
 }
 
-export function SecondaryKpiItem({ className, ...props }: HTMLAttributes<HTMLElement>) {
-  return <article className={classes("ui-secondary-kpi", className)} {...props} />;
+export function SecondaryKpiItem({ as: Component = "article", className, ...props }: SecondaryKpiItemProps) {
+  return <Component className={classes("ui-secondary-kpi", className)} {...props} />;
 }
 
 export function KpiLabel({ className, ...props }: HTMLAttributes<HTMLSpanElement>) {

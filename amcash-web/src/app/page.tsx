@@ -2439,11 +2439,11 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
           </PrimaryKpiCard>
 
           {summary.goal.todaySelected && <>
-          <section className="home-today-summary" aria-label="Resumo do trabalho de hoje">
-            <article><span>FATURAMENTO HOJE</span><strong>{formatCurrency(projectedGrossEarnings)}</strong></article>
-            <article><span>RESULTADO LÍQUIDO</span><strong className={projectedTodayNet < 0 ? "negative" : ""}>{projectedTodayNet < 0 ? "- " : ""}{formatCurrency(projectedTodayNet)}</strong></article>
-            <article><span>FATURAMENTO POR KM</span><strong>{kilometersValue > 0 ? formatCurrency(earningsPerKilometer) : "—"}</strong></article>
-          </section>
+          <SecondaryKpiGroup columns={3} className="home-today-summary" aria-label="Resumo do trabalho de hoje">
+            <SecondaryKpiItem><KpiLabel>FATURAMENTO HOJE</KpiLabel><KpiValue>{formatCurrency(projectedGrossEarnings)}</KpiValue></SecondaryKpiItem>
+            <SecondaryKpiItem><KpiLabel>RESULTADO LÍQUIDO</KpiLabel><KpiValue className={projectedTodayNet < 0 ? "negative" : ""}>{projectedTodayNet < 0 ? "- " : ""}{formatCurrency(projectedTodayNet)}</KpiValue></SecondaryKpiItem>
+            <SecondaryKpiItem><KpiLabel>FATURAMENTO POR KM</KpiLabel><KpiValue>{kilometersValue > 0 ? formatCurrency(earningsPerKilometer) : "—"}</KpiValue></SecondaryKpiItem>
+          </SecondaryKpiGroup>
           <section className="home-quick-entry" aria-label="Trabalho de hoje">
             <div className="home-work-card-heading"><div><span>TRABALHO DE HOJE</span></div><small>Edite os valores diretamente</small></div>
             <div className="home-work-fields">
