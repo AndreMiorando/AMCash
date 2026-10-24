@@ -33,7 +33,7 @@ class VehiclePersistenceTests {
         var response = service.create(userId, new VehicleRequest(
                 VehicleType.CAR, "Honda", "Fit", 2015, 2016, "EX", "Meu Fit", "ABC1D23",
                 FuelType.FLEX, new BigDecimal("85420"), LocalDate.of(2026, 10, 23),
-                new BigDecimal("11"), new BigDecimal("8"), null, FinancialStatus.FINANCED,
+                new BigDecimal("11"), new BigDecimal("8"), null, null, FinancialStatus.FINANCED,
                 new BigDecimal("1330"), 60, 22, LocalDate.of(2026, 11, 10),
                 LocalDate.of(2024, 5, 10)));
 
@@ -51,7 +51,7 @@ class VehiclePersistenceTests {
         var response = service.create(userId, new VehicleRequest(
                 VehicleType.CAR, "Honda", "Fit", 2015, 2016, null, null, null,
                 FuelType.FLEX, new BigDecimal("1000"), LocalDate.of(2026, 10, 23),
-                new BigDecimal("11"), new BigDecimal("8"), null, FinancialStatus.PAID_OFF,
+                new BigDecimal("11"), new BigDecimal("8"), null, null, FinancialStatus.PAID_OFF,
                 null, null, null, null, null));
 
         service.delete(userId, response.id());

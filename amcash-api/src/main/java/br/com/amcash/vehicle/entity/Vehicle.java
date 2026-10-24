@@ -24,6 +24,7 @@ public class Vehicle {
     @Column(name = "mileage_reading_date", nullable = false) private LocalDate mileageReadingDate;
     @Column(name = "gasoline_consumption", precision = 7, scale = 2) private BigDecimal gasolineConsumption;
     @Column(name = "ethanol_consumption", precision = 7, scale = 2) private BigDecimal ethanolConsumption;
+    @Column(name = "diesel_consumption", precision = 7, scale = 2) private BigDecimal dieselConsumption;
     @Column(name = "electric_consumption", precision = 7, scale = 2) private BigDecimal electricConsumption;
     @Column(name = "acquisition_date") private LocalDate acquisitionDate;
     @Column(name = "created_at", nullable = false) private OffsetDateTime createdAt;
@@ -34,12 +35,12 @@ public class Vehicle {
     public void update(VehicleType type, String brand, String model, int manufactureYear, int modelYear,
                        String version, String nickname, String licensePlate, FuelType fuelType,
                        BigDecimal currentMileage, LocalDate mileageReadingDate, BigDecimal gasolineConsumption,
-                       BigDecimal ethanolConsumption, BigDecimal electricConsumption, LocalDate acquisitionDate) {
+                       BigDecimal ethanolConsumption, BigDecimal dieselConsumption, BigDecimal electricConsumption, LocalDate acquisitionDate) {
         this.type=type; this.brand=brand; this.model=model; this.manufactureYear=manufactureYear; this.modelYear=modelYear;
         this.version=version; this.nickname=nickname; this.licensePlate=licensePlate; this.fuelType=fuelType;
         this.currentMileage=currentMileage; this.mileageReadingDate=mileageReadingDate;
         this.gasolineConsumption=gasolineConsumption; this.ethanolConsumption=ethanolConsumption;
-        this.electricConsumption=electricConsumption; this.acquisitionDate=acquisitionDate; updatedAt=now();
+        this.dieselConsumption=dieselConsumption; this.electricConsumption=electricConsumption; this.acquisitionDate=acquisitionDate; updatedAt=now();
     }
     public void updateOdometer(BigDecimal mileage, LocalDate readingDate) { currentMileage=mileage; mileageReadingDate=readingDate; updatedAt=now(); }
     private OffsetDateTime now() { return OffsetDateTime.now(ZoneOffset.UTC); }
@@ -49,5 +50,5 @@ public class Vehicle {
     public String getLicensePlate(){return licensePlate;} public FuelType getFuelType(){return fuelType;}
     public BigDecimal getCurrentMileage(){return currentMileage;} public LocalDate getMileageReadingDate(){return mileageReadingDate;}
     public BigDecimal getGasolineConsumption(){return gasolineConsumption;} public BigDecimal getEthanolConsumption(){return ethanolConsumption;}
-    public BigDecimal getElectricConsumption(){return electricConsumption;} public LocalDate getAcquisitionDate(){return acquisitionDate;}
+    public BigDecimal getDieselConsumption(){return dieselConsumption;} public BigDecimal getElectricConsumption(){return electricConsumption;} public LocalDate getAcquisitionDate(){return acquisitionDate;}
 }
