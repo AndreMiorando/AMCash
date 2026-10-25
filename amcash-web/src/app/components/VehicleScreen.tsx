@@ -13,6 +13,7 @@ import {
   ApiVehicleType, financeApi, MaintenancePayload, VehiclePayload,
 } from "@/lib/api";
 import { completeCurrencyInput, currencyInputFromNumber, maskCurrencyInput, parseCurrencyInput } from "@/lib/currency";
+import { formatLongDate } from "@/lib/date";
 
 export type VehicleDraft = {
   type: ApiVehicleType; brand: string; model: string; manufactureYear: string; modelYear: string; version: string; nickname: string;
@@ -34,7 +35,7 @@ const number = (value: string) => value.trim() ? Number(value.replace(/\./g, "")
 const optionalNumber = (value: string) => value.trim() ? number(value) : null;
 const decimal = (value: number) => new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(value);
 const money = (value: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
-const date = (value: string) => value ? new Intl.DateTimeFormat("pt-BR").format(new Date(`${value}T12:00:00`)) : "—";
+const date = (value: string) => value ? formatLongDate(value) : "—";
 const message = (error: unknown) => error instanceof Error ? error.message : "Não foi possível concluir a operação.";
 const vehiclePhotoCache = new Map<string, Blob>();
 const vehiclePhotoRequests = new Map<string, Promise<Blob>>();

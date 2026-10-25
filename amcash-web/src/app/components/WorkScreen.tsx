@@ -11,6 +11,7 @@ import Button from "@/app/components/ui/Button";
 import { InputField } from "@/app/components/ui/Input";
 import SegmentedControl from "@/app/components/ui/SegmentedControl";
 import { KpiLabel, KpiValue, PrimaryKpiCard, SecondaryKpiGroup, SecondaryKpiItem } from "@/app/components/ui/Kpi";
+import { formatDateRange, formatLongDate, formatMonthYear } from "@/lib/date";
 
 type EarningDraft = { source: string; amount: string };
 type CostDraft = { key: string; id?: string; category: ApiWorkCostCategory; description: string; amount: string; homeManaged?: boolean };
@@ -77,10 +78,88 @@ function orderedEarnings(day: ApiWorkDay | undefined) {
 function messageFrom(error: unknown) { return error instanceof Error ? error.message : "Não foi possível concluir a operação."; }
 function periodTitle(overview: ApiWorkOverview | null, period: ApiWorkPeriod, referenceDate: string) {
   if (!overview) return "";
-  const formatter = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
-  if (period === "DAY") return formatter.format(parseDate(referenceDate));
-  if (period === "WEEK") return `${formatter.format(parseDate(overview.rangeStart))} – ${formatter.format(parseDate(overview.rangeEnd))}`;
-  return new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(parseDate(referenceDate));
+  if (period === "DAY") return formatLongDate(referenceDate);
+  if (period === "WEEK") return formatDateRange(overview.rangeStart, overview.rangeEnd);
+  return formatMonthYear(referenceDate);
+}
+
+type WorkBreakdownItem = {
+  key: string;
+  label: string;
+  amount: number;
+  sourceKind?: "uber" | "ninety-nine" | "other";
+  category?: ApiWorkCostCategory;
+};
+
+function WorkPeriodBreakdown({ overview, incomeExpanded, costsExpanded, onToggleIncome, onToggleCosts }: {
+  overview: ApiWorkOverview;
+  incomeExpanded: boolean;
+  costsExpanded: boolean;
+  onToggleIncome: () => void;
+  onToggleCosts: () => void;
+}) {
+  const earningsBySource = new Map<string, { label: string; amount: number }>();
+  overview.days.flatMap((day) => day.earnings).forEach((earning) => {
+    const label = earning.source.trim() || "Outra renda";
+    const key = label.toLocaleLowerCase("pt-BR");
+    const current = earningsBySource.get(key);
+    earningsBySource.set(key, { label: current?.label ?? label, amount: (current?.amount ?? 0) + Number(earning.amount) });
+  });
+  const detailedEarnings: WorkBreakdownItem[] = [...earningsBySource.entries()]
+    .map(([key, item]) => ({
+      key,
+      label: item.label,
+      amount: item.amount,
+      sourceKind: key === "uber" ? "uber" as const : key === "99" ? "ninety-nine" as const : "other" as const,
+    }))
+    .sort((first, second) => second.amount - first.amount || earningPriority(first.label) - earningPriority(second.label));
+
+  const costsByCategory = new Map<ApiWorkCostCategory, number>();
+  overview.costs.forEach((cost) => costsByCategory.set(cost.category, (costsByCategory.get(cost.category) ?? 0) + Number(cost.amount)));
+  const detailedCosts: WorkBreakdownItem[] = [...costsByCategory.entries()]
+    .filter(([, amount]) => amount > 0)
+    .map(([category, amount]) => ({ key: category, label: workCostCategoryLabels[category], amount, category }))
+    .sort((first, second) => second.amount - first.amount);
+  const totalEarnings = detailedEarnings.reduce((total, item) => total + item.amount, 0);
+  const totalCosts = detailedCosts.reduce((total, item) => total + item.amount, 0);
+  const percentage = (amount: number, total: number) => total > 0 ? Math.min(100, Math.max(0, amount / total * 100)) : 0;
+  const percentageLabel = (value: number) => `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(value)}%`;
+
+  function renderGroup(title: string, total: number, items: WorkBreakdownItem[], tone: "income" | "cost", expanded: boolean, onToggle: () => void) {
+    const visibleItems = expanded ? items : items.slice(0, 3);
+    const hiddenCount = Math.max(0, items.length - 3);
+    return <article className={`work-breakdown-group ${tone}`}>
+      <header><span>{title}</span></header>
+      {!visibleItems.length ? <p>Nenhum registro no período.</p> : visibleItems.map((item) => {
+        const share = percentage(item.amount, total);
+        return <div className="work-breakdown-row" key={item.key}>
+          <div className="work-breakdown-row-heading">
+            <span className="work-breakdown-name">
+              {tone === "income" && item.sourceKind === "uber" && <Image className="work-breakdown-source-logo uber" src="/uber-logo.jpeg" alt="" width={96} height={96} />}
+              {tone === "income" && item.sourceKind === "ninety-nine" && <Image className="work-breakdown-source-logo ninety-nine" src="/99-logo.png" alt="" width={96} height={96} />}
+              {tone === "income" && item.sourceKind === "other" && <i className="work-breakdown-source-mark" aria-hidden="true">{item.label.charAt(0).toUpperCase()}</i>}
+              {tone === "cost" && item.category && <i className="work-breakdown-cost-icon"><CostCategoryIcon category={item.category} /></i>}
+              <span>{item.label}</span>
+            </span>
+            <strong>{currency(item.amount)}</strong>
+          </div>
+          <div className="work-breakdown-progress-heading"><b>{percentageLabel(share)}</b></div>
+          <div className="work-breakdown-progress" role="progressbar" aria-label={`${item.label}: ${percentageLabel(share)} do total`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(share.toFixed(1))}><i style={{ width: `${share}%` }} /></div>
+        </div>;
+      })}
+      {items.length > 3 && <Button type="button" variant="secondary" fullWidth className="work-breakdown-toggle" onClick={onToggle} aria-expanded={expanded}>{expanded ? "Ver menos" : `Ver mais (${hiddenCount})`}</Button>}
+    </article>;
+  }
+
+  return <section className="work-period-breakdown" aria-labelledby="work-period-breakdown-title">
+    <div className="work-breakdown-title">
+      <div><span>COMPOSIÇÃO DO PERÍODO</span><h2 id="work-period-breakdown-title">Receitas e custos</h2></div>
+    </div>
+    <div className="work-breakdown-columns">
+      {renderGroup("Faturamento por fonte", totalEarnings, detailedEarnings, "income", incomeExpanded, onToggleIncome)}
+      {renderGroup("Gastos por categoria", totalCosts, detailedCosts, "cost", costsExpanded, onToggleCosts)}
+    </div>
+  </section>;
 }
 
 export default function WorkScreen({ navigation, onReady, onOperationalCost }: {
@@ -92,6 +171,7 @@ export default function WorkScreen({ navigation, onReady, onOperationalCost }: {
   const [referenceDate, setReferenceDate] = useState(() => dateToInputValue(new Date()));
   const [overview, setOverview] = useState<ApiWorkOverview | null>(null);
   const [resultMode, setResultMode] = useState<ResultMode>("REGISTERED");
+  const [expandedBreakdownGroups, setExpandedBreakdownGroups] = useState({ income: false, costs: false });
   const [vehicles,setVehicles]=useState<ApiVehicle[]>([]);
   const [vehiclesLoading, setVehiclesLoading] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -291,6 +371,13 @@ export default function WorkScreen({ navigation, onReady, onOperationalCost }: {
             : <strong>{periodTitle(overview, period, referenceDate)}</strong>}
         <button type="button" onClick={() => movePeriod(1)} aria-label="Próximo período">›</button></div>
       {loading ? null : <>
+        {period !== "DAY" && overview && <WorkPeriodBreakdown
+          overview={overview}
+          incomeExpanded={expandedBreakdownGroups.income}
+          costsExpanded={expandedBreakdownGroups.costs}
+          onToggleIncome={() => setExpandedBreakdownGroups((current) => ({ ...current, income: !current.income }))}
+          onToggleCosts={() => setExpandedBreakdownGroups((current) => ({ ...current, costs: !current.costs }))}
+        />}
         <section className="work-days-section work-records-section"><div className="work-section-title"><div><span>HISTÓRICO</span><h2>Registros do período</h2></div><b>{records.length}</b></div>
           {!records.length ? <div className="work-empty"><strong>Nenhum registro no período</strong><span>Os resultados e custos atualizados pela Home aparecerão aqui.</span></div> : records.map((record) => {
             const gross = Number(record.day?.grossEarnings ?? 0);

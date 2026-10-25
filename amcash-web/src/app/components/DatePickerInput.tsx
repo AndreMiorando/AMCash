@@ -2,13 +2,10 @@
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
+import { formatLongDate, formatMonthYear } from "@/lib/date";
 
 export function dateToInputValue(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("pt-BR").format(new Date(`${value}T12:00:00`));
 }
 
 export default function DatePickerInput({ label, value, onChange, min, max, displayValue }: {
@@ -24,7 +21,7 @@ export default function DatePickerInput({ label, value, onChange, min, max, disp
   const [isOpen, setIsOpen] = useState(false);
   const [pendingValue, setPendingValue] = useState<string | null>(null);
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(initialDate.getFullYear(), initialDate.getMonth(), 1));
-  const monthLabel = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(visibleMonth);
+  const monthLabel = formatMonthYear(visibleMonth);
   const firstGridDate = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1 - visibleMonth.getDay());
   const days = Array.from({ length: 42 }, (_, index) => {
     const date = new Date(firstGridDate);
@@ -55,7 +52,7 @@ export default function DatePickerInput({ label, value, onChange, min, max, disp
   return <div className="field date-picker-field">
     <span>{label}</span>
     <button type="button" className="date-input-button" onClick={openCalendar} aria-label={label} aria-haspopup="dialog" aria-expanded={isOpen}>
-      <span>{value ? displayValue || formatDate(value) : "Selecionar data"}</span>
+      <span>{value ? displayValue || formatLongDate(value) : "Selecionar data"}</span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M8 3v4M16 3v4M3.5 9.5h17" /></svg>
     </button>
 
