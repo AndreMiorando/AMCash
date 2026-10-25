@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Script from "next/script";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   ApiEntry,
   ApiEntryCategory,
@@ -256,6 +257,9 @@ function BottomNavigation({ active, loading = false, onHome, onFinance, onRadar,
   showWorkFeatures?: boolean;
 }) {
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [moreDragOffset, setMoreDragOffset] = useState(0);
+  const [isMoreDragging, setIsMoreDragging] = useState(false);
+  const moreDragStart = useRef<number | null>(null);
   const pendingTab = useContext(NavigationLoadingContext);
   const onVehicles = useContext(VehicleNavigationContext);
   const onOperationalCost = useContext(OperationalCostNavigationContext);
@@ -271,6 +275,28 @@ function BottomNavigation({ active, loading = false, onHome, onFinance, onRadar,
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [isMoreOpen]);
+  function startMoreDrag(event: ReactPointerEvent<HTMLElement>) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    if ((event.target as HTMLElement).closest("button")) return;
+    moreDragStart.current = event.clientY;
+    setIsMoreDragging(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+  function moveMoreDrag(event: ReactPointerEvent<HTMLElement>) {
+    if (moreDragStart.current == null) return;
+    const offset = Math.max(0, event.clientY - moreDragStart.current);
+    setMoreDragOffset(offset);
+    if (offset > 0) event.preventDefault();
+  }
+  function finishMoreDrag(event: ReactPointerEvent<HTMLElement>) {
+    if (moreDragStart.current == null) return;
+    const offset = Math.max(0, event.clientY - moreDragStart.current);
+    moreDragStart.current = null;
+    setIsMoreDragging(false);
+    setMoreDragOffset(0);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    if (offset >= 72) setIsMoreOpen(false);
+  }
   return (
     <>
     <nav className="bottom-nav" aria-label="Navegação principal">
@@ -284,7 +310,7 @@ function BottomNavigation({ active, loading = false, onHome, onFinance, onRadar,
       </button>
       {showWorkFeatures && <button type="button" className={`nav-item${active === "work" ? " active" : ""}`} onClick={onWork} aria-current={active === "work" ? "page" : undefined} aria-busy={loadingTab === "work"}>
         {navigationIcon("work", "work")}
-        <span>Trabalho</span>
+        <span>Resultado</span>
       </button>}
       <button type="button" className={`nav-item${moreIsActive ? " active" : ""}`} onClick={() => setIsMoreOpen(true)} aria-current={moreIsActive ? "page" : undefined} aria-expanded={isMoreOpen} aria-haspopup="dialog" aria-busy={moreIsLoading}>
         {moreIsLoading ? <span className="nav-icon-loader" role="status" aria-label="Carregando página" /> : <svg className="nav-more-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="7" cy="7" r="2.25" /><circle cx="17" cy="7" r="2.25" /><circle cx="7" cy="17" r="2.25" /><circle cx="17" cy="17" r="2.25" /></svg>}
@@ -292,7 +318,7 @@ function BottomNavigation({ active, loading = false, onHome, onFinance, onRadar,
       </button>
     </nav>
     {isMoreOpen && <div className="more-menu-backdrop" role="presentation" onMouseDown={() => setIsMoreOpen(false)}>
-      <section className="more-menu-sheet" role="dialog" aria-modal="true" aria-label="Mais opções" onMouseDown={(event) => event.stopPropagation()}>
+      <section className={`more-menu-sheet${isMoreDragging ? " dragging" : ""}`} style={{ translate: `0 ${moreDragOffset}px` }} role="dialog" aria-modal="true" aria-label="Mais opções" onMouseDown={(event) => event.stopPropagation()} onPointerDown={startMoreDrag} onPointerMove={moveMoreDrag} onPointerUp={finishMoreDrag} onPointerCancel={finishMoreDrag}>
         <div className="more-menu-handle" aria-hidden="true" />
         <div className="more-menu-actions">
           {showWorkFeatures && <button type="button" className={active === "goals" ? "active" : ""} onClick={() => { setIsMoreOpen(false); onGoals(); }}>
@@ -2796,7 +2822,7 @@ export default function Home() {
     const onReady = isPending ? () => { setActiveTab(tab); setPendingTab(null); } : undefined;
     if (tab === "radar") return <RadarScreen onReady={onReady} onHome={() => navigateTo("home")} onFinance={openFinance} onGoals={() => openGoals()} onWork={openWork} showWorkFeatures={showWorkFeatures} />;
     if (tab === "goals") return <GoalsScreen onReady={onReady} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onWork={openWork} />;
-    if (tab === "work") return <WorkScreen onReady={onReady} navigation={(loading) => <BottomNavigation active="work" loading={loading} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={() => {}} />} />;
+    if (tab === "work") return <WorkScreen onReady={onReady} onOperationalCost={() => navigateTo("operational-cost")} navigation={(loading) => <BottomNavigation active="work" loading={loading} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={() => {}} />} />;
     if (tab === "vehicles") return <VehicleScreen onReady={onReady} navigation={(loading) => <BottomNavigation active="vehicles" loading={loading} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} />} />;
     if (tab === "operational-cost") return <OperationalCostScreen onReady={onReady} initialEditVehicleId={operationalEditVehicleId} onInitialEditHandled={()=>setOperationalEditVehicleId(null)} onVehicles={() => navigateTo("vehicles")} navigation={(loading) => <BottomNavigation active="operational-cost" loading={loading} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} />} />;
     if (tab === "finance") return <Dashboard onReady={onReady} items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onHome={() => navigateTo("home")} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} showWorkFeatures={showWorkFeatures} onMonthChange={changeMonth} initialPeriod={period} initialCreateOpen={financeCreateRequested} onInitialCreateHandled={() => setFinanceCreateRequested(false)} error={error} isLoading={isLoading} />;

@@ -265,7 +265,7 @@ export type ApiVehicle = Omit<VehiclePayload, "financialStatus" | "monthlyAmount
 export type ApiCostPeriod = "MONTHLY" | "ANNUAL";
 export type ApiMaintenanceCalculationMethod = "MANUAL" | "HISTORY";
 export type ApiMileageSource = "MANUAL" | "ODOMETER" | "WORK";
-export type OperationalCustomFixedCostPayload = { title: string; amount: number; period: ApiCostPeriod };
+export type OperationalCustomFixedCostPayload = { title: string; amount: number; period: ApiCostPeriod; workCostCategory: ApiWorkCostCategory | null };
 export type OperationalCostPayload = {
   monthlyMileage: number; mileageSource: ApiMileageSource; fuelType: "GASOLINE" | "ETHANOL" | "DIESEL" | "ELECTRIC"; fuelPrice: number;
   includeFinance: boolean; annualIpva: number; annualFees: number; insuranceAmount: number | null;
@@ -327,6 +327,18 @@ export type ApiWorkOverview = {
     kilometers: number;
     earningsPerKilometer: number;
     workedDays: number;
+  };
+  estimatedSummary: {
+    available: boolean;
+    unavailableReason: string | null;
+    grossEarnings: number | null;
+    operationalCost: number | null;
+    additionalCosts: number | null;
+    totalCosts: number | null;
+    netEarnings: number | null;
+    kilometers: number | null;
+    earningsPerKilometer: number | null;
+    resultPerKilometer: number | null;
   };
   comparison: {
     rangeStart: string;

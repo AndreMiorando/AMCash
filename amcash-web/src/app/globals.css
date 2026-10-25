@@ -229,7 +229,7 @@
 .operational-usage-inputs .ui-input:focus, .operational-usage-inputs .ui-input:focus-visible { border: 0; outline: none; box-shadow: none; }
 .operational-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0.65rem; margin-bottom: 0.8rem; }
 .operational-other-header { display: flex; min-height: 2rem; align-items: center; justify-content: space-between; color: #71859b; font-size: 0.61rem; font-weight: 650; }.operational-other-header button { padding: 0.35rem 0.5rem; }
-.operational-other { display: grid; padding: 0.75rem 0; grid-template-columns: minmax(0,1.2fr) minmax(0,1fr); gap: 0.55rem; border-top: 1px solid var(--border-subtle); }.operational-other > .ui-segmented { grid-column: 1 / -1; }.operational-other > .home-cost-remove { justify-self: end; grid-column: 1 / -1; margin-top: 0; }
+.operational-other { display: grid; padding: 0.75rem 0; grid-template-columns: minmax(0,1.2fr) minmax(0,1fr); gap: 0.55rem; border-top: 1px solid var(--border-subtle); }.operational-other > .ui-segmented, .operational-other > .operational-cost-category { grid-column: 1 / -1; }.operational-other > .home-cost-remove { justify-self: end; grid-column: 1 / -1; margin-top: 0; }
 .operational-toggle { display: flex; width: 100%; min-height: 3.2rem; padding: 0.65rem 0.75rem; margin-bottom: 0.8rem; align-items: center; justify-content: center; gap: 0.45rem; border: 1px solid #dce5ef; border-radius: 0.8rem; background: #fbfcfe; color: #617793; font: inherit; font-size: 0.66rem; font-weight: 650; text-align: center; cursor: pointer; }
 .operational-toggle b { display: grid; width: 1.35rem; height: 1.35rem; flex: 0 0 auto; place-items: center; border-radius: 50%; background: #e9f1ff; color: var(--brand-blue); opacity: 0; font-size: 0.7rem; }
 .operational-toggle.active { border-color: #2580f5; background: #f0f6ff; color: #086cf3; box-shadow: inset 0 0 0 1px rgb(8 108 243 / 12%); font-weight: 750; }
@@ -2169,16 +2169,27 @@ a {
 }
 
 .work-net-card {
+  position: relative;
   display: grid;
+  height: 11.25rem;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 1rem;
 }
 
-.work-net-main { display: flex; min-width: 0; justify-content: center; flex-direction: column; }
+.work-net-main { display: flex; min-width: 0; justify-content: center; flex-direction: column; transform: translateY(0.6rem); }
 .work-net-main > strong { margin-top: 0.45rem; }
 .work-net-main > strong.negative { color: #ffe0e5; }
+.work-estimate-reason { max-width: 24rem; margin-top: 0.3rem; color: rgb(255 255 255 / 82%); font-size: 0.6rem; line-height: 1.4; }
+.work-estimate-action { width: fit-content; margin-top: 0.45rem; padding: 0; border: 0; border-bottom: 1px solid rgb(255 255 255 / 55%); background: transparent; color: #fff; font-size: 0.62rem; font-weight: 750; cursor: pointer; }
+.work-net-side { display: flex; min-width: 5.75rem; align-items: center; justify-content: center; flex-direction: column; transform: translateY(0.6rem); }
+.work-result-mode.ui-segmented { position: absolute; top: 1rem; left: 50%; width: 12.5rem; min-height: 2.25rem; padding: 0.2rem; transform: translateX(-50%); border: 1px solid rgb(255 255 255 / 18%); border-radius: var(--segmented-radius); background: rgb(255 255 255 / 9%); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 4%); }
+.work-result-mode.ui-segmented > button { min-height: 1.8rem; padding-block: 0.25rem; border-radius: var(--segmented-option-radius); color: rgb(255 255 255 / 72%); font-size: 0.62rem; }
+.work-result-mode.ui-segmented > button:hover { color: #fff; }
+.work-result-mode.ui-segmented > button:focus-visible { color: #fff; box-shadow: 0 0 0 0.18rem rgb(255 255 255 / 24%); }
+.work-result-mode.ui-segmented > button.selected { background: #fff; color: var(--brand-blue); box-shadow: 0 0.25rem 0.7rem rgb(2 48 145 / 14%); }
 .work-net-comparison { display: flex; min-width: 3.8rem; align-items: center; flex-direction: column; gap: 0.22rem; color: #fff; }
+.work-net-comparison .ui-kpi-label { color: rgb(255 255 255 / 72%); font-size: 0.48rem; white-space: nowrap; }
 .work-net-comparison svg { width: 1.45rem; height: 1.45rem; }
 .work-net-comparison strong { font-size: 0.72rem; }
 .work-net-comparison.positive { color: #d9ffe9; }
@@ -2191,15 +2202,10 @@ a {
 .work-metrics article {
   display: grid;
   min-height: 4.4rem;
-  grid-template-columns: 2rem minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
-  gap: 0.65rem;
 }
 
-.work-metric-icon { display: grid; width: 2rem; height: 2rem; overflow: hidden; place-items: center; border-radius: 0.6rem; background: #edf4ff; color: #3478d6; }
-.work-metric-icon.expense { background: var(--expense-surface); color: #ef5368; }
-.work-metric-icon svg { width: 1.15rem; height: 1.15rem; }
-.work-metric-icon img { display: block; width: 1.4rem; height: 1.4rem; object-fit: contain; mix-blend-mode: multiply; }
 .work-metric-copy { display: flex; min-width: 0; flex-direction: column; }
 .work-metrics strong { margin-top: 0.28rem; }
 .work-metrics strong.cost { color: #f05469; }
@@ -2449,11 +2455,13 @@ a {
 .more-menu-backdrop {
   position: fixed;
   z-index: 70;
-  inset-block: 0;
+  top: 0;
+  bottom: calc(4.55rem + env(safe-area-inset-bottom));
   left: 50%;
   display: flex;
   width: min(100%, var(--app-shell-width));
   align-items: flex-end;
+  overflow: hidden;
   transform: translateX(-50%);
   background: rgb(14 31 52 / 42%);
   backdrop-filter: blur(0.18rem);
@@ -2462,12 +2470,16 @@ a {
 
 .more-menu-sheet {
   width: 100%;
-  padding: 0.65rem 1rem calc(1rem + env(safe-area-inset-bottom));
+  padding: 0.65rem 1rem 1rem;
   border-radius: 1.4rem 1.4rem 0 0;
   background: #fff;
   box-shadow: 0 -1rem 3rem rgb(14 31 52 / 18%);
-  animation: sheet-in 0.26s ease-out both;
+  touch-action: none;
+  transition: translate 0.2s ease-out;
+  animation: more-menu-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
+.more-menu-sheet.dragging { transition: none; }
 
 .more-menu-handle {
   width: 2.7rem;
@@ -2475,6 +2487,20 @@ a {
   margin: 0 auto 0.85rem;
   border-radius: 999px;
   background: #c5cfdd;
+  cursor: grab;
+}
+
+.more-menu-sheet.dragging .more-menu-handle { cursor: grabbing; }
+
+@keyframes more-menu-in {
+  from {
+    opacity: 0.35;
+    clip-path: inset(100% 0 0 0 round 1.4rem 1.4rem 0 0);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0 round 1.4rem 1.4rem 0 0);
+  }
 }
 
 .more-menu-actions {
