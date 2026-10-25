@@ -6,9 +6,7 @@ import br.com.amcash.goal.dto.request.UpdateGoalPreferencesRequest;
 import br.com.amcash.goal.dto.request.UpdateGoalConfigurationRequest;
 import br.com.amcash.goal.dto.response.GoalResponse;
 import br.com.amcash.goal.entity.GoalMonthPreference;
-import br.com.amcash.goal.entity.MonthlyGoalConfiguration;
 import br.com.amcash.goal.repository.GoalMonthPreferenceRepository;
-import br.com.amcash.goal.repository.MonthlyGoalConfigurationRepository;
 import br.com.amcash.shared.exception.BadRequestException;
 import br.com.amcash.shared.exception.NotFoundException;
 import br.com.amcash.user.entity.User;
@@ -32,16 +30,14 @@ public class GoalService {
     private final MonthlyFinancialSnapshotService financialSnapshotService;
     private final UserRepository userRepository;
     private final GoalMonthPreferenceRepository goalPreferenceRepository;
-    private final MonthlyGoalConfigurationRepository configurationRepository;
     private final WorkService workService;
 
     public GoalService(MonthlyFinancialSnapshotService financialSnapshotService,
                        UserRepository userRepository, GoalMonthPreferenceRepository goalPreferenceRepository,
-                       MonthlyGoalConfigurationRepository configurationRepository, WorkService workService) {
+                       WorkService workService) {
         this.financialSnapshotService = financialSnapshotService;
         this.userRepository = userRepository;
         this.goalPreferenceRepository = goalPreferenceRepository;
-        this.configurationRepository = configurationRepository;
         this.workService = workService;
     }
 
@@ -86,53 +82,35 @@ public class GoalService {
     @Transactional
     public GoalResponse updateConfiguration(UUID userId, LocalDate referenceDate,
                                             UpdateGoalConfigurationRequest request) {
-        User user = findUser(userId);
-        MonthlyFinancialSnapshot financial = financialSnapshotService.load(userId, YearMonth.from(referenceDate));
-        BigDecimal consideredExpenses = request.includeExpenses() ? financial.pendingExpenses() : BigDecimal.ZERO;
-        if (consideredExpenses.add(request.additionalAmount()).signum() == 0) {
-            throw new BadRequestException("Informe um valor adicional ou mantenha as despesas do mês habilitadas");
-        }
-        MonthlyGoalConfiguration configuration = configurationRepository.findByUserId(userId)
-                .orElseGet(() -> new MonthlyGoalConfiguration(user, request.includeExpenses(), request.additionalAmount()));
-        configuration.update(request.includeExpenses(), request.additionalAmount());
-        configurationRepository.save(configuration);
+        // Mantém o contrato legado sem permitir que configurações personalizadas
+        // alterem o objetivo, cuja fonte de verdade agora é exclusivamente Finanças.
         return current(userId, referenceDate);
     }
 
     private GoalResponse calculate(UUID userId, LocalDate referenceDate, YearMonth month, Set<Integer> selectedDays) {
         MonthlyFinancialSnapshot financial = financialSnapshotService.load(userId, month);
-        GoalConfiguration configuration = configurationRepository.findByUserId(userId)
-                .map(value -> new GoalConfiguration(value.isIncludeExpenses(), value.getAdditionalAmount()))
-                .orElseGet(() -> new GoalConfiguration(true, BigDecimal.ZERO));
-        BigDecimal consideredExpenses = configuration.includeExpenses() ? financial.pendingExpenses() : BigDecimal.ZERO;
-        BigDecimal targetAmount = consideredExpenses.add(configuration.additionalAmount());
+        BigDecimal targetAmount = financial.pendingExpenses();
+        BigDecimal remaining = targetAmount.subtract(financial.income()).max(BigDecimal.ZERO);
         WorkProgressSnapshot work = workService.progress(userId, referenceDate, month);
-        BigDecimal realizedAmount = work.monthNet();
-        BigDecimal remaining = targetAmount.subtract(realizedAmount).max(BigDecimal.ZERO);
         boolean currentMonth = month.equals(YearMonth.from(referenceDate));
         boolean todaySelected = currentMonth && selectedDays.contains(referenceDate.getDayOfMonth());
 
-        BigDecimal distributionAmount = remaining;
         int availableDays = countRemainingSelectedDays(referenceDate, month, selectedDays);
-        BigDecimal dailyTarget = distributionAmount.signum() == 0 ? money(BigDecimal.ZERO)
-                : availableDays == 0 ? money(distributionAmount)
-                : money(distributionAmount.divide(BigDecimal.valueOf(availableDays), 2, RoundingMode.HALF_UP));
+        BigDecimal dailyTarget = remaining.signum() == 0 || availableDays == 0 ? money(BigDecimal.ZERO)
+                : money(remaining.divide(BigDecimal.valueOf(availableDays), 2, RoundingMode.HALF_UP));
         BigDecimal weeklyTarget = money(dailyTarget
                 .multiply(BigDecimal.valueOf(Math.max(1, Math.min(availableDays, 7))))
-                .min(distributionAmount));
-        BigDecimal resultBeforeToday = realizedAmount.subtract(work.todayNet());
-        BigDecimal remainingAtDayStart = targetAmount.subtract(resultBeforeToday).max(BigDecimal.ZERO);
-        BigDecimal todayTarget = availableDays == 0 ? remainingAtDayStart
-                : remainingAtDayStart.divide(BigDecimal.valueOf(availableDays), 2, RoundingMode.HALF_UP);
+                .min(remaining));
+        BigDecimal todayTarget = dailyTarget;
         BigDecimal todayRemaining = todayTarget.subtract(work.todayNet()).max(BigDecimal.ZERO);
         BigDecimal progress = targetAmount.signum() == 0 ? ONE_HUNDRED
-                : realizedAmount.max(BigDecimal.ZERO).multiply(ONE_HUNDRED)
+                : financial.income().max(BigDecimal.ZERO).multiply(ONE_HUNDRED)
                     .divide(targetAmount, 2, RoundingMode.HALF_UP).min(ONE_HUNDRED);
 
         return new GoalResponse(month.getYear(), month.getMonthValue(), referenceDate,
                 money(financial.income()), money(financial.totalExpenses()), money(financial.paidExpenses()),
-                money(financial.pendingExpenses()), configuration.includeExpenses(), money(consideredExpenses),
-                money(configuration.additionalAmount()), money(targetAmount), money(realizedAmount), money(remaining),
+                money(financial.pendingExpenses()), true, money(financial.pendingExpenses()),
+                money(BigDecimal.ZERO), money(targetAmount), money(financial.income()), money(remaining),
                 weeklyTarget, dailyTarget, money(todayTarget), money(todayRemaining),
                 availableDays, progress, remaining.signum() == 0, todaySelected,
                 selectedDays.stream().sorted().toList());
@@ -158,8 +136,5 @@ public class GoalService {
 
     private BigDecimal money(BigDecimal value) {
         return value.setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private record GoalConfiguration(boolean includeExpenses, BigDecimal additionalAmount) {
     }
 }

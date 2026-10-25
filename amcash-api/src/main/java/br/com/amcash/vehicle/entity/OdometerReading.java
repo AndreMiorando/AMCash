@@ -13,5 +13,6 @@ public class OdometerReading {
     @Column(name="created_at", nullable=false) private OffsetDateTime createdAt;
     protected OdometerReading() {}
     public OdometerReading(Vehicle vehicle, BigDecimal mileage, LocalDate readingDate, boolean correction){id=UUID.randomUUID();this.vehicle=vehicle;this.mileage=mileage;this.readingDate=readingDate;this.correction=correction;createdAt=OffsetDateTime.now(ZoneOffset.UTC);}
-    public UUID getId(){return id;} public BigDecimal getMileage(){return mileage;} public LocalDate getReadingDate(){return readingDate;} public boolean isCorrection(){return correction;}
+    public void update(BigDecimal mileage,LocalDate readingDate,boolean correction){this.mileage=mileage;this.readingDate=readingDate;this.correction=correction;}
+    public UUID getId(){return id;} public Vehicle getVehicle(){return vehicle;} public BigDecimal getMileage(){return mileage;} public LocalDate getReadingDate(){return readingDate;} public boolean isCorrection(){return correction;}
 }

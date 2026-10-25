@@ -42,7 +42,7 @@ public class HomeService {
         long pendingExpenseCount = entryRepository.countByUserIdAndTypeAndPaidFalseAndDueDateBetween(
                 userId, EntryType.EXPENSE, monthStart, monthEnd);
         HomeResponse.GoalSummary goalSummary = new HomeResponse.GoalSummary(
-                PrimaryGoalType.EXPENSES, "Meta mensal", CustomGoalPeriod.MONTHLY,
+                PrimaryGoalType.EXPENSES, "Objetivo mensal", CustomGoalPeriod.MONTHLY,
                 goal.targetAmount(), goal.todayTarget(), goal.remainingAmount(), goal.covered(), goal.todaySelected());
         return new HomeResponse(date, hasFinancialEntries,
                 new HomeResponse.FinancialSummary(
