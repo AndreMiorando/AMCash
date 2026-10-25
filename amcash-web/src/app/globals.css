@@ -1159,7 +1159,6 @@ a {
   font: inherit;
   font-size: 0.74rem;
   font-weight: 650;
-  text-transform: capitalize;
   cursor: pointer;
   transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
 }
@@ -2135,7 +2134,6 @@ a {
   font-weight: 700;
   text-align: center;
   text-overflow: ellipsis;
-  text-transform: capitalize;
   white-space: nowrap;
 }
 
@@ -2155,14 +2153,13 @@ a {
   color: #183253;
   font-size: 0.72rem;
   font-weight: 700;
-  text-transform: capitalize;
 }
 
 .work-period-selector .work-period-date-picker .date-input-button:hover,
 .work-period-selector .work-period-date-picker .date-input-button:focus-visible {
   border: 0;
-  background: #eef4ff;
-  box-shadow: none;
+  background: transparent;
+  box-shadow: var(--focus-ring);
   color: var(--brand-blue);
 }
 
@@ -2233,6 +2230,67 @@ a {
 .work-metric-copy { display: flex; min-width: 0; flex-direction: column; }
 .work-metrics strong { margin-top: 0.28rem; }
 .work-metrics strong.cost { color: #f05469; }
+
+.work-period-breakdown {
+  margin-top: var(--section-stack-gap);
+  padding: 1rem;
+  border: 1px solid #e2eaf4;
+  border-radius: 1.15rem;
+  background: #fff;
+  box-shadow: 0 0.4rem 1.2rem rgb(38 68 104 / 5%);
+}
+
+.work-breakdown-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.work-breakdown-title > div > span {
+  color: #8da0b7;
+  font-size: 0.56rem;
+  font-weight: 780;
+  letter-spacing: 0.16em;
+}
+
+.work-breakdown-title h2 { margin: 0.22rem 0 0; font-size: 0.94rem; }
+
+.work-breakdown-columns {
+  display: grid;
+  margin-top: 0.85rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.2rem;
+}
+
+.work-breakdown-group + .work-breakdown-group { padding-left: 1.2rem; border-left: 1px solid var(--border-subtle); }
+.work-breakdown-group > header { display: flex; min-height: 1.5rem; align-items: center; justify-content: space-between; gap: 0.6rem; color: #71859b; font-size: 0.58rem; font-weight: 750; }
+.work-breakdown-group > p { margin: 0.85rem 0 0; color: var(--text-muted); font-size: 0.62rem; }
+
+.work-breakdown-row { padding: 0.65rem 0; border-top: 1px solid var(--border-subtle); }
+.work-breakdown-row-heading { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 0.65rem; }
+.work-breakdown-row-heading > strong { color: var(--text-primary); font-size: 0.68rem; white-space: nowrap; }
+.work-breakdown-name { display: flex; min-width: 0; align-items: center; gap: 0.45rem; }
+.work-breakdown-name > span { overflow: hidden; color: #526b86; font-size: 0.64rem; font-weight: 680; text-overflow: ellipsis; white-space: nowrap; }
+
+.work-breakdown-source-logo,
+.work-breakdown-source-mark,
+.work-breakdown-cost-icon { width: 1.65rem; height: 1.65rem; flex: 0 0 auto; border-radius: 0.48rem; }
+.work-breakdown-source-logo { display: block; object-fit: contain; }
+.work-breakdown-source-logo.uber { background: #111; }
+.work-breakdown-source-logo.ninety-nine { background: #ffd720; }
+.work-breakdown-source-mark { display: grid; place-items: center; background: #eaf2ff; color: var(--brand-blue); font-size: 0.64rem; font-style: normal; font-weight: 800; }
+.work-breakdown-cost-icon { display: grid; place-items: center; background: var(--expense-surface); color: #f24f68; }
+.work-breakdown-cost-icon svg { width: 0.95rem; height: 0.95rem; }
+
+.work-breakdown-progress-heading { display: flex; margin-top: 0.28rem; align-items: center; justify-content: flex-end; color: #8a9caf; font-size: 0.54rem; }
+.work-breakdown-progress-heading b { color: var(--brand-blue); font-size: 0.56rem; }
+.work-breakdown-group.cost .work-breakdown-progress-heading b { color: #ef5368; }
+.work-breakdown-progress { height: 0.3rem; margin-top: 0.12rem; overflow: hidden; border-radius: 999px; background: #edf2f8; }
+.work-breakdown-progress > i { display: block; height: 100%; border-radius: inherit; background: var(--brand-blue); }
+.work-breakdown-group.cost .work-breakdown-progress > i { background: #ef5368; }
+.work-breakdown-toggle.ui-button { min-height: 2.35rem; margin-top: 0.45rem; border-color: #cfe0fb; border-radius: 0.7rem; background: #f8fbff; color: var(--brand-blue); font-size: 0.62rem; box-shadow: none; }
+.work-breakdown-toggle.ui-button:hover { background: #f1f6ff; }
 
 .work-days-section {
   margin-top: var(--section-stack-gap);
@@ -2434,6 +2492,8 @@ a {
 }
 
 @media (max-width: 30rem) {
+  .work-breakdown-columns { grid-template-columns: 1fr; gap: 0; }
+  .work-breakdown-group + .work-breakdown-group { padding: 0.75rem 0 0; border-top: 1px solid var(--border-subtle); border-left: 0; }
   .work-day-row { min-height: 4.75rem; padding: 0.55rem; gap: 0.48rem; }
   .work-day-date { width: 2.4rem; height: 2.8rem; border-radius: 0.68rem; }
   .work-day-date b { font-size: 0.92rem; }
@@ -2713,7 +2773,7 @@ a {
 }
 
 .forecast-month-name { display: flex; min-width: 0; flex-direction: column; }
-.forecast-month-name strong { overflow: hidden; color: #173557; font-size: 0.75rem; text-overflow: ellipsis; text-transform: capitalize; white-space: nowrap; }
+.forecast-month-name strong { overflow: hidden; color: #173557; font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; }
 .forecast-month-name small { margin-top: 0.16rem; color: #8da0b5; font-size: 0.54rem; }
 
 .forecast-free {
@@ -4140,7 +4200,6 @@ a {
   font-size: 0.88rem;
   text-align: center;
   text-overflow: ellipsis;
-  text-transform: capitalize;
   white-space: nowrap;
 }
 

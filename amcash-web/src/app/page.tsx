@@ -37,6 +37,7 @@ import SegmentedControl from "@/app/components/ui/SegmentedControl";
 import SelectPickerInput from "@/app/components/ui/SelectPickerInput";
 import { KpiLabel, KpiValue, PrimaryKpiCard, SecondaryKpiGroup, SecondaryKpiItem } from "@/app/components/ui/Kpi";
 import { completeCurrencyInput, maskCurrencyInput, parseCurrencyInput } from "@/lib/currency";
+import { formatDateRange, formatLongDate, formatMonthYear } from "@/lib/date";
 
 type GoogleCredentialResponse = {
   credential?: string;
@@ -349,16 +350,12 @@ function formatCurrency(value: number) {
 }
 
 function formatDate(date: string) {
-  return new Intl.DateTimeFormat("pt-BR").format(new Date(`${date}T12:00:00`));
+  return formatLongDate(date);
 }
 
 function formatTransactionGroupDate(date: string) {
   const parsed = new Date(`${date}T12:00:00`);
-  const calendarDate = new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  }).format(parsed);
+  const calendarDate = formatLongDate(parsed);
   const weekday = new Intl.DateTimeFormat("pt-BR", { weekday: "long" }).format(parsed);
   return { calendarDate, weekday };
 }
@@ -1071,8 +1068,7 @@ function Dashboard({
     month: "long",
     year: "numeric",
   });
-  const monthFormatter = new Intl.DateTimeFormat("pt-BR", { month: "long" });
-  const monthLabel = `${monthFormatter.format(selectedMonth)} / ${selectedMonth.getFullYear()}`;
+  const monthLabel = formatMonthYear(selectedMonth);
   const previousMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() - 1, 1);
   const nextMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 1);
   const today = new Date();
@@ -1689,9 +1685,9 @@ function RadarScreen({ onHome, onFinance, onGoals, onWork, onReady, showWorkFeat
   const lowestBalance = timeline.reduce<(typeof timeline)[number] | undefined>((lowest, period) => (
     !lowest || Number(period.freeBalance) < Number(lowest.freeBalance) ? period : lowest
   ), undefined);
-  const monthName = (year: number, month: number, style: "long" | "short" = "long") => (
-    new Intl.DateTimeFormat("pt-BR", { month: style, year: "numeric" }).format(new Date(year, month - 1, 1))
-  );
+  const monthName = (year: number, month: number, style: "long" | "short" = "long") => style === "long"
+    ? formatMonthYear(new Date(year, month - 1, 1))
+    : new Intl.DateTimeFormat("pt-BR", { month: style, year: "numeric" }).format(new Date(year, month - 1, 1));
   const signedCurrency = (value: number) => `${value < 0 ? "- " : "+ "}${formatCurrency(value)}`;
   const balanceStatus = (value: number) => value < 0 ? "Atenção" : value === 0 ? "No limite" : "Saldo positivo";
 
@@ -1919,10 +1915,7 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, onReady }: { onHome: 
     void saveGoalDays(targetGoal, targetGoal.selectedDays.filter((day) => !remainingDays.has(day)));
   }
 
-  const goalMonthLabel = (targetGoal: ApiGoal) => (
-    new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" })
-      .format(new Date(targetGoal.year, targetGoal.month - 1, 1))
-  );
+  const goalMonthLabel = (targetGoal: ApiGoal) => formatMonthYear(new Date(targetGoal.year, targetGoal.month - 1, 1));
   const progress = Math.max(0, Math.min(100, Number(goal?.progressPercentage ?? 0)));
   function renderGoalDetails(targetGoal: ApiGoal) {
     const calendarCells = goalCalendarCells(targetGoal.year, targetGoal.month, referenceDate);
@@ -2519,7 +2512,7 @@ function MileageSuggestionDialog({vehicleName,data,preferredSource,loading,error
   return <div className="sheet-backdrop mileage-suggestion-backdrop" role="presentation" onMouseDown={()=>!loading&&onClose()}><section className="mileage-suggestion-dialog" role="dialog" aria-modal="true" aria-labelledby="mileage-suggestion-title" onMouseDown={event=>event.stopPropagation()}>
     <div className="mileage-suggestion-icon"><Image src="/vehicle-menu-icon.svg" width={28} height={28} alt=""/></div>
     <span>QUILOMETRAGEM MENSAL</span><h2 id="mileage-suggestion-title">Atualizar {vehicleName}?</h2><p>Configurado atualmente: <strong>{new Intl.NumberFormat("pt-BR",{maximumFractionDigits:0}).format(data.configuredMileage)} km/mês</strong></p>
-    <div className="mileage-suggestion-options">{data.options.map(option=><button type="button" disabled={!option.available} className={selectedSource===option.source?"selected":""} aria-pressed={selectedSource===option.source} key={option.source} onClick={()=>setSelectedSource(option.source)}><span><strong>{option.source==="ODOMETER"?"Uso total do veículo":"Somente trabalho"}</strong><small>{option.available&&option.periodStart&&option.periodEnd?`${new Date(`${option.periodStart}T12:00:00`).toLocaleDateString("pt-BR")} a ${new Date(`${option.periodEnd}T12:00:00`).toLocaleDateString("pt-BR")}`:option.unavailableReason}</small></span><b>{option.monthlyMileage==null?"Indisponível":`${new Intl.NumberFormat("pt-BR",{maximumFractionDigits:0}).format(option.monthlyMileage)} km`}</b></button>)}</div>
+    <div className="mileage-suggestion-options">{data.options.map(option=><button type="button" disabled={!option.available} className={selectedSource===option.source?"selected":""} aria-pressed={selectedSource===option.source} key={option.source} onClick={()=>setSelectedSource(option.source)}><span><strong>{option.source==="ODOMETER"?"Uso total do veículo":"Somente trabalho"}</strong><small>{option.available&&option.periodStart&&option.periodEnd?formatDateRange(option.periodStart,option.periodEnd):option.unavailableReason}</small></span><b>{option.monthlyMileage==null?"Indisponível":`${new Intl.NumberFormat("pt-BR",{maximumFractionDigits:0}).format(option.monthlyMileage)} km`}</b></button>)}</div>
     {error&&<p className="work-error" role="alert">{error}</p>}
     <Button type="button" fullWidth loading={loading} disabled={!selected?.available||selected.monthlyMileage==null} onClick={()=>selected?.monthlyMileage!=null&&onUpdate(selected.monthlyMileage,selected.source)}>Atualizar quilometragem</Button>
     <button type="button" className="mileage-review" disabled={loading} onClick={onReview}>Revisar configuração</button>
