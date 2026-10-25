@@ -2400,7 +2400,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
               <strong>Hoje você não planejou trabalhar</strong>
               <p>Aproveite o descanso. Se os planos mudarem, inclua o dia de hoje no seu planejamento.</p>
               <button type="button" onClick={onGoals}>Alterar dias em Objetivos <Icon name="forward" /></button>
-            </div> : dailyGoalCompleted ? <div className="daily-goal-completed">
+            </div> : dailyGoalCompleted ? <div className="daily-goal-completed-content">
               <i className="daily-goal-confetti confetti-one" aria-hidden="true" />
               <i className="daily-goal-confetti confetti-two" aria-hidden="true" />
               <i className="daily-goal-confetti confetti-three" aria-hidden="true" />

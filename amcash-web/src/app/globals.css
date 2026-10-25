@@ -1792,7 +1792,7 @@ a {
 .daily-goal-values > div > span { display: grid; gap: 0.05rem; }
 .daily-goal-values small { color: rgb(255 255 255 / 70%); font-size: 0.56rem; }
 .daily-goal-values b { font-size: 0.72rem; }
-.daily-goal-completed { position: relative; z-index: 1; height: 100%; }
+.daily-goal-completed-content { position: relative; z-index: 1; height: 100%; }
 .daily-goal-completed-values { display: flex; margin-top: 0.48rem; align-items: center; justify-content: space-between; gap: 0.75rem; }
 .daily-goal-completed-values > span { display: grid; gap: 0.18rem; }
 .daily-goal-completed-values > span > strong { font-size: 2rem; letter-spacing: -0.055em; }
