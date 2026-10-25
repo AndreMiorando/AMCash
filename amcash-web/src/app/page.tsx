@@ -264,7 +264,8 @@ function BottomNavigation({ active, loading = false, onHome, onFinance, onRadar,
   const onVehicles = useContext(VehicleNavigationContext);
   const onOperationalCost = useContext(OperationalCostNavigationContext);
   const loadingTab = pendingTab ?? (loading ? active : null);
-  const moreIsActive = active === "goals" || active === "radar" || active === "vehicles" || active === "operational-cost";
+  const moreContainsActiveTab = active === "goals" || active === "radar" || active === "vehicles" || active === "operational-cost";
+  const moreIsActive = isMoreOpen || moreContainsActiveTab;
   const moreIsLoading = loadingTab === "goals" || loadingTab === "radar" || loadingTab === "vehicles" || loadingTab === "operational-cost";
   const navigationIcon = (tab: "home" | "finance" | "radar" | "goals" | "work", icon: IconName) => (
     loadingTab === tab ? <span className="nav-icon-loader" role="status" aria-label="Carregando página" /> : <Icon name={icon} />
@@ -300,19 +301,19 @@ function BottomNavigation({ active, loading = false, onHome, onFinance, onRadar,
   return (
     <>
     <nav className="bottom-nav" aria-label="Navegação principal">
-      <button type="button" className={`nav-item${active === "home" ? " active" : ""}`} onClick={onHome} aria-current={active === "home" ? "page" : undefined} aria-busy={loadingTab === "home"}>
+      <button type="button" className={`nav-item${!isMoreOpen && active === "home" ? " active" : ""}`} onClick={onHome} aria-current={active === "home" ? "page" : undefined} aria-busy={loadingTab === "home"}>
         {navigationIcon("home", "home")}
         <span>Home</span>
       </button>
-      <button type="button" className={`nav-item${active === "finance" ? " active" : ""}`} onClick={onFinance} aria-current={active === "finance" ? "page" : undefined} aria-busy={loadingTab === "finance"}>
+      <button type="button" className={`nav-item${!isMoreOpen && active === "finance" ? " active" : ""}`} onClick={onFinance} aria-current={active === "finance" ? "page" : undefined} aria-busy={loadingTab === "finance"}>
         {navigationIcon("finance", "wallet")}
         <span>Finanças</span>
       </button>
-      {showWorkFeatures && <button type="button" className={`nav-item${active === "work" ? " active" : ""}`} onClick={onWork} aria-current={active === "work" ? "page" : undefined} aria-busy={loadingTab === "work"}>
+      {showWorkFeatures && <button type="button" className={`nav-item${!isMoreOpen && active === "work" ? " active" : ""}`} onClick={onWork} aria-current={active === "work" ? "page" : undefined} aria-busy={loadingTab === "work"}>
         {navigationIcon("work", "work")}
         <span>Resultado</span>
       </button>}
-      <button type="button" className={`nav-item${moreIsActive ? " active" : ""}`} onClick={() => setIsMoreOpen(true)} aria-current={moreIsActive ? "page" : undefined} aria-expanded={isMoreOpen} aria-haspopup="dialog" aria-busy={moreIsLoading}>
+      <button type="button" className={`nav-item${moreIsActive ? " active" : ""}`} onClick={() => setIsMoreOpen((current) => !current)} aria-current={moreContainsActiveTab ? "page" : undefined} aria-expanded={isMoreOpen} aria-haspopup="dialog" aria-busy={moreIsLoading}>
         {moreIsLoading ? <span className="nav-icon-loader" role="status" aria-label="Carregando página" /> : <svg className="nav-more-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="7" cy="7" r="2.25" /><circle cx="17" cy="7" r="2.25" /><circle cx="7" cy="17" r="2.25" /><circle cx="17" cy="17" r="2.25" /></svg>}
         <span>Mais</span>
       </button>
@@ -1922,7 +1923,6 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, onReady }: { onHome: 
     new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" })
       .format(new Date(targetGoal.year, targetGoal.month - 1, 1))
   );
-  const monthLabel = goal ? goalMonthLabel(goal) : "mês atual";
   const progress = Math.max(0, Math.min(100, Number(goal?.progressPercentage ?? 0)));
   function renderGoalDetails(targetGoal: ApiGoal) {
     const calendarCells = goalCalendarCells(targetGoal.year, targetGoal.month, referenceDate);
@@ -1992,11 +1992,12 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, onReady }: { onHome: 
 
         {isLoading ? null : goal && (
           <>
-            <PrimaryKpiCard className={`goal-main-card${goal.covered && Number(goal.targetAmount) > 0 ? " covered" : ""}`}>
-              {goal.covered && Number(goal.targetAmount) > 0 ? (
+            <PrimaryKpiCard className={`goal-main-card${goal.covered ? " monthly-goal-completed" : ""}`}>
+              {goal.covered ? (
                 <>
-                  <span className="goal-covered-icon"><Icon name="check" /></span>
-                  <div><span>{monthLabel}</span><h2>Objetivo concluído</h2><p>O saldo financeiro do mês está coberto.</p></div>
+                  <span>OBJETIVO MENSAL</span>
+                  <strong>Objetivo concluído</strong>
+                  <p>O saldo financeiro deste mês está coberto.</p>
                 </>
               ) : (
                 <>
