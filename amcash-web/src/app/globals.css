@@ -1773,6 +1773,11 @@ a {
 .daily-goal-card.day-off,
 .daily-goal-card.covered { padding: 1.25rem; }
 .daily-goal-card.covered { background: linear-gradient(145deg, #12ae77, #0b9d6b); }
+.daily-goal-card.daily-completed { position: relative; overflow: hidden; }
+.daily-goal-card.daily-completed::before,
+.daily-goal-card.daily-completed::after { position: absolute; border-radius: 50%; background: rgb(255 255 255 / 5%); content: ""; pointer-events: none; }
+.daily-goal-card.daily-completed::before { width: 8rem; height: 8rem; right: -3.5rem; top: -4rem; }
+.daily-goal-card.daily-completed::after { width: 7rem; height: 7rem; left: 44%; bottom: -5.5rem; }
 .daily-goal-card > span { font-size: 0.62rem; font-weight: 800; letter-spacing: 0.13em; opacity: 0.8; }
 .daily-goal-card > strong { display: block; margin-top: 0.45rem; font-size: 2rem; letter-spacing: -0.055em; }
 .daily-goal-card > p { margin: 0.15rem 0 0; color: rgb(255 255 255 / 78%); font-size: 0.76rem; line-height: 1.45; }
@@ -1787,6 +1792,24 @@ a {
 .daily-goal-values > div > span { display: grid; gap: 0.05rem; }
 .daily-goal-values small { color: rgb(255 255 255 / 70%); font-size: 0.56rem; }
 .daily-goal-values b { font-size: 0.72rem; }
+.daily-goal-completed { position: relative; z-index: 1; height: 100%; }
+.daily-goal-completed-values { display: flex; margin-top: 0.48rem; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.daily-goal-completed-values > span { display: grid; gap: 0.18rem; }
+.daily-goal-completed-values > span > strong { font-size: 2rem; letter-spacing: -0.055em; }
+.daily-goal-completed-values > span > small { display: flex; align-items: center; gap: 0.32rem; color: rgb(255 255 255 / 88%); font-size: 0.72rem; font-weight: 700; }
+.daily-goal-completed-values > span > small > i { display: grid; width: 1.05rem; height: 1.05rem; place-items: center; border-radius: 50%; background: #8df0a4; color: #0961e9; }
+.daily-goal-completed-values > span > small svg { width: 0.68rem; }
+.daily-goal-completed-values > div { display: flex; min-width: 7.25rem; padding: 0.45rem 0.65rem; align-items: center; gap: 0.48rem; border: 1px solid rgb(255 255 255 / 25%); border-radius: 0.75rem; background: rgb(0 47 145 / 24%); }
+.daily-goal-completed-values > div > i { display: grid; width: 1.45rem; height: 1.45rem; flex: 0 0 auto; place-items: center; border-radius: 50%; background: #fff; color: #0961e9; }
+.daily-goal-completed-values > div > i svg { width: 0.78rem; }
+.daily-goal-completed-values > div > span { display: grid; gap: 0.05rem; }
+.daily-goal-completed-values > div small { color: rgb(255 255 255 / 78%); font-size: 0.56rem; }
+.daily-goal-completed-values > div b { font-size: 0.72rem; }
+.daily-goal-confetti { position: absolute; z-index: -1; display: block; width: 0.28rem; height: 0.52rem; border-radius: 0.05rem; background: #86f4a4; transform: rotate(30deg); }
+.daily-goal-confetti.confetti-one { left: 49%; top: 1.8rem; }
+.daily-goal-confetti.confetti-two { left: 63%; top: 3.1rem; background: #60a4ff; transform: rotate(-38deg); }
+.daily-goal-confetti.confetti-three { right: 25%; top: 1rem; transform: rotate(22deg); }
+.daily-goal-confetti.confetti-four { right: 17%; bottom: 1.9rem; transform: rotate(-42deg); }
 .daily-goal-progress-label { display: flex; margin-top: 0.5rem; align-items: center; justify-content: flex-end; color: rgb(255 255 255 / 82%); font-size: 0.64rem; }
 .daily-goal-progress-label b { color: #fff; }
 .daily-goal-progress-label b.negative { color: #ffd7de; }

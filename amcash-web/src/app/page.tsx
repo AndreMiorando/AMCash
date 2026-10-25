@@ -2283,13 +2283,11 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   const savedHomeCostTotal = savedHomeCosts.reduce((total, item) => total + Number(item.amount), 0);
   const resultOutsideHomeFields = Number(workOverview?.summary.netEarnings ?? 0) - savedEditableEarnings + savedHomeCostTotal;
   const projectedTodayNet = resultOutsideHomeFields + netValue;
-  const todayResult = projectedTodayNet;
-  const dailyRemaining = Math.max(0, Number(summary?.goal.dailyTarget ?? 0)
-    - todayResult);
   const dailyTarget = Number(summary?.goal.dailyTarget ?? 0);
-  const dailyProgress = dailyTarget > 0
-    ? Math.min(100, Math.max(0, Math.round((Math.max(0, todayResult) / dailyTarget) * 100)))
-    : 0;
+  const dailyRemaining = Number(summary?.goal.todayRemaining ?? 0);
+  const dailyProgress = Number(summary?.goal.progressPercentage ?? 0);
+  const dailyGoalCompleted = dailyTarget > 0 && Boolean(summary?.goal.achieved);
+  const todayGross = Number(summary?.goal.todayGross ?? 0);
   const showEmptyState = summary?.hasFinancialEntries === false && Number(summary?.goal.targetAmount ?? 0) === 0;
   const additionalEarningsAreValid = additionalEarnings.every((item) => item.source.trim().length > 0 && (parseCurrencyInput(item.amount) || 0) > 0);
   const hasWorkChanges = initialWorkSignature !== "" && initialWorkSignature !== homeWorkSignature({ uber, ninetyNine, kilometers, additionalEarnings, costs: homeCosts });
@@ -2396,13 +2394,25 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
             </div>
           </section> : <>
           {usageProfile !== "PERSONAL" && <>
-          <PrimaryKpiCard className={`daily-goal-card${!summary.goal.todaySelected ? " day-off" : summary.goal.covered ? " covered" : ""}`}>
+          <PrimaryKpiCard className={`daily-goal-card${!summary.goal.todaySelected ? " day-off" : dailyGoalCompleted ? " daily-completed" : summary.goal.covered && dailyTarget === 0 ? " covered" : ""}`}>
             {!summary.goal.todaySelected ? <div className="daily-goal-day-off">
               <span>DIA DE FOLGA</span>
               <strong>Hoje você não planejou trabalhar</strong>
               <p>Aproveite o descanso. Se os planos mudarem, inclua o dia de hoje no seu planejamento.</p>
               <button type="button" onClick={onGoals}>Alterar dias em Objetivos <Icon name="forward" /></button>
-            </div> : summary.goal.covered ? <>
+            </div> : dailyGoalCompleted ? <div className="daily-goal-completed">
+              <i className="daily-goal-confetti confetti-one" aria-hidden="true" />
+              <i className="daily-goal-confetti confetti-two" aria-hidden="true" />
+              <i className="daily-goal-confetti confetti-three" aria-hidden="true" />
+              <i className="daily-goal-confetti confetti-four" aria-hidden="true" />
+              <div className="daily-goal-title"><span><Icon name="target" />OBJETIVO DE HOJE</span></div>
+              <div className="daily-goal-completed-values">
+                <span><strong>{formatCurrency(dailyTarget)}</strong><small><i><Icon name="check" /></i>Meta concluída!</small></span>
+                <div><i><Icon name="check" /></i><span><small>Concluído</small><b>{formatCurrency(todayGross)}</b></span></div>
+              </div>
+              <div className="daily-goal-progress-label"><strong>100%</strong></div>
+              <div className="daily-progress-track" aria-label="100% do objetivo de hoje"><i style={{ width: "100%" }} /></div>
+            </div> : summary.goal.covered && dailyTarget === 0 ? <>
               <span>OBJETIVO MENSAL</span>
               <strong>Objetivo concluído</strong><p>O saldo financeiro deste mês está coberto.</p>
             </> : <>
