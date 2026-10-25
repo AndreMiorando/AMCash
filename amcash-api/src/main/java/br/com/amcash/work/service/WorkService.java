@@ -1,5 +1,9 @@
 package br.com.amcash.work.service;
 
+import br.com.amcash.operationalcost.entity.MaintenanceCalculationMethod;
+import br.com.amcash.operationalcost.entity.OperationalCostConfiguration;
+import br.com.amcash.operationalcost.repository.OperationalCostConfigurationRepository;
+import br.com.amcash.operationalcost.service.OperationalCostService;
 import br.com.amcash.shared.exception.BadRequestException;
 import br.com.amcash.shared.exception.NotFoundException;
 import br.com.amcash.user.entity.User;
@@ -13,6 +17,7 @@ import br.com.amcash.work.dto.response.WorkCostResponse;
 import br.com.amcash.work.dto.response.WorkComparisonResponse;
 import br.com.amcash.work.dto.response.WorkDayResponse;
 import br.com.amcash.work.dto.response.WorkEarningResponse;
+import br.com.amcash.work.dto.response.WorkEstimatedSummaryResponse;
 import br.com.amcash.work.dto.response.WorkOverviewResponse;
 import br.com.amcash.work.dto.response.WorkSummaryResponse;
 import br.com.amcash.work.entity.WorkCost;
@@ -40,6 +45,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class WorkService {
@@ -50,14 +57,20 @@ public class WorkService {
     private final WorkCostRepository workCostRepository;
     private final UserRepository userRepository;
     private final VehicleRepository vehicleRepository;
+    private final OperationalCostConfigurationRepository operationalCostConfigurations;
+    private final OperationalCostService operationalCostService;
 
     public WorkService(WorkDayRepository workDayRepository, WorkEarningRepository workEarningRepository,
-                       WorkCostRepository workCostRepository, UserRepository userRepository,VehicleRepository vehicleRepository) {
+                       WorkCostRepository workCostRepository, UserRepository userRepository, VehicleRepository vehicleRepository,
+                       OperationalCostConfigurationRepository operationalCostConfigurations,
+                       OperationalCostService operationalCostService) {
         this.workDayRepository = workDayRepository;
         this.workEarningRepository = workEarningRepository;
         this.workCostRepository = workCostRepository;
         this.userRepository = userRepository;
         this.vehicleRepository=vehicleRepository;
+        this.operationalCostConfigurations = operationalCostConfigurations;
+        this.operationalCostService = operationalCostService;
     }
 
     @Transactional(readOnly = true)
@@ -73,8 +86,9 @@ public class WorkService {
                 .findAllByUserIdAndDateBetweenOrderByDateDescCreatedAtDesc(userId, start, end)
                 .stream().map(this::toResponse).toList();
         WorkSummaryResponse summary = summarize(dayResponses, costResponses);
+        WorkEstimatedSummaryResponse estimatedSummary = estimate(userId, days, costResponses, summary);
         return new WorkOverviewResponse(period.name(), referenceDate, start, end,
-                summary, comparison(userId, referenceDate, period, summary), dayResponses, costResponses);
+                summary, estimatedSummary, comparison(userId, referenceDate, period, summary), dayResponses, costResponses);
     }
 
     @Transactional(readOnly = true)
@@ -200,6 +214,65 @@ public class WorkService {
         return new WorkSummaryResponse(money(gross), money(fuel), money(other), money(costs),
                 money(gross.subtract(costs)), kilometers.setScale(2, RoundingMode.HALF_UP),
                 perKilometer, days.size());
+    }
+
+    private WorkEstimatedSummaryResponse estimate(UUID userId, List<WorkDay> days,
+                                                   List<WorkCostResponse> costs,
+                                                   WorkSummaryResponse registered) {
+        if (days.isEmpty() && costs.isEmpty()) {
+            return unavailableEstimate("Registre um dia de trabalho para calcular a estimativa operacional.");
+        }
+        if (days.stream().anyMatch(day -> day.getVehicle() == null)) {
+            return unavailableEstimate("Associe um veículo aos registros do período para calcular a estimativa.");
+        }
+        Map<LocalDate, WorkDay> daysByDate = days.stream()
+                .collect(Collectors.toMap(WorkDay::getDate, Function.identity()));
+        if (costs.stream().anyMatch(cost -> !daysByDate.containsKey(cost.date()))) {
+            return unavailableEstimate("Há custos sem um dia de trabalho associado no período.");
+        }
+        Map<UUID, OperationalCostConfiguration> configurations = operationalCostConfigurations
+                .findAllByUserIdOrderByUpdatedAtDesc(userId).stream()
+                .collect(Collectors.toMap(item -> item.getVehicle().getId(), Function.identity()));
+        Set<UUID> vehicleIds = days.stream().map(day -> day.getVehicle().getId()).collect(Collectors.toSet());
+        if (!configurations.keySet().containsAll(vehicleIds)) {
+            return unavailableEstimate("Configure o custo operacional de todos os veículos usados no período.");
+        }
+
+        Map<UUID, BigDecimal> costPerKilometer = configurations.entrySet().stream()
+                .filter(entry -> vehicleIds.contains(entry.getKey()))
+                .collect(Collectors.toMap(Map.Entry::getKey,
+                        entry -> operationalCostService.calculation(entry.getValue()).cashCostPerKm()));
+        BigDecimal operationalCost = BigDecimal.ZERO;
+        for (WorkDay day : days) {
+            operationalCost = operationalCost.add(day.getKilometers().multiply(
+                    costPerKilometer.get(day.getVehicle().getId())));
+        }
+        BigDecimal additionalCosts = costs.stream()
+                .filter(cost -> !covered(cost.category(), configurations.get(daysByDate.get(cost.date()).getVehicle().getId())))
+                .map(WorkCostResponse::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalCosts = money(operationalCost.add(additionalCosts));
+        BigDecimal net = money(registered.grossEarnings().subtract(totalCosts));
+        BigDecimal resultPerKilometer = registered.kilometers().signum() == 0
+                ? ZERO : net.divide(registered.kilometers(), 2, RoundingMode.HALF_UP);
+        return new WorkEstimatedSummaryResponse(true, null, registered.grossEarnings(), money(operationalCost),
+                money(additionalCosts), totalCosts, net, registered.kilometers(),
+                registered.earningsPerKilometer(), resultPerKilometer);
+    }
+
+    private boolean covered(WorkCostCategory category, OperationalCostConfiguration configuration) {
+        if (category == WorkCostCategory.FUEL) return true;
+        if (category == WorkCostCategory.MAINTENANCE
+                && configuration.getMaintenanceMethod() == MaintenanceCalculationMethod.MANUAL
+                && configuration.getAnnualMaintenanceEstimate() != null
+                && configuration.getAnnualMaintenanceEstimate().signum() > 0) return true;
+        if (category == WorkCostCategory.OTHER) return false;
+        return configuration.getCustomFixedCosts().stream()
+                .anyMatch(item -> item.getAmount().signum() > 0 && item.getWorkCostCategory() == category);
+    }
+
+    private WorkEstimatedSummaryResponse unavailableEstimate(String reason) {
+        return new WorkEstimatedSummaryResponse(false, reason, null, null, null, null, null, null, null, null);
     }
 
     private WorkComparisonResponse comparison(UUID userId, LocalDate referenceDate, WorkPeriod period,

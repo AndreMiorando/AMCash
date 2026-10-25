@@ -31,6 +31,11 @@ const legacyHomeCostDescription = "Custo do dia — Home";
 
 const periodLabels: Record<ApiWorkPeriod, string> = { DAY: "Dia", WEEK: "Semana", MONTH: "Mês" };
 const periodOptions = (Object.keys(periodLabels) as ApiWorkPeriod[]).map((value) => ({ value, label: periodLabels[value] }));
+type ResultMode = "REGISTERED" | "ESTIMATED";
+const resultModeOptions: { value: ResultMode; label: string }[] = [
+  { value: "REGISTERED", label: "Registrado" },
+  { value: "ESTIMATED", label: "Estimado" },
+];
 function parseDate(value: string) { return new Date(`${value}T12:00:00`); }
 function currency(value: number) { return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value); }
 function decimal(value: number) { return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 }).format(value); }
@@ -78,14 +83,17 @@ function periodTitle(overview: ApiWorkOverview | null, period: ApiWorkPeriod, re
   return new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(parseDate(referenceDate));
 }
 
-export default function WorkScreen({ navigation, onReady }: {
+export default function WorkScreen({ navigation, onReady, onOperationalCost }: {
   navigation: (loading: boolean) => ReactNode;
   onReady?: () => void;
+  onOperationalCost: () => void;
 }) {
   const [period, setPeriod] = useState<ApiWorkPeriod>("WEEK");
   const [referenceDate, setReferenceDate] = useState(() => dateToInputValue(new Date()));
   const [overview, setOverview] = useState<ApiWorkOverview | null>(null);
+  const [resultMode, setResultMode] = useState<ResultMode>("REGISTERED");
   const [vehicles,setVehicles]=useState<ApiVehicle[]>([]);
+  const [vehiclesLoading, setVehiclesLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [draft, setDraft] = useState<WorkDraft | null>(null);
@@ -101,15 +109,24 @@ export default function WorkScreen({ navigation, onReady }: {
     const currentRequest = ++requestId.current;
     setLoading(true); setError("");
     try {
-      const [response,vehicleList] = await Promise.all([financeApi.workOverview(referenceDate, period),financeApi.vehicles().catch(()=>[] as ApiVehicle[])]);
-      if (currentRequest === requestId.current){setOverview(response);setVehicles(vehicleList);}
+      const response = await financeApi.workOverview(referenceDate, period);
+      if (currentRequest === requestId.current) setOverview(response);
     } catch (requestError) {
       if (currentRequest === requestId.current) setError(messageFrom(requestError));
     } finally { if (currentRequest === requestId.current) setLoading(false); }
   }, [period, referenceDate]);
 
+  const loadVehicles = useCallback(async () => {
+    setVehiclesLoading(true);
+    try { setVehicles(await financeApi.vehicles()); }
+    catch { setVehicles([]); }
+    finally { setVehiclesLoading(false); }
+  }, []);
+
   useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
-  useEffect(() => { if (!loading) onReady?.(); }, [loading, onReady]);
+  useEffect(() => { const timer = window.setTimeout(() => void loadVehicles(), 0); return () => window.clearTimeout(timer); }, [loadVehicles]);
+  const pageLoading = loading || vehiclesLoading;
+  useEffect(() => { if (!pageLoading) onReady?.(); }, [pageLoading, onReady]);
 
   function movePeriod(direction: number) {
     const date = parseDate(referenceDate);
@@ -219,6 +236,11 @@ export default function WorkScreen({ navigation, onReady }: {
   }
 
   const summary = overview?.summary;
+  const estimated = overview?.estimatedSummary;
+  const showingEstimated = resultMode === "ESTIMATED";
+  const estimateAvailable = Boolean(estimated?.available);
+  const displayedNet = showingEstimated ? estimated?.netEarnings : summary?.netEarnings;
+  const displayedCosts = showingEstimated ? estimated?.totalCosts : summary?.totalCosts;
   const comparison = overview?.comparison;
   const comparisonChange = Number(comparison?.changeAmount ?? 0);
   const comparisonTone = comparisonChange > 0 ? "positive" : comparisonChange < 0 ? "negative" : "neutral";
@@ -239,22 +261,25 @@ export default function WorkScreen({ navigation, onReady }: {
   const draftCosts = draft?.costs.reduce((total, cost) => total + numberFromInput(cost.amount), 0) ?? 0;
   const draftNet = draftGross - draftCosts;
   return <main className="work-screen">
-    <AppHeader className="work-header"><div className="work-header-actions"><span className="work-header-label">TRABALHO</span><button type="button" className="header-add-button work-register-button" onClick={openCreateRecord} disabled={checkingDate} aria-label={checkingDate ? "Verificando registro" : "Registrar dia"} title={checkingDate ? "Verificando registro" : "Registrar dia"}>{checkingDate ? <span className="work-register-loader" aria-hidden="true" /> : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M8 3v4M16 3v4M3.5 9.5h17M12 13v5M9.5 15.5h5" /></svg>}</button></div></AppHeader>
+    <AppHeader className="work-header"><div className="work-header-actions"><span className="work-header-label">RESULTADO</span><button type="button" className="header-add-button work-register-button" onClick={openCreateRecord} disabled={checkingDate} aria-label={checkingDate ? "Verificando registro" : "Registrar dia"} title={checkingDate ? "Verificando registro" : "Registrar dia"}>{checkingDate ? <span className="work-register-loader" aria-hidden="true" /> : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M8 3v4M16 3v4M3.5 9.5h17M12 13v5M9.5 15.5h5" /></svg>}</button></div></AppHeader>
     <div className="work-content">
       {error && !draft && <p className="work-error" role="alert">{error}</p>}
       {overview && <>
         <PrimaryKpiCard className="work-net-card">
-          <div className="work-net-main"><KpiLabel>LÍQUIDO NO PERÍODO</KpiLabel><KpiValue className={(summary?.netEarnings ?? 0) < 0 ? "negative" : ""}>{currency(Number(summary?.netEarnings ?? 0))}</KpiValue></div>
-          <div className={`work-net-comparison ${comparisonTone}`} aria-label={`${comparisonValue} em relação ao ${previousPeriodLabel}`} title={`Líquido do ${previousPeriodLabel}: ${currency(Number(comparison?.netEarnings ?? 0))}`}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M5 20v-6M12 20V9M19 20V4" /></svg>
-            <strong>{comparisonValue}</strong>
+          <SegmentedControl className="work-result-mode" ariaLabel="Tipo de resultado" value={resultMode} options={resultModeOptions} onChange={setResultMode} />
+          <div className="work-net-main"><KpiLabel>{showingEstimated ? "RESULTADO OPERACIONAL" : "LÍQUIDO NO PERÍODO"}</KpiLabel>{!showingEstimated || estimateAvailable ? <KpiValue className={(displayedNet ?? 0) < 0 ? "negative" : ""}>{currency(Number(displayedNet ?? 0))}</KpiValue> : <><KpiValue>—</KpiValue><small className="work-estimate-reason">{estimated?.unavailableReason}</small><button type="button" className="work-estimate-action" onClick={onOperationalCost}>Configurar custo operacional</button></>}</div>
+          <div className="work-net-side">
+            {!showingEstimated ? <div className={`work-net-comparison ${comparisonTone}`} aria-label={`${comparisonValue} em relação ao ${previousPeriodLabel}`} title={`Líquido do ${previousPeriodLabel}: ${currency(Number(comparison?.netEarnings ?? 0))}`}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M5 20v-6M12 20V9M19 20V4" /></svg>
+              <strong>{comparisonValue}</strong>
+            </div> : estimateAvailable && <div className="work-net-comparison neutral" aria-label={`Resultado estimado por quilômetro: ${currency(Number(estimated?.resultPerKilometer ?? 0))}`}><KpiLabel>RESULTADO/KM</KpiLabel><strong>{currency(Number(estimated?.resultPerKilometer ?? 0))}</strong></div>}
           </div>
         </PrimaryKpiCard>
         <SecondaryKpiGroup className="work-metrics">
-          <SecondaryKpiItem><span className="work-metric-icon revenue" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M7 10h10M7 14h6" /></svg></span><span className="work-metric-copy"><KpiLabel>Faturamento</KpiLabel><KpiValue>{currency(Number(summary?.grossEarnings ?? 0))}</KpiValue></span></SecondaryKpiItem>
-          <SecondaryKpiItem><span className="work-metric-icon expense" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18M7 14h5" /></svg></span><span className="work-metric-copy"><KpiLabel>Custos</KpiLabel><KpiValue className="cost">{currency(Number(summary?.totalCosts ?? 0))}</KpiValue></span></SecondaryKpiItem>
-          <SecondaryKpiItem><span className="work-metric-icon" aria-hidden="true"><Image src="/road-icon.png" alt="" width={1254} height={1254} /></span><span className="work-metric-copy"><KpiLabel>Quilômetros</KpiLabel><KpiValue>{decimal(Number(summary?.kilometers ?? 0))}</KpiValue></span></SecondaryKpiItem>
-          <SecondaryKpiItem><span className="work-metric-icon" aria-hidden="true"><Image src="/earnings-per-km-icon.png" alt="" width={1254} height={1254} /></span><span className="work-metric-copy"><KpiLabel>Por km</KpiLabel><KpiValue>{currency(Number(summary?.earningsPerKilometer ?? 0))}</KpiValue></span></SecondaryKpiItem>
+          <SecondaryKpiItem><span className="work-metric-copy"><KpiLabel>Faturamento</KpiLabel><KpiValue>{currency(Number(summary?.grossEarnings ?? 0))}</KpiValue></span></SecondaryKpiItem>
+          <SecondaryKpiItem><span className="work-metric-copy"><KpiLabel>{showingEstimated ? "Custos estimados" : "Custos registrados"}</KpiLabel><KpiValue className="cost">{showingEstimated && !estimateAvailable ? "—" : currency(Number(displayedCosts ?? 0))}</KpiValue></span></SecondaryKpiItem>
+          <SecondaryKpiItem><span className="work-metric-copy"><KpiLabel>Quilômetros</KpiLabel><KpiValue>{decimal(Number(summary?.kilometers ?? 0))}</KpiValue></span></SecondaryKpiItem>
+          <SecondaryKpiItem><span className="work-metric-copy"><KpiLabel>Faturamento por km</KpiLabel><KpiValue>{currency(Number(summary?.earningsPerKilometer ?? 0))}</KpiValue></span></SecondaryKpiItem>
         </SecondaryKpiGroup>
       </>}
       <SegmentedControl className="work-period-tabs" ariaLabel="Período do resumo" value={period} options={periodOptions} onChange={setPeriod} />
@@ -303,7 +328,7 @@ export default function WorkScreen({ navigation, onReady }: {
             </button>;
           })}</section>
       </>}
-    </div>{navigation(loading)}
+    </div>{navigation(pageLoading)}
 
     {draft && <section className="work-record-screen" aria-labelledby="work-record-title">
       <header className="work-record-page-header"><button type="button" onClick={() => { if (!saving) setDraft(null); }} aria-label="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg></button><h2 id="work-record-title">{draftMode === "create" ? "Registrar trabalho" : "Editar trabalho"}</h2><span aria-hidden="true" /></header>
