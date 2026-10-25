@@ -7,6 +7,7 @@ import br.com.amcash.goal.dto.response.GoalResponse;
 import br.com.amcash.goal.entity.CustomGoalPeriod;
 import br.com.amcash.goal.entity.PrimaryGoalType;
 import br.com.amcash.goal.service.GoalService;
+import br.com.amcash.work.service.WorkService;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -28,7 +29,8 @@ class HomeServiceTests {
     void returnsUnifiedGoalAndNextPendingExpense() {
         GoalService goalService = mock(GoalService.class);
         FinancialEntryRepository entryRepository = mock(FinancialEntryRepository.class);
-        HomeService service = new HomeService(goalService, entryRepository);
+        WorkService workService = mock(WorkService.class);
+        HomeService service = new HomeService(goalService, entryRepository, workService);
         UUID userId = UUID.randomUUID();
         LocalDate date = LocalDate.of(2026, 10, 18);
         GoalResponse goal = goal(date, "2558.60", "500", "3058.60", "2800", "182.76", false, true);
@@ -39,6 +41,8 @@ class HomeServiceTests {
         when(nextExpense.getDueDate()).thenReturn(LocalDate.of(2026, 10, 23));
         when(nextExpense.getAmount()).thenReturn(money("329"));
         when(goalService.current(userId, date)).thenReturn(goal);
+        when(workService.result(userId, date, date)).thenReturn(
+                new WorkService.WorkResultSnapshot(money("350"), money("100"), money("250")));
         when(entryRepository.findFirstByUserIdAndTypeAndPaidFalseAndDueDateBetweenOrderByDueDateAscCreatedAtAsc(
                 userId, EntryType.EXPENSE, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31)))
                 .thenReturn(Optional.of(nextExpense));
@@ -48,7 +52,13 @@ class HomeServiceTests {
 
         var response = service.current(userId, date);
 
-        assertEquals(money("182.76"), response.goal().dailyTarget());
+        assertEquals(money("282.76"), response.goal().dailyTarget());
+        assertEquals(money("182.76"), response.goal().baseDailyTarget());
+        assertEquals(money("350"), response.goal().todayGross());
+        assertEquals(money("100"), response.goal().todayCosts());
+        assertEquals(money("0"), response.goal().todayRemaining());
+        assertEquals(money("100"), response.goal().progressPercentage());
+        assertTrue(response.goal().achieved());
         assertEquals("Objetivo mensal", response.goal().name());
         assertEquals(CustomGoalPeriod.MONTHLY, response.goal().period());
         assertEquals(PrimaryGoalType.EXPENSES, response.goal().type());
@@ -61,11 +71,14 @@ class HomeServiceTests {
     void supportsAdditionalGoalWithoutFinancialEntries() {
         GoalService goalService = mock(GoalService.class);
         FinancialEntryRepository entryRepository = mock(FinancialEntryRepository.class);
-        HomeService service = new HomeService(goalService, entryRepository);
+        WorkService workService = mock(WorkService.class);
+        HomeService service = new HomeService(goalService, entryRepository, workService);
         UUID userId = UUID.randomUUID();
         LocalDate date = LocalDate.of(2026, 10, 18);
         when(goalService.current(userId, date)).thenReturn(
-                goal(date, "0", "1200", "1200", "1200", "100", false, true));
+                goal(date, "0", "1200", "1200", "1200", "200", false, true));
+        when(workService.result(userId, date, date)).thenReturn(
+                new WorkService.WorkResultSnapshot(money("50"), money("100"), money("-50")));
         when(entryRepository.findFirstByUserIdAndTypeAndPaidFalseAndDueDateBetweenOrderByDueDateAscCreatedAtAsc(
                 userId, EntryType.EXPENSE, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31)))
                 .thenReturn(Optional.empty());
@@ -74,6 +87,10 @@ class HomeServiceTests {
 
         assertFalse(response.hasFinancialEntries());
         assertFalse(response.goal().covered());
+        assertEquals(money("300"), response.goal().dailyTarget());
+        assertEquals(money("250"), response.goal().todayRemaining());
+        assertEquals(money("16.67"), response.goal().progressPercentage());
+        assertFalse(response.goal().achieved());
         assertEquals(money("1200"), response.goal().periodRemaining());
         assertNull(response.nextExpense());
     }

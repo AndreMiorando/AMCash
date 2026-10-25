@@ -19,8 +19,10 @@ public record HomeResponse(
     }
 
     public record GoalSummary(PrimaryGoalType type, String name, CustomGoalPeriod period,
-                              BigDecimal targetAmount, BigDecimal dailyTarget, BigDecimal periodRemaining,
-                              boolean covered, boolean todaySelected) {
+                              BigDecimal targetAmount, BigDecimal dailyTarget, BigDecimal baseDailyTarget,
+                              BigDecimal todayGross, BigDecimal todayCosts, BigDecimal todayRemaining,
+                              BigDecimal progressPercentage, BigDecimal periodRemaining,
+                              boolean achieved, boolean covered, boolean todaySelected) {
     }
 
     public record NextExpense(UUID id, String name, LocalDate dueDate, BigDecimal amount) {

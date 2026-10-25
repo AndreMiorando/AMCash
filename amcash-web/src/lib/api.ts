@@ -211,7 +211,13 @@ export type ApiHome = {
     period: ApiCustomGoalPeriod | null;
     targetAmount: number;
     dailyTarget: number;
+    baseDailyTarget: number;
+    todayGross: number;
+    todayCosts: number;
+    todayRemaining: number;
+    progressPercentage: number;
     periodRemaining: number;
+    achieved: boolean;
     covered: boolean;
     todaySelected: boolean;
   };
