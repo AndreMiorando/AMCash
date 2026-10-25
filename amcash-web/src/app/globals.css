@@ -1811,7 +1811,7 @@ a {
 .daily-goal-confetti.confetti-two { left: 63%; top: 3.1rem; background: #60a4ff; transform: rotate(-38deg); }
 .daily-goal-confetti.confetti-three { right: 25%; top: 1rem; transform: rotate(22deg); }
 .daily-goal-confetti.confetti-four { right: 17%; bottom: 1.9rem; transform: rotate(-42deg); }
-.daily-goal-progress-label { display: flex; margin-top: 0.5rem; align-items: center; justify-content: flex-end; color: rgb(255 255 255 / 82%); font-size: 0.64rem; }
+.daily-goal-progress-label { display: flex; margin-top: 0.5rem; align-items: center; justify-content: space-between; color: rgb(255 255 255 / 82%); font-size: 0.64rem; }
 .daily-goal-progress-label b { color: #fff; }
 .daily-goal-progress-label b.negative { color: #ffd7de; }
 .daily-goal-progress-label + .daily-progress-track { margin-top: 0.38rem; }

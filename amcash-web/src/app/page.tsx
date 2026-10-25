@@ -2410,15 +2410,13 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
                 <span><strong>{formatCurrency(dailyTarget)}</strong><small><i><Icon name="check" /></i>Meta concluída!</small></span>
                 <div><i><Icon name="check" /></i><span><small>Concluído</small><b>{formatCurrency(todayGross)}</b></span></div>
               </div>
-              <div className="daily-goal-progress-label"><strong>100%</strong></div>
-              <div className="daily-progress-track" aria-label="100% do objetivo de hoje"><i style={{ width: "100%" }} /></div>
             </div> : summary.goal.covered && dailyTarget === 0 ? <>
               <span>OBJETIVO MENSAL</span>
               <strong>Objetivo concluído</strong><p>O saldo financeiro deste mês está coberto.</p>
             </> : <>
               <div className="daily-goal-title"><span><Icon name="target" />OBJETIVO DE HOJE</span></div>
               <div className="daily-goal-values"><strong>{formatCurrency(dailyTarget)}</strong><div><Icon name="clock" /><span><small>Faltam</small><b>{formatCurrency(dailyRemaining)}</b></span></div></div>
-              <div className="daily-goal-progress-label"><strong>{dailyProgress}%</strong></div>
+              <div className="daily-goal-progress-label"><span>Progresso</span><strong>{dailyProgress}%</strong></div>
               <div className="daily-progress-track" aria-label={`${dailyProgress}% do objetivo de hoje`}><i style={{ width: `${dailyProgress}%` }} /></div>
             </>}
           </PrimaryKpiCard>
