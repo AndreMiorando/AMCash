@@ -1955,12 +1955,17 @@ a {
 .home-additional-source-copy { display: flex; min-width: 0; align-items: center; gap: 0.35rem; }
 .home-additional-source-copy > .home-additional-source-name { text-align: left; }
 .home-additional-source-copy > .home-additional-source-name:focus-visible { border-radius: 0.35rem; outline: none; box-shadow: var(--focus-ring); }
+.home-additional-source-row.invalid .home-additional-source-copy { padding-left: 0.4rem; border-radius: 0.45rem; background: #fff5f6; box-shadow: inset 0 0 0 1px #ffd5dc; }
+.home-additional-source-row.invalid .home-additional-source-name { color: #d9435b; }
 .home-additional-source-row > div input { text-align: right; }
 .home-additional-source-row b { color: #8092a7; font-size: 0.62rem; }
 .home-additional-source-copy > button { display: grid; width: 1.35rem; height: 2.35rem; flex: 0 0 auto; padding: 0; place-items: center; border: 0; background: transparent; color: #f05267; }
 .home-additional-source-copy > button svg { width: 0.9rem; }
 .home-add-source { display: flex; width: 100%; min-height: 2.5rem; margin: 0.65rem 0; align-items: center; justify-content: center; gap: 0.4rem; border: 1px solid #cfe0f8; border-radius: 0.7rem; background: #f7faff; color: #086cf3; font: inherit; font-size: 0.68rem; font-weight: 700; }
 .home-add-source svg { width: 0.95rem; }
+.home-work-inline-error { display: flex; margin: 0.55rem 0 0; padding: 0.58rem 0.65rem; align-items: flex-start; gap: 0.42rem; border-radius: 0.65rem; background: #fff0f2; color: #d9435b; font-size: 0.62rem; line-height: 1.4; }
+.home-work-inline-error svg { width: 0.9rem; height: 0.9rem; flex: 0 0 auto; }
+.home-work-inline-error span { min-width: 0; }
 .home-quick-entry-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; }
 .home-quick-entry-heading span { color: #8a9caf; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.14em; }
 .home-quick-entry-heading h2 { margin: 0.22rem 0 0; font-size: 1rem; }

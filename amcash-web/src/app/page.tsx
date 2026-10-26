@@ -2201,6 +2201,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [workError, setWorkError] = useState("");
   const nextCostKey = useRef(1);
   const today = dateToInputValue(new Date());
   const homeCostPrefix = "HOME: ";
@@ -2209,6 +2210,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
+    setWorkError("");
     try {
       const [home, work, vehicles] = await Promise.all([
         financeApi.home(today),
@@ -2284,6 +2286,11 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   const todayGross = Number(summary?.goal.todayGross ?? 0);
   const showEmptyState = summary?.hasFinancialEntries === false && Number(summary?.goal.targetAmount ?? 0) === 0;
   const additionalEarningsAreValid = additionalEarnings.every((item) => item.source.trim().length > 0 && (parseCurrencyInput(item.amount) || 0) > 0);
+  const earningSourceCounts = ["uber", "99", ...additionalEarnings.map((item) => item.source.trim().toLocaleLowerCase("pt-BR")).filter(Boolean)]
+    .reduce<Map<string, number>>((counts, source) => counts.set(source, (counts.get(source) ?? 0) + 1), new Map());
+  const duplicateEarningSources = new Set([...earningSourceCounts.entries()].filter(([, count]) => count > 1).map(([source]) => source));
+  const duplicateEarningError = duplicateEarningSources.size > 0 ? "Cada fonte de faturamento deve aparecer apenas uma vez." : "";
+  const workFormError = duplicateEarningError || workError;
   const hasWorkChanges = initialWorkSignature !== "" && initialWorkSignature !== homeWorkSignature({ uber, ninetyNine, kilometers, additionalEarnings, costs: homeCosts });
   const selectedHomeVehicle = homeVehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
   const parsedOdometer = parseDecimalInput(odometerValue);
@@ -2304,18 +2311,23 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   }
 
   function updateAdditionalEarning(index: number, changes: Partial<HomeEarningDraft>) {
+    setWorkError("");
     setAdditionalEarnings((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...changes } : item));
   }
 
   async function saveDailyResult() {
     if (!summary || saving || !hasWorkChanges || !additionalEarningsAreValid) return;
+    if (duplicateEarningError) {
+      setWorkError(duplicateEarningError);
+      return;
+    }
     const additional = additionalEarnings.filter((item) => item.source.trim() || item.amount);
     if (additional.some((item) => !item.source.trim())) {
-      setError("Informe o nome de cada fonte adicional.");
+      setWorkError("Informe o nome de cada fonte adicional.");
       return;
     }
     setSaving(true);
-    setError("");
+    setWorkError("");
     try {
       await financeApi.saveWorkDay(today, {
         kilometers: kilometersValue,
@@ -2340,7 +2352,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
       ]);
       await load();
     } catch (requestError) {
-      setError(messageFromError(requestError));
+      setWorkError(messageFromError(requestError));
     } finally {
       setSaving(false);
     }
@@ -2425,10 +2437,14 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
             <div className="home-work-card-heading"><div><span>TRABALHO DE HOJE</span></div><small>Edite os valores diretamente</small></div>
             <div className="home-work-fields">
               <label><span className="home-work-source logo metric-logo"><Image src="/road-icon.png" alt="" width={1254} height={1254} /></span><span>Quilômetros rodados</span><div><b>km</b><input aria-label="Quilômetros rodados" value={kilometers} onChange={(event) => setKilometers(maskDecimalInput(event.target.value))} placeholder="0" inputMode="decimal" /></div></label>
-              <label><span className="home-work-source uber logo"><Image src="/uber-logo.jpeg" alt="" width={768} height={512} /></span><span>Uber</span><div><b>R$</b><input aria-label="Faturamento Uber" value={uber} onChange={(event) => setUber(maskCurrencyInput(event.target.value))} placeholder="0,00" inputMode="numeric" /></div></label>
-              <label><span className="home-work-source ninety-nine logo"><Image src="/99-logo.png" alt="" width={1600} height={1600} /></span><span>99</span><div><b>R$</b><input aria-label="Faturamento 99" value={ninetyNine} onChange={(event) => setNinetyNine(maskCurrencyInput(event.target.value))} placeholder="0,00" inputMode="numeric" /></div></label>
-              {additionalEarnings.map((item, index) => <div className="home-additional-source-row" key={item.key}><span className="home-work-source additional"><Icon name="wallet" /></span><span className="home-additional-source-copy"><input className="home-additional-source-name" maxLength={30} aria-label={`Nome da fonte adicional ${index + 1}`} value={item.source} onChange={(event) => updateAdditionalEarning(index, { source: event.target.value })} placeholder="Fonte adicional" /><button type="button" aria-label={`Remover fonte adicional ${index + 1}`} onClick={() => setAdditionalEarnings((current) => current.filter((_, itemIndex) => itemIndex !== index))}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 10v6M14 10v6" /></svg></button></span><div><b>R$</b><input aria-label={`Valor da fonte adicional ${index + 1}`} value={item.amount} onChange={(event) => updateAdditionalEarning(index, { amount: maskCurrencyInput(event.target.value) })} placeholder="0,00" inputMode="numeric" /></div></div>)}
-              <button type="button" className="home-add-source" onClick={() => setAdditionalEarnings((current) => [...current, { key: crypto.randomUUID(), source: "", amount: "" }])}><Icon name="plus" />Adicionar outra fonte</button>
+              <label><span className="home-work-source uber logo"><Image src="/uber-logo.jpeg" alt="" width={768} height={512} /></span><span>Uber</span><div><b>R$</b><input aria-label="Faturamento Uber" value={uber} onChange={(event) => { setUber(maskCurrencyInput(event.target.value)); setWorkError(""); }} placeholder="0,00" inputMode="numeric" /></div></label>
+              <label><span className="home-work-source ninety-nine logo"><Image src="/99-logo.png" alt="" width={1600} height={1600} /></span><span>99</span><div><b>R$</b><input aria-label="Faturamento 99" value={ninetyNine} onChange={(event) => { setNinetyNine(maskCurrencyInput(event.target.value)); setWorkError(""); }} placeholder="0,00" inputMode="numeric" /></div></label>
+              {additionalEarnings.map((item, index) => {
+                const duplicateSource = duplicateEarningSources.has(item.source.trim().toLocaleLowerCase("pt-BR"));
+                return <div className={`home-additional-source-row${duplicateSource ? " invalid" : ""}`} key={item.key}><span className="home-work-source additional"><Icon name="wallet" /></span><span className="home-additional-source-copy"><input className="home-additional-source-name" maxLength={30} aria-label={`Nome da fonte adicional ${index + 1}`} aria-invalid={duplicateSource || undefined} value={item.source} onChange={(event) => updateAdditionalEarning(index, { source: event.target.value })} placeholder="Fonte adicional" /><button type="button" aria-label={`Remover fonte adicional ${index + 1}`} onClick={() => { setWorkError(""); setAdditionalEarnings((current) => current.filter((_, itemIndex) => itemIndex !== index)); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 10v6M14 10v6" /></svg></button></span><div><b>R$</b><input aria-label={`Valor da fonte adicional ${index + 1}`} value={item.amount} onChange={(event) => updateAdditionalEarning(index, { amount: maskCurrencyInput(event.target.value) })} placeholder="0,00" inputMode="numeric" /></div></div>;
+              })}
+              {workFormError && <p className="home-work-inline-error" role="alert"><Icon name="warning" /><span>{workFormError}</span></p>}
+              <button type="button" className="home-add-source" onClick={() => { setWorkError(""); setAdditionalEarnings((current) => [...current, { key: crypto.randomUUID(), source: "", amount: "" }]); }}><Icon name="plus" />Adicionar outra fonte</button>
             </div>
             <div className="home-costs-block">
               <div className="home-costs-heading"><div><span>CUSTOS DE HOJE</span></div></div>
@@ -2447,7 +2463,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
               </div>
               <button type="button" className="home-add-cost" onClick={addHomeCost}><Icon name="plus" />Adicionar custo</button>
             </div>
-            <Button type="button" fullWidth loading={saving} loadingLabel="Atualizando..." disabled={!hasWorkChanges || !additionalEarningsAreValid} onClick={() => void saveDailyResult()}>Atualizar trabalho de hoje</Button>
+            <Button type="button" fullWidth loading={saving} loadingLabel="Atualizando..." disabled={!hasWorkChanges || !additionalEarningsAreValid || Boolean(duplicateEarningError)} onClick={() => void saveDailyResult()}>Atualizar trabalho de hoje</Button>
           </section>
           {homeVehicles.length > 0 ? <section className="home-odometer-update" aria-labelledby="home-odometer-title">
             <header className="home-odometer-heading">
