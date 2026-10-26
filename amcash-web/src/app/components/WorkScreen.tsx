@@ -2,26 +2,33 @@
 
 import Image from "next/image";
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { ApiVehicle, ApiWorkCost, ApiWorkCostCategory, ApiWorkDay, ApiWorkOverview, ApiWorkPeriod, financeApi } from "@/lib/api";
+import { ApiVehicle, ApiWorkCost, ApiWorkCostCategory, ApiWorkDay, ApiWorkEarningSource, ApiWorkOverview, ApiWorkPeriod, financeApi } from "@/lib/api";
 import AppHeader from "@/app/components/AppHeader";
 import { CostCategoryGrid, CostCategoryIcon, workCostCategoryLabels } from "@/app/components/CostCategoryGrid";
 import DatePickerInput, { dateToInputValue } from "@/app/components/DatePickerInput";
 import MonthPickerInput from "@/app/components/MonthPickerInput";
+import EarningSourceDialog from "@/app/components/EarningSourceDialog";
 import Button from "@/app/components/ui/Button";
 import { InputField } from "@/app/components/ui/Input";
 import SegmentedControl from "@/app/components/ui/SegmentedControl";
 import { KpiLabel, KpiValue, PrimaryKpiCard, SecondaryKpiGroup, SecondaryKpiItem } from "@/app/components/ui/Kpi";
 import { formatDateRange, formatLongDate, formatMonthYear } from "@/lib/date";
 
-type EarningDraft = { source: string; amount: string };
+type EarningDraft = {
+  key: string;
+  sourceId?: string;
+  source: string;
+  originalSource: string;
+  amount: string;
+  persistForFuture: boolean;
+  systemKey: ApiWorkEarningSource["systemKey"];
+};
 type CostDraft = { key: string; id?: string; category: ApiWorkCostCategory; description: string; amount: string; homeManaged?: boolean };
 type WorkDraft = {
   date: string;
   vehicleId: string | null;
   kilometers: string;
-  uber: string;
-  ninetyNine: string;
-  additional: EarningDraft[];
+  earnings: EarningDraft[];
   costs: CostDraft[];
   originalCostIds: string[];
   hadWorkDay: boolean;
@@ -156,7 +163,7 @@ function WorkPeriodBreakdown({ overview, incomeExpanded, costsExpanded, onToggle
       <div><span>COMPOSIÇÃO DO PERÍODO</span><h2 id="work-period-breakdown-title">Receitas e custos</h2></div>
     </div>
     <div className="work-breakdown-columns">
-      {renderGroup("Faturamento por fonte", totalEarnings, detailedEarnings, "income", incomeExpanded, onToggleIncome)}
+      {renderGroup("Faturamento por origem", totalEarnings, detailedEarnings, "income", incomeExpanded, onToggleIncome)}
       {renderGroup("Gastos por categoria", totalCosts, detailedCosts, "cost", costsExpanded, onToggleCosts)}
     </div>
   </section>;
@@ -174,6 +181,8 @@ export default function WorkScreen({ navigation, onReady, onOperationalCost }: {
   const [expandedBreakdownGroups, setExpandedBreakdownGroups] = useState({ income: false, costs: false });
   const [vehicles,setVehicles]=useState<ApiVehicle[]>([]);
   const [vehiclesLoading, setVehiclesLoading] = useState(true);
+  const [earningSources, setEarningSources] = useState<ApiWorkEarningSource[]>([]);
+  const [earningSourcesLoading, setEarningSourcesLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [draft, setDraft] = useState<WorkDraft | null>(null);
@@ -181,9 +190,11 @@ export default function WorkScreen({ navigation, onReady, onOperationalCost }: {
   const [checkingDate, setCheckingDate] = useState(false);
   const [editingCostKey, setEditingCostKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
   const requestId = useRef(0);
   const workDateRequestId = useRef(0);
   const nextCostKey = useRef(0);
+  const nextEarningKey = useRef(0);
 
   const load = useCallback(async () => {
     const currentRequest = ++requestId.current;
@@ -203,9 +214,17 @@ export default function WorkScreen({ navigation, onReady, onOperationalCost }: {
     finally { setVehiclesLoading(false); }
   }, []);
 
+  const loadEarningSources = useCallback(async () => {
+    setEarningSourcesLoading(true);
+    try { setEarningSources(await financeApi.workEarningSources()); }
+    catch (requestError) { setError(messageFrom(requestError)); }
+    finally { setEarningSourcesLoading(false); }
+  }, []);
+
   useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
   useEffect(() => { const timer = window.setTimeout(() => void loadVehicles(), 0); return () => window.clearTimeout(timer); }, [loadVehicles]);
-  const pageLoading = loading || vehiclesLoading;
+  useEffect(() => { const timer = window.setTimeout(() => void loadEarningSources(), 0); return () => window.clearTimeout(timer); }, [loadEarningSources]);
+  const pageLoading = loading || vehiclesLoading || earningSourcesLoading;
   useEffect(() => { if (!pageLoading) onReady?.(); }, [pageLoading, onReady]);
 
   function movePeriod(direction: number) {
@@ -215,23 +234,35 @@ export default function WorkScreen({ navigation, onReady, onOperationalCost }: {
     if (period === "MONTH") date.setMonth(date.getMonth() + direction, 1);
     setReferenceDate(dateToInputValue(date));
   }
+  function earningDrafts(day: ApiWorkDay | undefined) {
+    const usedEarningIds = new Set<string>();
+    const persistent = earningSources.map((source) => {
+      const earning = day?.earnings.find((item) => !usedEarningIds.has(item.id) && item.source.trim().toLowerCase() === source.name.trim().toLowerCase());
+      if (earning) usedEarningIds.add(earning.id);
+      return { key: source.id, sourceId: source.id, source: source.name, originalSource: source.name,
+        amount: moneyForInput(Number(earning?.amount ?? 0)), persistForFuture: true, systemKey: source.systemKey } satisfies EarningDraft;
+    });
+    const historical = day?.earnings.filter((earning) => !usedEarningIds.has(earning.id)).map((earning) => ({
+      key: `earning-${earning.id}`, source: earning.source, originalSource: earning.source,
+      amount: moneyForInput(Number(earning.amount)), persistForFuture: false, systemKey: null,
+    } satisfies EarningDraft)) ?? [];
+    return [...persistent, ...historical];
+  }
+
   function openRecord(date: string, day: ApiWorkDay | undefined, costs: ApiWorkCost[]) {
-    const uber = day?.earnings.find((earning) => earning.source.toLowerCase() === "uber");
-    const ninetyNine = day?.earnings.find((earning) => earning.source === "99");
     setDraft({ date,vehicleId:day?.vehicleId??vehicles.find(vehicle=>vehicle.inUse)?.id??null, kilometers: day?.kilometers ? String(day.kilometers).replace(".", ",") : "",
-      uber: moneyForInput(Number(uber?.amount ?? 0)), ninetyNine: moneyForInput(Number(ninetyNine?.amount ?? 0)),
-      additional: day?.earnings.filter((earning) => earning !== uber && earning !== ninetyNine)
-        .map((earning) => ({ source: earning.source, amount: moneyForInput(Number(earning.amount)) })) ?? [],
+      earnings: earningDrafts(day),
       costs: costs.map((cost) => ({ key: cost.id, id: cost.id, category: cost.category,
         description: costDescription(cost), amount: moneyForInput(Number(cost.amount)), homeManaged: isHomeCost(cost) })),
       originalCostIds: costs.map((cost) => cost.id), hadWorkDay: Boolean(day) });
     setEditingCostKey(null);
+    setSourceDialogOpen(false);
     setDraftMode("edit");
     setError("");
   }
 
   function emptyDraft(date: string): WorkDraft {
-    return { date,vehicleId:vehicles.find(vehicle=>vehicle.inUse)?.id??null, kilometers: "", uber: "", ninetyNine: "", additional: [], costs: [], originalCostIds: [], hadWorkDay: false };
+    return { date,vehicleId:vehicles.find(vehicle=>vehicle.inUse)?.id??null, kilometers: "", earnings: earningDrafts(undefined), costs: [], originalCostIds: [], hadWorkDay: false };
   }
 
   async function selectWorkDate(date: string) {
@@ -262,13 +293,16 @@ export default function WorkScreen({ navigation, onReady, onOperationalCost }: {
 
   async function saveRecord() {
     if (!draft || saving) return;
-    const additional = draft.additional.filter((item) => item.source.trim() || item.amount);
-    if (additional.some((item) => !item.source.trim())) { setError("Informe o nome de cada fonte adicional."); return; }
+    const earnings = draft.earnings.filter((item) => item.sourceId || item.source.trim() || item.amount);
+    if (earnings.some((item) => !item.source.trim())) { setError("Informe o nome de cada ganho adicional."); return; }
+    const normalizedSources = earnings.map((item) => item.source.trim().toLocaleLowerCase("pt-BR"));
+    if (new Set(normalizedSources).size !== normalizedSources.length) { setError("Cada ganho deve aparecer apenas uma vez."); return; }
     const validCosts = draft.costs.filter((cost) => numberFromInput(cost.amount) > 0);
     const retainedCostIds = new Set(validCosts.flatMap((cost) => cost.id ? [cost.id] : []));
-    const hasWorkValues = numberFromInput(draft.kilometers) > 0 || numberFromInput(draft.uber) > 0
-      || numberFromInput(draft.ninetyNine) > 0 || additional.some((item) => numberFromInput(item.amount) > 0);
-    if (draftMode === "create" && !hasWorkValues && !validCosts.length) { setError("Informe ao menos um dado do trabalho antes de registrar."); return; }
+    const hasWorkValues = numberFromInput(draft.kilometers) > 0 || earnings.some((item) => numberFromInput(item.amount) > 0);
+    const hasSourceChanges = earnings.some((item) => item.sourceId && item.systemKey === null && item.source.trim() !== item.originalSource)
+      || earnings.some((item) => !item.sourceId && item.persistForFuture && item.source.trim());
+    if (draftMode === "create" && !hasWorkValues && !validCosts.length && !hasSourceChanges) { setError("Informe ao menos um dado do trabalho antes de registrar."); return; }
     setSaving(true); setError("");
     try {
       if (draftMode === "create") {
@@ -280,15 +314,26 @@ export default function WorkScreen({ navigation, onReady, onOperationalCost }: {
           return;
         }
       }
+      let resolvedEarnings = earnings;
+      for (const earning of earnings) {
+        if (earning.sourceId && earning.systemKey === null && earning.source.trim() !== earning.originalSource) {
+          const updated = await financeApi.renameWorkEarningSource(earning.sourceId, earning.source.trim());
+          resolvedEarnings = resolvedEarnings.map((item) => item.key === earning.key
+            ? { ...item, source: updated.name, originalSource: updated.name }
+            : item);
+        } else if (!earning.sourceId && earning.persistForFuture && earning.source.trim()) {
+          const created = await financeApi.createWorkEarningSource(earning.source.trim());
+          resolvedEarnings = resolvedEarnings.map((item) => item.key === earning.key
+            ? { ...item, sourceId: created.id, source: created.name, originalSource: created.name }
+            : item);
+        }
+        setDraft((current) => current ? { ...current, earnings: current.earnings.map((item) => resolvedEarnings.find((resolved) => resolved.key === item.key) ?? item) } : current);
+      }
       const operations: Promise<unknown>[] = [];
       if (draftMode === "create" || draft.hadWorkDay || hasWorkValues) operations.push(financeApi.saveWorkDay(draft.date, {
         kilometers: numberFromInput(draft.kilometers),
         vehicleId:draft.vehicleId,
-        earnings: [
-          { source: "Uber", amount: numberFromInput(draft.uber) },
-          { source: "99", amount: numberFromInput(draft.ninetyNine) },
-          ...additional.map((item) => ({ source: item.source.trim(), amount: numberFromInput(item.amount) })),
-        ],
+        earnings: resolvedEarnings.map((item) => ({ source: item.source.trim(), amount: numberFromInput(item.amount) })),
       }));
       operations.push(...validCosts.map((cost) => {
         const description = cost.description.trim();
@@ -300,8 +345,12 @@ export default function WorkScreen({ navigation, onReady, onOperationalCost }: {
       operations.push(...draft.originalCostIds.filter((id) => !retainedCostIds.has(id))
         .map((id) => financeApi.deleteWorkCost(id)));
       await Promise.all(operations);
-      const refreshed = await financeApi.workOverview(draft.date, period);
-      setReferenceDate(draft.date); setOverview(refreshed); setDraft(null);
+      const [refreshed, refreshedSources] = await Promise.all([
+        financeApi.workOverview(draft.date, period),
+        hasSourceChanges ? financeApi.workEarningSources() : Promise.resolve(earningSources),
+      ]);
+      setEarningSources(refreshedSources);
+      setReferenceDate(draft.date); setOverview(refreshed); setSourceDialogOpen(false); setDraft(null);
     } catch (requestError) { setError(messageFrom(requestError)); } finally { setSaving(false); }
   }
   async function deleteRecord() {
@@ -311,7 +360,7 @@ export default function WorkScreen({ navigation, onReady, onOperationalCost }: {
         ...(draft.hadWorkDay ? [financeApi.deleteWorkDay(draft.date)] : []),
         ...draft.originalCostIds.map((id) => financeApi.deleteWorkCost(id)),
       ]);
-      setDraft(null); await load();
+      setSourceDialogOpen(false); setDraft(null); await load();
     } catch (requestError) { setError(messageFrom(requestError)); } finally { setSaving(false); }
   }
 
@@ -336,8 +385,7 @@ export default function WorkScreen({ navigation, onReady, onOperationalCost }: {
     day: overview.days.find((day) => day.date === date),
     costs: overview.costs.filter((cost) => cost.date === date),
   })) : [];
-  const draftGross = draft ? numberFromInput(draft.uber) + numberFromInput(draft.ninetyNine)
-    + draft.additional.reduce((total, earning) => total + numberFromInput(earning.amount), 0) : 0;
+  const draftGross = draft?.earnings.reduce((total, earning) => total + numberFromInput(earning.amount), 0) ?? 0;
   const draftCosts = draft?.costs.reduce((total, cost) => total + numberFromInput(cost.amount), 0) ?? 0;
   const draftNet = draftGross - draftCosts;
   return <main className="work-screen">
@@ -418,17 +466,16 @@ export default function WorkScreen({ navigation, onReady, onOperationalCost }: {
     </div>{navigation(pageLoading)}
 
     {draft && <section className="work-record-screen" aria-labelledby="work-record-title">
-      <header className="work-record-page-header"><button type="button" onClick={() => { if (!saving) setDraft(null); }} aria-label="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg></button><h2 id="work-record-title">{draftMode === "create" ? "Registrar trabalho" : "Editar trabalho"}</h2><span aria-hidden="true" /></header>
+      <header className="work-record-page-header"><button type="button" onClick={() => { if (!saving) { setSourceDialogOpen(false); setDraft(null); } }} aria-label="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg></button><h2 id="work-record-title">{draftMode === "create" ? "Registrar trabalho" : "Editar trabalho"}</h2><span aria-hidden="true" /></header>
       <div className="work-form-scroll">
         {error && <p className="work-error" role="alert">{error}</p>}
         <div className="work-record-date-field"><DatePickerInput label="Data do trabalho" value={draft.date} max={dateToInputValue(new Date())} onChange={selectWorkDate} />{draft.vehicleId&&<small className="work-record-active-vehicle">Veículo em uso: {vehicles.find(vehicle=>vehicle.id===draft.vehicleId)?.nickname||vehicles.find(vehicle=>vehicle.id===draft.vehicleId)?.model}</small>}</div>
         <label className="work-record-kilometers"><span>Quilômetros rodados</span><div><span className="work-record-road-icon"><Image src="/road-icon.png" alt="" width={1254} height={1254} /></span><span className="work-record-kilometers-input"><b>km</b><input inputMode="decimal" aria-label="Quilômetros rodados" placeholder="0" value={draft.kilometers} onChange={(event) => setDraft({ ...draft, kilometers: numberInput(event.target.value) })} /></span></div></label>
         <div className="work-record-section-title"><h3>Faturamento</h3></div><div className="work-form-grid">
-          <BrandedMoneyField label="Uber" logo="/uber-logo.jpeg" value={draft.uber} onChange={(value) => setDraft({ ...draft, uber: value })} /><BrandedMoneyField label="99" logo="/99-logo.png" value={draft.ninetyNine} onChange={(value) => setDraft({ ...draft, ninetyNine: value })} /></div>
-        {draft.additional.map((item, index) => <div className="work-additional-row" key={index}><InputField fieldClassName="work-field" label="Fonte adicional" maxLength={30} placeholder="Ex.: particular" value={item.source} onChange={(event) => setDraft({ ...draft, additional: draft.additional.map((current, i) => i === index ? { ...current, source: event.target.value } : current) })} />
-          <MoneyField label="Valor" value={item.amount} onChange={(value) => setDraft({ ...draft, additional: draft.additional.map((current, i) => i === index ? { ...current, amount: value } : current) })} />
-          <button type="button" onClick={() => setDraft({ ...draft, additional: draft.additional.filter((_, i) => i !== index) })} aria-label="Remover fonte"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 10v6M14 10v6" /></svg></button></div>)}
-        <button type="button" className="work-add-source" onClick={() => setDraft({ ...draft, additional: [...draft.additional, { source: "", amount: "" }] })}>+ Adicionar outra fonte</button>
+          {draft.earnings.filter((item) => item.systemKey).map((item) => <BrandedMoneyField key={item.key} label={item.source} logo={item.systemKey === "UBER" ? "/uber-logo.jpeg" : "/99-logo.png"} value={item.amount} onChange={(value) => setDraft({ ...draft, earnings: draft.earnings.map((current) => current.key === item.key ? { ...current, amount: value } : current) })} />)}
+          {draft.earnings.filter((item) => !item.systemKey).map((item) => <CustomEarningMoneyField key={item.key} source={item.source} value={item.amount} removable={!item.sourceId} onSourceChange={(source) => setDraft({ ...draft, earnings: draft.earnings.map((current) => current.key === item.key ? { ...current, source } : current) })} onAmountChange={(amount) => setDraft({ ...draft, earnings: draft.earnings.map((current) => current.key === item.key ? { ...current, amount } : current) })} onRemove={() => setDraft({ ...draft, earnings: draft.earnings.filter((current) => current.key !== item.key) })} />)}
+        </div>
+        <button type="button" className="work-add-source" onClick={() => setSourceDialogOpen(true)}>+ Adicionar outro ganho</button>
 
         <div className="work-record-section-title"><h3>Custos do dia</h3></div>
         <div className="work-record-costs">{draft.costs.map((cost, index) => <div className={`work-record-cost-item${editingCostKey === cost.key ? " expanded" : ""}`} key={cost.key}>
@@ -446,9 +493,11 @@ export default function WorkScreen({ navigation, onReady, onOperationalCost }: {
       </div>
       <footer><Button type="button" className="work-save" fullWidth loading={saving} loadingLabel="Salvando..." disabled={checkingDate || !draft.date} onClick={saveRecord}>{draftMode === "create" ? "Registrar trabalho" : "Salvar alterações"}</Button>{draftMode === "edit" && <button type="button" className="work-delete" disabled={saving || checkingDate} onClick={deleteRecord}>Excluir registro</button>}</footer>
     </section>}
+    {draft && sourceDialogOpen && <EarningSourceDialog existingSources={draft.earnings.map((item) => item.source)} onClose={() => setSourceDialogOpen(false)} onAdd={(value) => { const key = `new-earning-${nextEarningKey.current++}`; setDraft({ ...draft, earnings: [...draft.earnings, { key, source: value.source, originalSource: "", amount: value.amount, persistForFuture: value.persistForFuture, systemKey: null }] }); setSourceDialogOpen(false); }} />}
   </main>;
 }
 
 function DateBadge({ date }: { date: string }) { return <span className="work-day-date"><b>{String(parseDate(date).getDate()).padStart(2, "0")}</b><small>{new Intl.DateTimeFormat("pt-BR", { weekday: "short" }).format(parseDate(date)).replace(".", "")}</small></span>; }
 function MoneyField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <InputField fieldClassName="work-field" controlClassName="work-money-input" label={label} prefix="R$" inputMode="numeric" placeholder="0,00" value={value} onChange={(event) => onChange(inputMoney(event.target.value))} />; }
 function BrandedMoneyField({ label, logo, value, onChange }: { label: string; logo: string; value: string; onChange: (value: string) => void }) { return <label className="work-branded-money"><span>{label}</span><div><span className="work-branded-logo"><Image src={logo} alt="" width={96} height={96} /></span><span className="work-branded-input"><b>R$</b><input inputMode="numeric" placeholder="0,00" value={value} onChange={(event) => onChange(inputMoney(event.target.value))} /></span></div></label>; }
+function CustomEarningMoneyField({ source, value, removable, onSourceChange, onAmountChange, onRemove }: { source: string; value: string; removable: boolean; onSourceChange: (value: string) => void; onAmountChange: (value: string) => void; onRemove: () => void }) { return <div className="work-branded-money"><span className="work-branded-label"><input className="work-branded-source-name" aria-label="Nome do ganho" maxLength={30} value={source} onChange={(event) => onSourceChange(event.target.value)} />{removable && <button type="button" aria-label="Remover ganho" onClick={onRemove}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 10v6M14 10v6" /></svg></button>}</span><div><span className="work-branded-logo additional"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M16 10h5v5h-5a2.5 2.5 0 0 1 0-5ZM7 6V4h10v2" /></svg></span><span className="work-branded-input"><b>R$</b><input aria-label={`Valor de ${source}`} inputMode="numeric" placeholder="0,00" value={value} onChange={(event) => onAmountChange(inputMoney(event.target.value))} /></span></div></div>; }

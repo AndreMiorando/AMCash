@@ -16,6 +16,7 @@ import {
   ApiMileageSuggestions,
   ApiPaymentMethod,
   ApiWorkCostCategory,
+  ApiWorkEarningSource,
   ApiWorkOverview,
   ApiRecurrenceFrequency,
   ApiSeriesScope,
@@ -29,6 +30,7 @@ import { MonthPickerDialog } from "@/app/components/MonthPickerInput";
 import WorkScreen from "@/app/components/WorkScreen";
 import VehicleScreen from "@/app/components/VehicleScreen";
 import OperationalCostScreen from "@/app/components/OperationalCostScreen";
+import EarningSourceDialog from "@/app/components/EarningSourceDialog";
 import AppHeader from "@/app/components/AppHeader";
 import { CostCategoryGrid, CostCategoryIcon, workCostCategoryLabels } from "@/app/components/CostCategoryGrid";
 import Button from "@/app/components/ui/Button";
@@ -1148,8 +1150,8 @@ function Dashboard({
     <main className="dashboard-screen">
       <AppHeader>
         <div className="header-create-actions">
-          <button type="button" className="header-add-button header-add-button--expense" disabled={isLoading} onClick={() => setCreateType("expense")} aria-label="Nova despesa" title="Nova despesa"><Icon name="expense" /></button>
           <button type="button" className="header-add-button header-add-button--income" disabled={isLoading} onClick={() => setCreateType("income")} aria-label="Nova receita" title="Nova receita"><Icon name="income" /></button>
+          <button type="button" className="header-add-button header-add-button--expense" disabled={isLoading} onClick={() => setCreateType("expense")} aria-label="Nova despesa" title="Nova despesa"><Icon name="expense" /></button>
         </div>
       </AppHeader>
 
@@ -1989,8 +1991,8 @@ function GoalsScreen({ onHome, onFinance, onRadar, onWork, onReady }: { onHome: 
               {goal.covered ? (
                 <>
                   <span>OBJETIVO MENSAL</span>
-                  <strong>Objetivo concluído</strong>
-                  <p>O saldo financeiro deste mês está coberto.</p>
+                  <strong>Meta alcançada!</strong>
+                  <p>Seus ganhos já cobrem todas as despesas do mês.</p>
                 </>
               ) : (
                 <>
@@ -2056,8 +2058,11 @@ type HomeCostDraft = {
 
 type HomeEarningDraft = {
   key: string;
+  sourceId?: string;
   source: string;
+  originalSource: string;
   amount: string;
+  persistForFuture: boolean;
 };
 
 function homeWorkSignature({
@@ -2077,7 +2082,7 @@ function homeWorkSignature({
     uber,
     ninetyNine,
     kilometers,
-    additionalEarnings: additionalEarnings.map(({ source, amount }) => ({ source, amount })),
+    additionalEarnings: additionalEarnings.map(({ sourceId, source, amount, persistForFuture }) => ({ sourceId, source, amount, persistForFuture })),
     costs: costs
       .filter((item) => item.id || (parseCurrencyInput(item.amount) || 0) > 0)
       .map(({ id, category, amount, description }) => ({ id: id ?? null, category, amount, description })),
@@ -2202,6 +2207,9 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [workError, setWorkError] = useState("");
+  const [sourceModalOpen, setSourceModalOpen] = useState(false);
+  const [pendingFixedSourceDelete, setPendingFixedSourceDelete] = useState<HomeEarningDraft | null>(null);
+  const [deletingFixedSource, setDeletingFixedSource] = useState(false);
   const nextCostKey = useRef(1);
   const today = dateToInputValue(new Date());
   const homeCostPrefix = "HOME: ";
@@ -2212,10 +2220,11 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
     setError("");
     setWorkError("");
     try {
-      const [home, work, vehicles] = await Promise.all([
+      const [home, work, vehicles, earningSources] = await Promise.all([
         financeApi.home(today),
         usageProfile === "PERSONAL" ? Promise.resolve(null) : financeApi.workOverview(today, "DAY"),
         usageProfile === "PERSONAL" ? Promise.resolve([] as ApiVehicle[]) : financeApi.vehicles().catch(() => [] as ApiVehicle[]),
+        usageProfile === "PERSONAL" ? Promise.resolve([] as ApiWorkEarningSource[]) : financeApi.workEarningSources(),
       ]);
       setSummary(home);
       setWorkOverview(work);
@@ -2228,8 +2237,19 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
       const savedHomeCosts = work.costs.filter((item) => item.description === legacyHomeCostDescription || item.description?.startsWith(homeCostPrefix));
       const nextUber = maskCurrencyInput(String(Math.round(Number(uberEarning?.amount ?? 0) * 100)));
       const nextNinetyNine = maskCurrencyInput(String(Math.round(Number(ninetyNineEarning?.amount ?? 0) * 100)));
-      const nextAdditionalEarnings = day?.earnings.filter((item) => item !== uberEarning && item !== ninetyNineEarning)
-        .map((item) => ({ key: crypto.randomUUID(), source: item.source, amount: maskCurrencyInput(String(Math.round(Number(item.amount) * 100))) })) ?? [];
+      const usedEarningIds = new Set<string>();
+      if (uberEarning) usedEarningIds.add(uberEarning.id);
+      if (ninetyNineEarning) usedEarningIds.add(ninetyNineEarning.id);
+      const nextAdditionalEarnings: HomeEarningDraft[] = earningSources.filter((source) => !source.systemKey).map((source) => {
+        const earning = day?.earnings.find((item) => !usedEarningIds.has(item.id) && item.source.trim().toLocaleLowerCase("pt-BR") === source.name.trim().toLocaleLowerCase("pt-BR"));
+        if (earning) usedEarningIds.add(earning.id);
+        return { key: source.id, sourceId: source.id, source: source.name, originalSource: source.name,
+          amount: maskCurrencyInput(String(Math.round(Number(earning?.amount ?? 0) * 100))), persistForFuture: true };
+      });
+      day?.earnings.filter((item) => !usedEarningIds.has(item.id) && Number(item.amount) > 0).forEach((item) => nextAdditionalEarnings.push({
+        key: `earning-${item.id}`, source: item.source, originalSource: item.source,
+        amount: maskCurrencyInput(String(Math.round(Number(item.amount) * 100))), persistForFuture: false,
+      }));
       const nextKilometers = Number(day?.kilometers ?? 0) > 0 ? String(Number(day?.kilometers)).replace(".", ",") : "";
       const nextHomeCosts = savedHomeCosts.length ? savedHomeCosts.map((item) => {
         const storedDescription = item.description?.startsWith(homeCostPrefix) ? item.description.slice(homeCostPrefix.length) : "";
@@ -2285,11 +2305,12 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   const dailyGoalCompleted = dailyTarget > 0 && Boolean(summary?.goal.achieved);
   const todayGross = Number(summary?.goal.todayGross ?? 0);
   const showEmptyState = summary?.hasFinancialEntries === false && Number(summary?.goal.targetAmount ?? 0) === 0;
-  const additionalEarningsAreValid = additionalEarnings.every((item) => item.source.trim().length > 0 && (parseCurrencyInput(item.amount) || 0) > 0);
+  const additionalEarningsAreValid = additionalEarnings.every((item) => item.source.trim().length > 0
+    && ((parseCurrencyInput(item.amount) || 0) > 0 || item.persistForFuture || Boolean(item.sourceId)));
   const earningSourceCounts = ["uber", "99", ...additionalEarnings.map((item) => item.source.trim().toLocaleLowerCase("pt-BR")).filter(Boolean)]
     .reduce<Map<string, number>>((counts, source) => counts.set(source, (counts.get(source) ?? 0) + 1), new Map());
   const duplicateEarningSources = new Set([...earningSourceCounts.entries()].filter(([, count]) => count > 1).map(([source]) => source));
-  const duplicateEarningError = duplicateEarningSources.size > 0 ? "Cada fonte de faturamento deve aparecer apenas uma vez." : "";
+  const duplicateEarningError = duplicateEarningSources.size > 0 ? "Cada ganho deve aparecer apenas uma vez." : "";
   const workFormError = duplicateEarningError || workError;
   const hasWorkChanges = initialWorkSignature !== "" && initialWorkSignature !== homeWorkSignature({ uber, ninetyNine, kilometers, additionalEarnings, costs: homeCosts });
   const selectedHomeVehicle = homeVehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
@@ -2315,29 +2336,88 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
     setAdditionalEarnings((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...changes } : item));
   }
 
+  function openSourceModal() {
+    setSourceModalOpen(true);
+  }
+
+  function removeAdditionalEarning(item: HomeEarningDraft) {
+    setWorkError("");
+    if (item.sourceId) {
+      setPendingFixedSourceDelete(item);
+      return;
+    }
+    setAdditionalEarnings((current) => current.filter((earning) => earning.key !== item.key));
+  }
+
+  async function confirmFixedSourceDelete() {
+    const deleted = pendingFixedSourceDelete;
+    const sourceId = deleted?.sourceId;
+    if (!deleted || !sourceId || deletingFixedSource) return;
+    setDeletingFixedSource(true);
+    setWorkError("");
+    try {
+      await financeApi.deactivateWorkEarningSource(sourceId);
+      const keepsTodayValue = (parseCurrencyInput(deleted.amount) || 0) > 0;
+      setAdditionalEarnings((current) => keepsTodayValue
+        ? current.map((item) => item.key === deleted.key ? { ...item, sourceId: undefined, originalSource: item.source, persistForFuture: false } : item)
+        : current.filter((item) => item.key !== deleted.key));
+      setInitialWorkSignature((signature) => {
+        if (!signature) return signature;
+        const parsed = JSON.parse(signature) as { additionalEarnings: Array<Record<string, unknown>> };
+        parsed.additionalEarnings = keepsTodayValue
+          ? parsed.additionalEarnings.map((item) => item.sourceId === sourceId ? { ...item, sourceId: undefined, persistForFuture: false } : item)
+          : parsed.additionalEarnings.filter((item) => item.sourceId !== sourceId);
+        return JSON.stringify(parsed);
+      });
+      setPendingFixedSourceDelete(null);
+    } catch (requestError) {
+      setWorkError(messageFromError(requestError));
+      setPendingFixedSourceDelete(null);
+    } finally {
+      setDeletingFixedSource(false);
+    }
+  }
+
   async function saveDailyResult() {
     if (!summary || saving || !hasWorkChanges || !additionalEarningsAreValid) return;
     if (duplicateEarningError) {
       setWorkError(duplicateEarningError);
       return;
     }
-    const additional = additionalEarnings.filter((item) => item.source.trim() || item.amount);
+    let additional = additionalEarnings.filter((item) => item.sourceId || item.source.trim() || item.amount);
     if (additional.some((item) => !item.source.trim())) {
-      setWorkError("Informe o nome de cada fonte adicional.");
+      setWorkError("Informe o nome de cada ganho adicional.");
       return;
     }
     setSaving(true);
     setWorkError("");
     try {
-      await financeApi.saveWorkDay(today, {
-        kilometers: kilometersValue,
-        vehicleId: selectedHomeVehicle?.id ?? null,
-        earnings: [
-          { source: "Uber", amount: uberValue },
-          { source: "99", amount: ninetyNineValue },
-          ...additional.map((item) => ({ source: item.source.trim(), amount: parseCurrencyInput(item.amount) || 0 })),
-        ],
-      });
+      for (const earning of additional) {
+        if (earning.sourceId && earning.source.trim() !== earning.originalSource) {
+          const updated = await financeApi.renameWorkEarningSource(earning.sourceId, earning.source.trim());
+          additional = additional.map((item) => item.key === earning.key ? { ...item, source: updated.name, originalSource: updated.name } : item);
+        } else if (!earning.sourceId && earning.persistForFuture && earning.source.trim()) {
+          const created = await financeApi.createWorkEarningSource(earning.source.trim());
+          additional = additional.map((item) => item.key === earning.key
+            ? { ...item, sourceId: created.id, source: created.name, originalSource: created.name }
+            : item);
+        }
+        setAdditionalEarnings((current) => current.map((item) => additional.find((resolved) => resolved.key === item.key) ?? item));
+      }
+
+      const hasDayValues = kilometersValue > 0 || uberValue > 0 || ninetyNineValue > 0
+        || additional.some((item) => (parseCurrencyInput(item.amount) || 0) > 0);
+      if (savedDay || hasDayValues) {
+        await financeApi.saveWorkDay(today, {
+          kilometers: kilometersValue,
+          vehicleId: selectedHomeVehicle?.id ?? null,
+          earnings: [
+            { source: "Uber", amount: uberValue },
+            { source: "99", amount: ninetyNineValue },
+            ...additional.map((item) => ({ source: item.source.trim(), amount: parseCurrencyInput(item.amount) || 0 })),
+          ],
+        });
+      }
 
       const validCosts = homeCosts
         .map((item) => ({ ...item, parsedAmount: parseCurrencyInput(item.amount) || 0 }))
@@ -2417,8 +2497,8 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
                 <div><i><Icon name="check" /></i><span><small>Concluído</small><b>{formatCurrency(todayGross)}</b></span></div>
               </div>
             </div> : summary.goal.covered && dailyTarget === 0 ? <>
-              <span>OBJETIVO MENSAL</span>
-              <strong>Objetivo concluído</strong><p>O saldo financeiro deste mês está coberto.</p>
+              <span>OBJETIVO DE HOJE</span>
+              <strong>Meta concluída</strong>
             </> : <>
               <div className="daily-goal-title"><span><Icon name="target" />OBJETIVO DE HOJE</span></div>
               <div className="daily-goal-values"><strong>{formatCurrency(dailyTarget)}</strong><div><Icon name="clock" /><span><small>Faltam</small><b>{formatCurrency(dailyRemaining)}</b></span></div></div>
@@ -2441,10 +2521,10 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
               <label><span className="home-work-source ninety-nine logo"><Image src="/99-logo.png" alt="" width={1600} height={1600} /></span><span>99</span><div><b>R$</b><input aria-label="Faturamento 99" value={ninetyNine} onChange={(event) => { setNinetyNine(maskCurrencyInput(event.target.value)); setWorkError(""); }} placeholder="0,00" inputMode="numeric" /></div></label>
               {additionalEarnings.map((item, index) => {
                 const duplicateSource = duplicateEarningSources.has(item.source.trim().toLocaleLowerCase("pt-BR"));
-                return <div className={`home-additional-source-row${duplicateSource ? " invalid" : ""}`} key={item.key}><span className="home-work-source additional"><Icon name="wallet" /></span><span className="home-additional-source-copy"><input className="home-additional-source-name" maxLength={30} aria-label={`Nome da fonte adicional ${index + 1}`} aria-invalid={duplicateSource || undefined} value={item.source} onChange={(event) => updateAdditionalEarning(index, { source: event.target.value })} placeholder="Fonte adicional" /><button type="button" aria-label={`Remover fonte adicional ${index + 1}`} onClick={() => { setWorkError(""); setAdditionalEarnings((current) => current.filter((_, itemIndex) => itemIndex !== index)); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 10v6M14 10v6" /></svg></button></span><div><b>R$</b><input aria-label={`Valor da fonte adicional ${index + 1}`} value={item.amount} onChange={(event) => updateAdditionalEarning(index, { amount: maskCurrencyInput(event.target.value) })} placeholder="0,00" inputMode="numeric" /></div></div>;
+                return <div className="home-additional-source-entry" key={item.key}><div className={`home-additional-source-row${duplicateSource ? " invalid" : ""}`}><span className="home-work-source additional"><Icon name="wallet" /></span><span className="home-additional-source-copy"><input className="home-additional-source-name" maxLength={30} aria-label={`Nome do ganho adicional ${index + 1}`} aria-invalid={duplicateSource || undefined} value={item.source} onChange={(event) => updateAdditionalEarning(index, { source: event.target.value })} placeholder="Ganho adicional" /><button type="button" aria-label={item.sourceId ? `Excluir ganho fixo ${item.source}` : `Remover ganho adicional ${index + 1}`} onClick={() => removeAdditionalEarning(item)}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 10v6M14 10v6" /></svg></button></span><div><b>R$</b><input aria-label={`Valor do ganho adicional ${index + 1}`} value={item.amount} onChange={(event) => updateAdditionalEarning(index, { amount: maskCurrencyInput(event.target.value) })} placeholder="0,00" inputMode="numeric" /></div></div></div>;
               })}
               {workFormError && <p className="home-work-inline-error" role="alert"><Icon name="warning" /><span>{workFormError}</span></p>}
-              <button type="button" className="home-add-source" onClick={() => { setWorkError(""); setAdditionalEarnings((current) => [...current, { key: crypto.randomUUID(), source: "", amount: "" }]); }}><Icon name="plus" />Adicionar outra fonte</button>
+              <button type="button" className="home-add-source" onClick={openSourceModal}><Icon name="plus" />Adicionar outro ganho</button>
             </div>
             <div className="home-costs-block">
               <div className="home-costs-heading"><div><span>CUSTOS DE HOJE</span></div></div>
@@ -2485,6 +2565,8 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
           </>}
         </>}
     </div>
+    {sourceModalOpen && <EarningSourceDialog existingSources={["Uber", "99", ...additionalEarnings.map((item) => item.source)]} onClose={() => setSourceModalOpen(false)} onAdd={(value) => { setAdditionalEarnings((current) => [...current, { key: crypto.randomUUID(), source: value.source, originalSource: "", amount: value.amount, persistForFuture: value.persistForFuture }]); setWorkError(""); setSourceModalOpen(false); }} />}
+    {pendingFixedSourceDelete && <div className="sheet-backdrop confirm-backdrop" role="presentation" onMouseDown={() => !deletingFixedSource && setPendingFixedSourceDelete(null)}><section className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-fixed-source-title" onMouseDown={(event) => event.stopPropagation()}><span className="confirm-icon"><Icon name="trash" /></span><h2 id="delete-fixed-source-title">Excluir ganho fixo?</h2><p>O ganho “{pendingFixedSourceDelete.source}” deixará de aparecer nos próximos registros. Os valores já registrados serão mantidos.</p><div><button type="button" disabled={deletingFixedSource} onClick={() => setPendingFixedSourceDelete(null)}>Cancelar</button><button type="button" disabled={deletingFixedSource} onClick={() => void confirmFixedSourceDelete()}>{deletingFixedSource ? "Excluindo..." : "Excluir ganho"}</button></div></section></div>}
     <BottomNavigation active="home" loading={loading} onHome={() => {}} onFinance={onFinance} onRadar={onRadar} onGoals={onGoals} onWork={onWork} showWorkFeatures={usageProfile !== "PERSONAL"} />
   </main>;
 }

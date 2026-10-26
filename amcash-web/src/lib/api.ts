@@ -299,6 +299,14 @@ export type ApiWorkEarning = {
   amount: number;
 };
 
+export type ApiWorkEarningSource = {
+  id: string;
+  name: string;
+  systemKey: "UBER" | "NINETY_NINE" | null;
+  active: boolean;
+  sortOrder: number;
+};
+
 export type ApiWorkDay = {
   id: string;
   date: string;
@@ -545,6 +553,28 @@ export const financeApi = {
 
   workOverview(date: string, period: ApiWorkPeriod) {
     return apiRequest<ApiWorkOverview>(`/api/v1/work?date=${date}&period=${period}`);
+  },
+
+  workEarningSources() {
+    return apiRequest<ApiWorkEarningSource[]>("/api/v1/work/earning-sources");
+  },
+
+  createWorkEarningSource(name: string) {
+    return apiRequest<ApiWorkEarningSource>("/api/v1/work/earning-sources", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+  },
+
+  renameWorkEarningSource(sourceId: string, name: string) {
+    return apiRequest<ApiWorkEarningSource>(`/api/v1/work/earning-sources/${sourceId}`, {
+      method: "PUT",
+      body: JSON.stringify({ name }),
+    });
+  },
+
+  deactivateWorkEarningSource(sourceId: string) {
+    return apiRequest<void>(`/api/v1/work/earning-sources/${sourceId}`, { method: "DELETE" });
   },
 
   saveWorkDay(date: string, payload: WorkDayPayload) {

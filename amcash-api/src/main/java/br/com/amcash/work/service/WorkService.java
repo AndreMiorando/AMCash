@@ -305,7 +305,7 @@ public class WorkService {
         for (WorkEarningRequest earning : earnings) {
             String normalized = earning.source().trim().toLowerCase(Locale.ROOT);
             if (!sources.add(normalized)) {
-                throw new BadRequestException("Cada fonte de faturamento deve aparecer apenas uma vez");
+                throw new BadRequestException("Cada ganho deve aparecer apenas uma vez");
             }
         }
     }

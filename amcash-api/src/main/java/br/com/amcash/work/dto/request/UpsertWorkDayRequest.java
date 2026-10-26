@@ -17,6 +17,6 @@ public record UpsertWorkDayRequest(
         UUID vehicleId,
 
         @NotNull(message = "Informe os faturamentos")
-        @Size(max = 20, message = "Informe no máximo 20 fontes de faturamento")
+        @Size(max = 20, message = "Informe no máximo 20 ganhos")
         List<@Valid WorkEarningRequest> earnings) {
 }
