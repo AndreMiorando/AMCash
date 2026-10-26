@@ -13,21 +13,23 @@ import br.com.amcash.vehicle.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.*;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Service
 public class OperationalCostService {
     private static final BigDecimal TWELVE=BigDecimal.valueOf(12);
     private static final BigDecimal HUNDRED=BigDecimal.valueOf(100);
+    private static final int MIN_HISTORY_DAYS=90;
     private final OperationalCostConfigurationRepository configurations;
     private final VehicleRepository vehicles;
     private final VehicleFinanceRepository finances;
     private final VehicleMaintenanceRepository maintenances;
+    private final OdometerReadingRepository readings;
     private final UserRepository users;
 
-    public OperationalCostService(OperationalCostConfigurationRepository configurations,VehicleRepository vehicles,VehicleFinanceRepository finances,VehicleMaintenanceRepository maintenances,UserRepository users){this.configurations=configurations;this.vehicles=vehicles;this.finances=finances;this.maintenances=maintenances;this.users=users;}
+    public OperationalCostService(OperationalCostConfigurationRepository configurations,VehicleRepository vehicles,VehicleFinanceRepository finances,VehicleMaintenanceRepository maintenances,OdometerReadingRepository readings,UserRepository users){this.configurations=configurations;this.vehicles=vehicles;this.finances=finances;this.maintenances=maintenances;this.readings=readings;this.users=users;}
 
     @Transactional(readOnly=true) public List<OperationalCostResponse> list(UUID userId){requireMobility(userId);return configurations.findAllByUserIdOrderByUpdatedAtDesc(userId).stream().map(this::response).toList();}
     @Transactional(readOnly=true) public OperationalCostResponse get(UUID userId,UUID vehicleId){requireMobility(userId);return response(findConfiguration(userId,vehicleId));}
@@ -39,7 +41,7 @@ public class OperationalCostService {
     private void apply(OperationalCostConfiguration configuration,Vehicle vehicle,OperationalCostRequest request){
         validate(vehicle,request);
         List<OperationalCustomFixedCost> custom=request.customFixedCosts().stream().map(item->new OperationalCustomFixedCost(item.title().trim(),item.amount(),item.period(),item.workCostCategory())).toList();
-        configuration.update(request.monthlyMileage(),request.mileageSource(),request.fuelType(),request.fuelPrice(),request.includeFinance(),request.annualIpva(),request.annualFees(),request.insuranceAmount(),request.insurancePeriod(),request.maintenanceMethod(),request.maintenanceMethod()==MaintenanceCalculationMethod.MANUAL?request.annualMaintenanceEstimate():null,request.includeDepreciation(),request.includeDepreciation()?request.currentVehicleValue():null,request.includeDepreciation()?request.annualDepreciationRate():null,custom,request.maintenanceMethod()==MaintenanceCalculationMethod.HISTORY?request.selectedMaintenanceIds():Set.of());
+        configuration.update(request.monthlyMileage(),request.mileageSource(),request.fuelType(),request.fuelPrice(),request.includeFinance(),request.annualIpva(),request.annualFees(),request.insuranceAmount(),request.insurancePeriod(),request.maintenanceMethod(),request.maintenanceMethod()==MaintenanceCalculationMethod.MANUAL?request.annualMaintenanceEstimate():null,request.includeDepreciation(),request.includeDepreciation()?request.currentVehicleValue():null,request.includeDepreciation()?request.annualDepreciationRate():null,custom);
     }
 
     private void validate(Vehicle vehicle,OperationalCostRequest request){
@@ -49,11 +51,9 @@ public class OperationalCostService {
         if(request.insuranceAmount()==null&&request.insurancePeriod()!=null)throw new BadRequestException("Informe o valor do seguro");
         if(request.includeFinance()&&(vehicleFinance(vehicle).getStatus()==FinancialStatus.PAID_OFF||vehicleFinance(vehicle).getMonthlyAmount()==null))throw new BadRequestException("O veículo não possui financiamento ou aluguel mensal disponível");
         if(request.maintenanceMethod()==MaintenanceCalculationMethod.MANUAL&&request.annualMaintenanceEstimate()==null)throw new BadRequestException("Informe a estimativa anual de manutenção");
-        if(request.maintenanceMethod()==MaintenanceCalculationMethod.HISTORY){
-            if(request.selectedMaintenanceIds().isEmpty())throw new BadRequestException("Selecione ao menos uma manutenção com intervalo de quilometragem informado");
-            Map<UUID,VehicleMaintenance> selected=maintenances.findAllById(request.selectedMaintenanceIds()).stream().collect(Collectors.toMap(VehicleMaintenance::getId,Function.identity()));
-            boolean invalid=selected.size()!=request.selectedMaintenanceIds().size()||selected.values().stream().anyMatch(item->!item.getVehicle().getId().equals(vehicle.getId())||item.getNextMileage()==null||item.getNextMileage().compareTo(item.getMileage())<=0);
-            if(invalid)throw new BadRequestException("Uma manutenção selecionada não possui intervalo confiável para o cálculo");
+        if(request.maintenanceMethod()==MaintenanceCalculationMethod.LAST_12_MONTHS){
+            OperationalCostResponse.MaintenanceHistoryResponse history=maintenanceHistory(vehicle);
+            if(!history.available())throw new BadRequestException(history.unavailableReason());
         }
         if(request.includeDepreciation()&&(request.currentVehicleValue()==null||request.annualDepreciationRate()==null))throw new BadRequestException("Informe o valor atual e a taxa anual de depreciação");
     }
@@ -63,7 +63,7 @@ public class OperationalCostService {
         var calculation=calculation(configuration);
         List<OperationalCostResponse.CustomFixedCostResponse> custom=configuration.getCustomFixedCosts().stream().map(item->new OperationalCostResponse.CustomFixedCostResponse(item.getTitle(),item.getAmount(),item.getPeriod(),item.getWorkCostCategory())).toList();
         String name=vehicle.getNickname()!=null?vehicle.getNickname():vehicle.getBrand()+" "+vehicle.getModel();
-        return new OperationalCostResponse(configuration.getId(),vehicle.getId(),name,configuration.getFuelType(),configuration.getMonthlyMileage(),configuration.getMileageSource(),configuration.getFuelPrice(),configuration.isIncludeFinance(),configuration.getAnnualIpva(),configuration.getAnnualFees(),configuration.getInsuranceAmount(),configuration.getInsurancePeriod(),configuration.getMaintenanceMethod(),configuration.getAnnualMaintenanceEstimate(),configuration.isIncludeDepreciation(),configuration.getCurrentVehicleValue(),configuration.getAnnualDepreciationRate(),custom,new LinkedHashSet<>(configuration.getSelectedMaintenanceIds()),calculation);
+        return new OperationalCostResponse(configuration.getId(),vehicle.getId(),name,configuration.getFuelType(),configuration.getMonthlyMileage(),configuration.getMileageSource(),configuration.getFuelPrice(),configuration.isIncludeFinance(),configuration.getAnnualIpva(),configuration.getAnnualFees(),configuration.getInsuranceAmount(),configuration.getInsurancePeriod(),configuration.getMaintenanceMethod(),configuration.getAnnualMaintenanceEstimate(),configuration.isIncludeDepreciation(),configuration.getCurrentVehicleValue(),configuration.getAnnualDepreciationRate(),custom,configuration.getMaintenanceMethod()==MaintenanceCalculationMethod.LAST_12_MONTHS?maintenanceHistory(vehicle):null,calculation);
     }
 
     @Transactional(readOnly=true)
@@ -86,14 +86,28 @@ public class OperationalCostService {
 
     private BigDecimal maintenanceMonthly(OperationalCostConfiguration configuration){
         if(configuration.getMaintenanceMethod()==MaintenanceCalculationMethod.MANUAL)return configuration.getAnnualMaintenanceEstimate().divide(TWELVE,10,RoundingMode.HALF_UP);
-        Set<UUID> ids=configuration.getSelectedMaintenanceIds();
-        Map<String,VehicleMaintenance> distinct=new LinkedHashMap<>();
-        maintenances.findAllByVehicleIdOrderByDateDescCreatedAtDesc(configuration.getVehicle().getId()).stream().filter(item->ids.contains(item.getId())&&item.getNextMileage()!=null).forEach(item->distinct.putIfAbsent(maintenanceKey(item),item));
-        BigDecimal perKm=distinct.values().stream().map(item->item.getAmount().divide(item.getNextMileage().subtract(item.getMileage()),10,RoundingMode.HALF_UP)).reduce(BigDecimal.ZERO,BigDecimal::add);
-        return perKm.multiply(configuration.getMonthlyMileage());
+        OperationalCostResponse.MaintenanceHistoryResponse history=maintenanceHistory(configuration.getVehicle());
+        if(!history.available())return BigDecimal.ZERO;
+        return history.amount().divide(history.kilometers(),10,RoundingMode.HALF_UP).multiply(configuration.getMonthlyMileage());
     }
 
-    private String maintenanceKey(VehicleMaintenance item){return item.getType()==MaintenanceType.OTHER?item.getType()+":"+String.valueOf(item.getCustomName()).trim().toLowerCase(Locale.ROOT):item.getType().name();}
+    @Transactional(readOnly=true)
+    public OperationalCostResponse.MaintenanceHistoryResponse maintenanceHistory(Vehicle vehicle){
+        LocalDate end=LocalDate.now();
+        List<OdometerReading> history=readings.findAllByVehicleIdOrderByReadingDateDescCreatedAtDesc(vehicle.getId());
+        if(history.size()<2)return unavailableHistory("Registre ao menos duas leituras de quilometragem para usar o histórico do último ano.");
+        LocalDate windowStart=end.minusMonths(12);
+        OdometerReading latest=history.get(0);
+        OdometerReading start=history.stream().filter(item->!item.getReadingDate().isAfter(windowStart)).findFirst().orElse(history.get(history.size()-1));
+        if(start==latest||ChronoUnit.DAYS.between(start.getReadingDate(),end)<MIN_HISTORY_DAYS)return unavailableHistory("Histórico insuficiente: são necessários ao menos 90 dias de leituras. Use a estimativa manual ou registre mais leituras.");
+        BigDecimal kilometers=latest.getMileage().subtract(start.getMileage());
+        if(kilometers.signum()<=0)return unavailableHistory("As leituras de quilometragem não permitem calcular o histórico do último ano.");
+        List<VehicleMaintenance> items=maintenances.findAllByVehicleIdOrderByDateDescCreatedAtDesc(vehicle.getId()).stream().filter(item->item.getDate().isAfter(start.getReadingDate())&&!item.getDate().isAfter(end)).toList();
+        BigDecimal amount=items.stream().map(VehicleMaintenance::getAmount).reduce(BigDecimal.ZERO,BigDecimal::add);
+        return new OperationalCostResponse.MaintenanceHistoryResponse(true,null,start.getReadingDate(),end,kilometers,money(amount),items.size(),perKm(amount,kilometers));
+    }
+
+    private OperationalCostResponse.MaintenanceHistoryResponse unavailableHistory(String reason){return new OperationalCostResponse.MaintenanceHistoryResponse(false,reason,null,null,null,null,0,null);}
     private BigDecimal consumption(Vehicle vehicle,FuelType fuel){return switch(fuel){case GASOLINE->allowed(vehicle,fuel)?vehicle.getGasolineConsumption():null;case ETHANOL->allowed(vehicle,fuel)?vehicle.getEthanolConsumption():null;case DIESEL->allowed(vehicle,fuel)?vehicle.getDieselConsumption():null;case ELECTRIC->allowed(vehicle,fuel)?vehicle.getElectricConsumption():null;default->null;};}
     private boolean allowed(Vehicle vehicle,FuelType selected){return switch(vehicle.getFuelType()){case FLEX->selected==FuelType.GASOLINE||selected==FuelType.ETHANOL;case HYBRID->selected==FuelType.GASOLINE||selected==FuelType.ETHANOL||selected==FuelType.DIESEL||selected==FuelType.ELECTRIC;default->vehicle.getFuelType()==selected;};}
     private BigDecimal monthly(BigDecimal value,CostPeriod period){return period==CostPeriod.ANNUAL?value.divide(TWELVE,10,RoundingMode.HALF_UP):value;}
