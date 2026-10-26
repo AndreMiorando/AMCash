@@ -30,6 +30,7 @@ import { MonthPickerDialog } from "@/app/components/MonthPickerInput";
 import WorkScreen from "@/app/components/WorkScreen";
 import VehicleScreen from "@/app/components/VehicleScreen";
 import OperationalCostScreen from "@/app/components/OperationalCostScreen";
+import CostDialog, { CostDialogValue } from "@/app/components/CostDialog";
 import EarningSourceDialog from "@/app/components/EarningSourceDialog";
 import AppHeader from "@/app/components/AppHeader";
 import { CostCategoryGrid, CostCategoryIcon, workCostCategoryLabels } from "@/app/components/CostCategoryGrid";
@@ -2208,6 +2209,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   const [error, setError] = useState("");
   const [workError, setWorkError] = useState("");
   const [sourceModalOpen, setSourceModalOpen] = useState(false);
+  const [costDialogOpen, setCostDialogOpen] = useState(false);
   const [pendingFixedSourceDelete, setPendingFixedSourceDelete] = useState<HomeEarningDraft | null>(null);
   const [deletingFixedSource, setDeletingFixedSource] = useState(false);
   const nextCostKey = useRef(1);
@@ -2320,10 +2322,11 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
     setHomeCosts((current) => current.map((item) => item.key === key ? { ...item, ...changes } : item));
   }
 
-  function addHomeCost() {
+  function addHomeCost(value: CostDialogValue) {
     const key = `new-${nextCostKey.current++}`;
-    setHomeCosts((current) => [...current, { key, category: "FUEL", amount: "", description: "" }]);
-    setOpenCostKey(key);
+    setHomeCosts((current) => [...current, { key, ...value }]);
+    setOpenCostKey(null);
+    setCostDialogOpen(false);
   }
 
   function removeHomeCost(key: string) {
@@ -2356,17 +2359,12 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
     setDeletingFixedSource(true);
     setWorkError("");
     try {
-      await financeApi.deactivateWorkEarningSource(sourceId);
-      const keepsTodayValue = (parseCurrencyInput(deleted.amount) || 0) > 0;
-      setAdditionalEarnings((current) => keepsTodayValue
-        ? current.map((item) => item.key === deleted.key ? { ...item, sourceId: undefined, originalSource: item.source, persistForFuture: false } : item)
-        : current.filter((item) => item.key !== deleted.key));
+      await financeApi.deactivateWorkEarningSource(sourceId, today);
+      setAdditionalEarnings((current) => current.filter((item) => item.key !== deleted.key));
       setInitialWorkSignature((signature) => {
         if (!signature) return signature;
         const parsed = JSON.parse(signature) as { additionalEarnings: Array<Record<string, unknown>> };
-        parsed.additionalEarnings = keepsTodayValue
-          ? parsed.additionalEarnings.map((item) => item.sourceId === sourceId ? { ...item, sourceId: undefined, persistForFuture: false } : item)
-          : parsed.additionalEarnings.filter((item) => item.sourceId !== sourceId);
+        parsed.additionalEarnings = parsed.additionalEarnings.filter((item) => item.sourceId !== sourceId);
         return JSON.stringify(parsed);
       });
       setPendingFixedSourceDelete(null);
@@ -2541,7 +2539,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
                   </div>}
                 </div>)}
               </div>
-              <button type="button" className="home-add-cost" onClick={addHomeCost}><Icon name="plus" />Adicionar custo</button>
+              <button type="button" className="home-add-cost" onClick={() => setCostDialogOpen(true)}><Icon name="plus" />Adicionar custo</button>
             </div>
             <Button type="button" fullWidth loading={saving} loadingLabel="Atualizando..." disabled={!hasWorkChanges || !additionalEarningsAreValid || Boolean(duplicateEarningError)} onClick={() => void saveDailyResult()}>Atualizar trabalho de hoje</Button>
           </section>
@@ -2566,7 +2564,8 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
         </>}
     </div>
     {sourceModalOpen && <EarningSourceDialog existingSources={["Uber", "99", ...additionalEarnings.map((item) => item.source)]} onClose={() => setSourceModalOpen(false)} onAdd={(value) => { setAdditionalEarnings((current) => [...current, { key: crypto.randomUUID(), source: value.source, originalSource: "", amount: value.amount, persistForFuture: value.persistForFuture }]); setWorkError(""); setSourceModalOpen(false); }} />}
-    {pendingFixedSourceDelete && <div className="sheet-backdrop confirm-backdrop" role="presentation" onMouseDown={() => !deletingFixedSource && setPendingFixedSourceDelete(null)}><section className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-fixed-source-title" onMouseDown={(event) => event.stopPropagation()}><span className="confirm-icon"><Icon name="trash" /></span><h2 id="delete-fixed-source-title">Excluir ganho fixo?</h2><p>O ganho “{pendingFixedSourceDelete.source}” deixará de aparecer nos próximos registros. Os valores já registrados serão mantidos.</p><div><button type="button" disabled={deletingFixedSource} onClick={() => setPendingFixedSourceDelete(null)}>Cancelar</button><button type="button" disabled={deletingFixedSource} onClick={() => void confirmFixedSourceDelete()}>{deletingFixedSource ? "Excluindo..." : "Excluir ganho"}</button></div></section></div>}
+    {costDialogOpen && <CostDialog onClose={() => setCostDialogOpen(false)} onAdd={addHomeCost} />}
+    {pendingFixedSourceDelete && <div className="sheet-backdrop confirm-backdrop" role="presentation" onMouseDown={() => !deletingFixedSource && setPendingFixedSourceDelete(null)}><section className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-fixed-source-title" onMouseDown={(event) => event.stopPropagation()}><span className="confirm-icon"><Icon name="trash" /></span><h2 id="delete-fixed-source-title">Excluir ganho fixo?</h2><p>O ganho “{pendingFixedSourceDelete.source}” e o valor registrado hoje serão excluídos. Os registros anteriores serão mantidos.</p><div><button type="button" disabled={deletingFixedSource} onClick={() => setPendingFixedSourceDelete(null)}>Cancelar</button><button type="button" disabled={deletingFixedSource} onClick={() => void confirmFixedSourceDelete()}>{deletingFixedSource ? "Excluindo..." : "Excluir ganho"}</button></div></section></div>}
     <BottomNavigation active="home" loading={loading} onHome={() => {}} onFinance={onFinance} onRadar={onRadar} onGoals={onGoals} onWork={onWork} showWorkFeatures={usageProfile !== "PERSONAL"} />
   </main>;
 }

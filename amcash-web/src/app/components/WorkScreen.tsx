@@ -4,6 +4,7 @@ import Image from "next/image";
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { ApiVehicle, ApiWorkCost, ApiWorkCostCategory, ApiWorkDay, ApiWorkEarningSource, ApiWorkOverview, ApiWorkPeriod, financeApi } from "@/lib/api";
 import AppHeader from "@/app/components/AppHeader";
+import CostDialog, { CostDialogValue } from "@/app/components/CostDialog";
 import { CostCategoryGrid, CostCategoryIcon, workCostCategoryLabels } from "@/app/components/CostCategoryGrid";
 import DatePickerInput, { dateToInputValue } from "@/app/components/DatePickerInput";
 import MonthPickerInput from "@/app/components/MonthPickerInput";
@@ -191,6 +192,7 @@ export default function WorkScreen({ navigation, onReady, onOperationalCost }: {
   const [editingCostKey, setEditingCostKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
+  const [costDialogOpen, setCostDialogOpen] = useState(false);
   const requestId = useRef(0);
   const workDateRequestId = useRef(0);
   const nextCostKey = useRef(0);
@@ -466,7 +468,7 @@ export default function WorkScreen({ navigation, onReady, onOperationalCost }: {
     </div>{navigation(pageLoading)}
 
     {draft && <section className="work-record-screen" aria-labelledby="work-record-title">
-      <header className="work-record-page-header"><button type="button" onClick={() => { if (!saving) { setSourceDialogOpen(false); setDraft(null); } }} aria-label="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg></button><h2 id="work-record-title">{draftMode === "create" ? "Registrar trabalho" : "Editar trabalho"}</h2><span aria-hidden="true" /></header>
+      <header className="work-record-page-header"><button type="button" onClick={() => { if (!saving) { setSourceDialogOpen(false); setCostDialogOpen(false); setDraft(null); } }} aria-label="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg></button><h2 id="work-record-title">{draftMode === "create" ? "Registrar trabalho" : "Editar trabalho"}</h2><span aria-hidden="true" /></header>
       <div className="work-form-scroll">
         {error && <p className="work-error" role="alert">{error}</p>}
         <div className="work-record-date-field"><DatePickerInput label="Data do trabalho" value={draft.date} max={dateToInputValue(new Date())} onChange={selectWorkDate} />{draft.vehicleId&&<small className="work-record-active-vehicle">Veículo em uso: {vehicles.find(vehicle=>vehicle.id===draft.vehicleId)?.nickname||vehicles.find(vehicle=>vehicle.id===draft.vehicleId)?.model}</small>}</div>
@@ -487,13 +489,14 @@ export default function WorkScreen({ navigation, onReady, onOperationalCost }: {
             <InputField fieldClassName="work-field" label="Descrição (opcional)" maxLength={60} placeholder="Ex.: Abastecimento no posto" value={cost.description} onChange={(event) => setDraft({ ...draft, costs: draft.costs.map((current, i) => i === index ? { ...current, description: event.target.value } : current) })} />
             <button type="button" className="work-record-cost-remove" onClick={() => { setDraft({ ...draft, costs: draft.costs.filter((_, i) => i !== index) }); setEditingCostKey(null); }}>× <span>Remover custo</span></button></div>}
         </div>)}</div>
-        <button type="button" className="work-add-source work-add-cost" onClick={() => { const key = `new-${nextCostKey.current++}`; setDraft({ ...draft, costs: [...draft.costs, { key, category: "FUEL", description: "", amount: "" }] }); setEditingCostKey(key); }}>+ Adicionar custo</button>
+        <button type="button" className="work-add-source work-add-cost" onClick={() => setCostDialogOpen(true)}>+ Adicionar custo</button>
 
         <div className="work-record-result"><span><b>Resultado líquido do dia</b><small>Faturamento {currency(draftGross)} · Custos {currency(draftCosts)}</small></span><strong className={draftNet < 0 ? "negative" : ""}>{draftNet < 0 ? "- " : ""}{currency(Math.abs(draftNet))}</strong></div>
       </div>
       <footer><Button type="button" className="work-save" fullWidth loading={saving} loadingLabel="Salvando..." disabled={checkingDate || !draft.date} onClick={saveRecord}>{draftMode === "create" ? "Registrar trabalho" : "Salvar alterações"}</Button>{draftMode === "edit" && <button type="button" className="work-delete" disabled={saving || checkingDate} onClick={deleteRecord}>Excluir registro</button>}</footer>
     </section>}
     {draft && sourceDialogOpen && <EarningSourceDialog existingSources={draft.earnings.map((item) => item.source)} onClose={() => setSourceDialogOpen(false)} onAdd={(value) => { const key = `new-earning-${nextEarningKey.current++}`; setDraft({ ...draft, earnings: [...draft.earnings, { key, source: value.source, originalSource: "", amount: value.amount, persistForFuture: value.persistForFuture, systemKey: null }] }); setSourceDialogOpen(false); }} />}
+    {draft && costDialogOpen && <CostDialog onClose={() => setCostDialogOpen(false)} onAdd={(value: CostDialogValue) => { const key = `new-${nextCostKey.current++}`; setDraft({ ...draft, costs: [...draft.costs, { key, ...value }] }); setEditingCostKey(null); setCostDialogOpen(false); }} />}
   </main>;
 }
 
