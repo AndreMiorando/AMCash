@@ -20,6 +20,12 @@ public interface WorkEarningRepository extends JpaRepository<WorkEarning, UUID> 
     @Query("delete from WorkEarning earning where earning.workDay.id = :workDayId")
     void deleteAllByWorkDayId(@Param("workDayId") UUID workDayId);
 
+    @Modifying
+    @Query("update WorkEarning earning set earning.source = :newSource where earning.workDay.user.id = :userId and lower(earning.source) = :normalizedSource")
+    void renameSource(@Param("userId") UUID userId,
+                      @Param("normalizedSource") String normalizedSource,
+                      @Param("newSource") String newSource);
+
     @Query("""
             select coalesce(sum(earning.amount), 0),
                    coalesce(sum(case when day.date = :referenceDate then earning.amount else 0 end), 0)

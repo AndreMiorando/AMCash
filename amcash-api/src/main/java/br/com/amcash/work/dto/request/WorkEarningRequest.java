@@ -8,8 +8,8 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 
 public record WorkEarningRequest(
-        @NotBlank(message = "Informe a fonte do faturamento")
-        @Size(max = 30, message = "A fonte deve ter no máximo 30 caracteres")
+        @NotBlank(message = "Informe o ganho")
+        @Size(max = 30, message = "O ganho deve ter no máximo 30 caracteres")
         String source,
 
         @NotNull(message = "Informe o valor faturado")

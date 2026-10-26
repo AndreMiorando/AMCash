@@ -4,11 +4,14 @@ import br.com.amcash.config.AuthenticatedUser;
 import br.com.amcash.config.CurrentUser;
 import br.com.amcash.work.dto.request.UpsertWorkDayRequest;
 import br.com.amcash.work.dto.request.WorkCostRequest;
+import br.com.amcash.work.dto.request.WorkEarningSourceRequest;
 import br.com.amcash.work.dto.response.WorkCostResponse;
 import br.com.amcash.work.dto.response.WorkDayResponse;
+import br.com.amcash.work.dto.response.WorkEarningSourceResponse;
 import br.com.amcash.work.dto.response.WorkOverviewResponse;
 import br.com.amcash.work.entity.WorkPeriod;
 import br.com.amcash.work.service.WorkService;
+import br.com.amcash.work.service.WorkEarningSourceService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -24,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -31,9 +35,40 @@ import java.util.UUID;
 public class WorkController {
 
     private final WorkService workService;
+    private final WorkEarningSourceService sourceService;
 
-    public WorkController(WorkService workService) {
+    public WorkController(WorkService workService, WorkEarningSourceService sourceService) {
         this.workService = workService;
+        this.sourceService = sourceService;
+    }
+
+    @GetMapping("/earning-sources")
+    public List<WorkEarningSourceResponse> earningSources(@CurrentUser AuthenticatedUser user) {
+        return sourceService.list(user.userId());
+    }
+
+    @PostMapping("/earning-sources")
+    @org.springframework.web.bind.annotation.ResponseStatus(HttpStatus.CREATED)
+    public WorkEarningSourceResponse createEarningSource(
+            @CurrentUser AuthenticatedUser user,
+            @Valid @RequestBody WorkEarningSourceRequest request) {
+        return sourceService.create(user.userId(), request.name());
+    }
+
+    @PutMapping("/earning-sources/{sourceId}")
+    public WorkEarningSourceResponse renameEarningSource(
+            @CurrentUser AuthenticatedUser user,
+            @PathVariable UUID sourceId,
+            @Valid @RequestBody WorkEarningSourceRequest request) {
+        return sourceService.rename(user.userId(), sourceId, request.name());
+    }
+
+    @DeleteMapping("/earning-sources/{sourceId}")
+    public ResponseEntity<Void> deactivateEarningSource(
+            @CurrentUser AuthenticatedUser user,
+            @PathVariable UUID sourceId) {
+        sourceService.deactivate(user.userId(), sourceId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping
