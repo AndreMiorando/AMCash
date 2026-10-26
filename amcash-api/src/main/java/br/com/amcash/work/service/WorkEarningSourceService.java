@@ -11,6 +11,7 @@ import br.com.amcash.work.repository.WorkEarningSourceRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -77,12 +78,15 @@ public class WorkEarningSourceService {
     }
 
     @Transactional
-    public void deactivate(UUID userId, UUID sourceId) {
+    public void deactivate(UUID userId, UUID sourceId, LocalDate date) {
         WorkEarningSource source = sourceRepository.findByIdAndUserId(sourceId, userId)
                 .orElseThrow(() -> new NotFoundException("Ganho não encontrado"));
         if (source.getSystemKey() != null) throw new BadRequestException("Os ganhos padrão não podem ser desativados");
         source.deactivate();
         sourceRepository.save(source);
+        if (date != null) {
+            earningRepository.deleteBySourceAndDate(userId, source.getName().toLowerCase(Locale.ROOT), date);
+        }
     }
 
     private void ensureSystemSource(User user, String name, String systemKey, int sortOrder) {

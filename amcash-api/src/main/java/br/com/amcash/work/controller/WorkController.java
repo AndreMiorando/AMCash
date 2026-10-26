@@ -66,8 +66,9 @@ public class WorkController {
     @DeleteMapping("/earning-sources/{sourceId}")
     public ResponseEntity<Void> deactivateEarningSource(
             @CurrentUser AuthenticatedUser user,
-            @PathVariable UUID sourceId) {
-        sourceService.deactivate(user.userId(), sourceId);
+            @PathVariable UUID sourceId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        sourceService.deactivate(user.userId(), sourceId, date);
         return ResponseEntity.noContent().build();
     }
 

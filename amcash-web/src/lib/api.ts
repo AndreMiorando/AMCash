@@ -573,8 +573,9 @@ export const financeApi = {
     });
   },
 
-  deactivateWorkEarningSource(sourceId: string) {
-    return apiRequest<void>(`/api/v1/work/earning-sources/${sourceId}`, { method: "DELETE" });
+  deactivateWorkEarningSource(sourceId: string, date?: string) {
+    const query = date ? `?date=${encodeURIComponent(date)}` : "";
+    return apiRequest<void>(`/api/v1/work/earning-sources/${sourceId}${query}`, { method: "DELETE" });
   },
 
   saveWorkDay(date: string, payload: WorkDayPayload) {
