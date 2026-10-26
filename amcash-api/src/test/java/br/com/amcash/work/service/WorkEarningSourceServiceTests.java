@@ -1,5 +1,6 @@
 package br.com.amcash.work.service;
 
+import br.com.amcash.user.entity.UsageProfile;
 import br.com.amcash.user.entity.User;
 import br.com.amcash.user.repository.UserRepository;
 import br.com.amcash.work.entity.WorkEarningSource;
@@ -8,6 +9,7 @@ import br.com.amcash.work.repository.WorkEarningSourceRepository;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -75,5 +77,29 @@ class WorkEarningSourceServiceTests {
         verify(sourceRepository).save(source);
         verify(earningRepository).deleteBySourceAndDate(userId, "teste", date);
         assertEquals(false, source.isActive());
+    }
+
+    @Test
+    void shouldListDeliveryPlatformsAndKeepCustomSourcesForDeliveryProfile() {
+        WorkEarningSourceRepository sourceRepository = mock(WorkEarningSourceRepository.class);
+        WorkEarningRepository earningRepository = mock(WorkEarningRepository.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        UUID userId = UUID.randomUUID();
+        User user = mock(User.class);
+        when(user.getId()).thenReturn(userId);
+        when(user.getUsageProfile()).thenReturn(UsageProfile.DELIVERY);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        WorkEarningSource customIfood = new WorkEarningSource(user, "ifood", null, 3);
+        when(sourceRepository.findByUserIdAndNameIgnoreCase(userId, "iFood")).thenReturn(Optional.of(customIfood));
+        when(sourceRepository.findByUserIdAndNameIgnoreCase(userId, "99Food")).thenReturn(Optional.empty());
+        when(sourceRepository.findAllByUserIdOrderBySortOrderAscNameAsc(userId)).thenReturn(List.of(
+                new WorkEarningSource(user, "Uber", "UBER", 0), customIfood,
+                new WorkEarningSource(user, "99Food", "NINETY_NINE_FOOD", 1), new WorkEarningSource(user, "Particular", null, 4)));
+        WorkEarningSourceService service = new WorkEarningSourceService(sourceRepository, earningRepository, userRepository);
+
+        var sources = service.list(userId);
+
+        assertEquals(List.of("iFood", "99Food", "Particular"), sources.stream().map(source -> source.name()).toList());
+        assertEquals("IFOOD", customIfood.getSystemKey());
     }
 }

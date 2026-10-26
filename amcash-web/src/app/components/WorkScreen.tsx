@@ -14,6 +14,7 @@ import { InputField } from "@/app/components/ui/Input";
 import SegmentedControl from "@/app/components/ui/SegmentedControl";
 import { KpiLabel, KpiValue, PrimaryKpiCard, SecondaryKpiGroup, SecondaryKpiItem } from "@/app/components/ui/Kpi";
 import { formatDateRange, formatLongDate, formatMonthYear } from "@/lib/date";
+import { WorkPlatform, workPlatformByKey, workPlatformBySource } from "@/lib/workPlatforms";
 
 type EarningDraft = {
   key: string;
@@ -72,10 +73,9 @@ function costDescription(cost: ApiWorkCost) {
   return cost.description || "";
 }
 function earningPriority(source: string) {
-  const normalized = source.trim().toLowerCase();
-  if (normalized === "uber") return 0;
-  if (normalized === "99") return 1;
-  return 2;
+  const platform = workPlatformBySource(source);
+  if (!platform) return 2;
+  return platform.key === "UBER" || platform.key === "IFOOD" ? 0 : 1;
 }
 function orderedEarnings(day: ApiWorkDay | undefined) {
   return day?.earnings
@@ -95,7 +95,7 @@ type WorkBreakdownItem = {
   key: string;
   label: string;
   amount: number;
-  sourceKind?: "uber" | "ninety-nine" | "other";
+  platform?: WorkPlatform | null;
   category?: ApiWorkCostCategory;
 };
 
@@ -118,7 +118,7 @@ function WorkPeriodBreakdown({ overview, incomeExpanded, costsExpanded, onToggle
       key,
       label: item.label,
       amount: item.amount,
-      sourceKind: key === "uber" ? "uber" as const : key === "99" ? "ninety-nine" as const : "other" as const,
+      platform: workPlatformBySource(item.label),
     }))
     .sort((first, second) => second.amount - first.amount || earningPriority(first.label) - earningPriority(second.label));
 
@@ -143,9 +143,8 @@ function WorkPeriodBreakdown({ overview, incomeExpanded, costsExpanded, onToggle
         return <div className="work-breakdown-row" key={item.key}>
           <div className="work-breakdown-row-heading">
             <span className="work-breakdown-name">
-              {tone === "income" && item.sourceKind === "uber" && <Image className="work-breakdown-source-logo uber" src="/uber-logo.jpeg" alt="" width={96} height={96} />}
-              {tone === "income" && item.sourceKind === "ninety-nine" && <Image className="work-breakdown-source-logo ninety-nine" src="/99-logo.png" alt="" width={96} height={96} />}
-              {tone === "income" && item.sourceKind === "other" && <i className="work-breakdown-source-mark" aria-hidden="true">{item.label.charAt(0).toUpperCase()}</i>}
+              {tone === "income" && item.platform && <Image className={`work-breakdown-source-logo ${item.platform.className}`} src={item.platform.logo} alt="" width={96} height={96} />}
+              {tone === "income" && !item.platform && <i className="work-breakdown-source-mark" aria-hidden="true">{item.label.charAt(0).toUpperCase()}</i>}
               {tone === "cost" && item.category && <i className="work-breakdown-cost-icon"><CostCategoryIcon category={item.category} /></i>}
               <span>{item.label}</span>
             </span>
@@ -449,14 +448,11 @@ export default function WorkScreen({ navigation, onReady, onOperationalCost }: {
               {earnings.length > 0 && <span className="work-day-earnings" aria-label="Faturamento por plataforma">
                 {earnings.map((earning) => {
                   const source = earning.source.trim();
-                  const normalizedSource = source.toLowerCase();
-                  const isUber = normalizedSource === "uber";
-                  const isNinetyNine = normalizedSource === "99";
+                  const platform = workPlatformBySource(source);
                   return <span className="work-day-earning" key={earning.id}>
                     <span className="work-day-earning-source">
-                      {isUber && <><Image className="work-day-platform-logo uber" src="/uber-logo.jpeg" alt="" width={96} height={96} /><span className="sr-only">Uber</span></>}
-                      {isNinetyNine && <><Image className="work-day-platform-logo ninety-nine" src="/99-logo.png" alt="" width={96} height={96} /><span className="sr-only">99</span></>}
-                      {!isUber && !isNinetyNine && <><span className="work-day-source-mark" aria-hidden="true">{source.charAt(0).toUpperCase() || "+"}</span><span className="work-day-source-name" title={source}>{source}</span></>}
+                      {platform && <><Image className={`work-day-platform-logo ${platform.className}`} src={platform.logo} alt="" width={96} height={96} /><span className="sr-only">{platform.name}</span></>}
+                      {!platform && <><span className="work-day-source-mark" aria-hidden="true">{source.charAt(0).toUpperCase() || "+"}</span><span className="work-day-source-name" title={source}>{source}</span></>}
                     </span>
                     <b>{currency(Number(earning.amount))}</b>
                   </span>;
@@ -474,7 +470,7 @@ export default function WorkScreen({ navigation, onReady, onOperationalCost }: {
         <div className="work-record-date-field"><DatePickerInput label="Data do trabalho" value={draft.date} max={dateToInputValue(new Date())} onChange={selectWorkDate} />{draft.vehicleId&&<small className="work-record-active-vehicle">Veículo em uso: {vehicles.find(vehicle=>vehicle.id===draft.vehicleId)?.nickname||vehicles.find(vehicle=>vehicle.id===draft.vehicleId)?.model}</small>}</div>
         <label className="work-record-kilometers"><span>Quilômetros rodados</span><div><span className="work-record-road-icon"><Image src="/road-icon.png" alt="" width={1254} height={1254} /></span><span className="work-record-kilometers-input"><b>km</b><input inputMode="decimal" aria-label="Quilômetros rodados" placeholder="0" value={draft.kilometers} onChange={(event) => setDraft({ ...draft, kilometers: numberInput(event.target.value) })} /></span></div></label>
         <div className="work-record-section-title"><h3>Faturamento</h3></div><div className="work-form-grid">
-          {draft.earnings.filter((item) => item.systemKey).map((item) => <BrandedMoneyField key={item.key} label={item.source} logo={item.systemKey === "UBER" ? "/uber-logo.jpeg" : "/99-logo.png"} value={item.amount} onChange={(value) => setDraft({ ...draft, earnings: draft.earnings.map((current) => current.key === item.key ? { ...current, amount: value } : current) })} />)}
+          {draft.earnings.filter((item) => item.systemKey).map((item) => <BrandedMoneyField key={item.key} label={item.source} logo={item.systemKey ? workPlatformByKey(item.systemKey).logo : "/99-logo.png"} value={item.amount} onChange={(value) => setDraft({ ...draft, earnings: draft.earnings.map((current) => current.key === item.key ? { ...current, amount: value } : current) })} />)}
           {draft.earnings.filter((item) => !item.systemKey).map((item) => <CustomEarningMoneyField key={item.key} source={item.source} value={item.amount} removable={!item.sourceId} onSourceChange={(source) => setDraft({ ...draft, earnings: draft.earnings.map((current) => current.key === item.key ? { ...current, source } : current) })} onAmountChange={(amount) => setDraft({ ...draft, earnings: draft.earnings.map((current) => current.key === item.key ? { ...current, amount } : current) })} onRemove={() => setDraft({ ...draft, earnings: draft.earnings.filter((current) => current.key !== item.key) })} />)}
         </div>
         <button type="button" className="work-add-source" onClick={() => setSourceDialogOpen(true)}>+ Adicionar outro ganho</button>

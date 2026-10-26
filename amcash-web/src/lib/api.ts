@@ -304,7 +304,7 @@ export type ApiWorkEarning = {
 export type ApiWorkEarningSource = {
   id: string;
   name: string;
-  systemKey: "UBER" | "NINETY_NINE" | null;
+  systemKey: "UBER" | "NINETY_NINE" | "IFOOD" | "NINETY_NINE_FOOD" | null;
   active: boolean;
   sortOrder: number;
 };

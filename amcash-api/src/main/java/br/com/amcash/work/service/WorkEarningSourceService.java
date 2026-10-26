@@ -2,6 +2,7 @@ package br.com.amcash.work.service;
 
 import br.com.amcash.shared.exception.BadRequestException;
 import br.com.amcash.shared.exception.NotFoundException;
+import br.com.amcash.user.entity.UsageProfile;
 import br.com.amcash.user.entity.User;
 import br.com.amcash.user.repository.UserRepository;
 import br.com.amcash.work.dto.response.WorkEarningSourceResponse;
@@ -14,12 +15,18 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.UUID;
 
 @Service
 public class WorkEarningSourceService {
-    private static final String UBER = "UBER";
-    private static final String NINETY_NINE = "NINETY_NINE";
+    private record SystemSource(String key, String name, int sortOrder) {}
+
+    private static final List<SystemSource> RIDE_SOURCES = List.of(
+            new SystemSource("UBER", "Uber", 0), new SystemSource("NINETY_NINE", "99", 1));
+    private static final List<SystemSource> DELIVERY_SOURCES = List.of(
+            new SystemSource("IFOOD", "iFood", 0), new SystemSource("NINETY_NINE_FOOD", "99Food", 1));
 
     private final WorkEarningSourceRepository sourceRepository;
     private final WorkEarningRepository earningRepository;
@@ -38,9 +45,11 @@ public class WorkEarningSourceService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado"));
         ensureSystemSources(user);
+        Set<String> profileKeys = systemSources(user).stream().map(SystemSource::key).collect(Collectors.toSet());
 
         return sourceRepository.findAllByUserIdOrderBySortOrderAscNameAsc(userId).stream()
                 .filter(WorkEarningSource::isActive)
+                .filter(source -> source.getSystemKey() == null || profileKeys.contains(source.getSystemKey()))
                 .map(this::toResponse)
                 .toList();
     }
@@ -89,15 +98,25 @@ public class WorkEarningSourceService {
         }
     }
 
-    private void ensureSystemSource(User user, String name, String systemKey, int sortOrder) {
-        if (!sourceRepository.existsByUserIdAndSystemKey(user.getId(), systemKey)) {
-            sourceRepository.save(new WorkEarningSource(user, name, systemKey, sortOrder));
+    private void ensureSystemSource(User user, SystemSource systemSource) {
+        if (sourceRepository.existsByUserIdAndSystemKey(user.getId(), systemSource.key())) return;
+        WorkEarningSource custom = sourceRepository.findByUserIdAndNameIgnoreCase(user.getId(), systemSource.name())
+                .filter(source -> source.getSystemKey() == null)
+                .orElse(null);
+        if (custom != null) {
+            custom.promoteToSystem(systemSource.key(), systemSource.name(), systemSource.sortOrder());
+            sourceRepository.save(custom);
+            return;
         }
+        sourceRepository.save(new WorkEarningSource(user, systemSource.name(), systemSource.key(), systemSource.sortOrder()));
     }
 
     private void ensureSystemSources(User user) {
-        ensureSystemSource(user, "Uber", UBER, 0);
-        ensureSystemSource(user, "99", NINETY_NINE, 1);
+        systemSources(user).forEach(source -> ensureSystemSource(user, source));
+    }
+
+    private List<SystemSource> systemSources(User user) {
+        return user.getUsageProfile() == UsageProfile.DELIVERY ? DELIVERY_SOURCES : RIDE_SOURCES;
     }
 
     private WorkEarningSourceResponse toResponse(WorkEarningSource source) {

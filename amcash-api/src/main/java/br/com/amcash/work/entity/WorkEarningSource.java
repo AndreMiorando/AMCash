@@ -71,6 +71,14 @@ public class WorkEarningSource {
         this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 
+    public void promoteToSystem(String systemKey, String name, int sortOrder) {
+        this.systemKey = systemKey;
+        this.name = name;
+        this.sortOrder = sortOrder;
+        this.active = true;
+        this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
+    }
+
     public void deactivate() {
         this.active = false;
         this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
