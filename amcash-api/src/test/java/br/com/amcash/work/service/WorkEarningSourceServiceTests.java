@@ -7,6 +7,7 @@ import br.com.amcash.work.repository.WorkEarningRepository;
 import br.com.amcash.work.repository.WorkEarningSourceRepository;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -55,5 +56,24 @@ class WorkEarningSourceServiceTests {
 
         assertEquals("Particular", updated.name());
         verify(earningRepository).renameSource(userId, "particulr", "Particular");
+    }
+
+    @Test
+    void shouldDeactivateTheSourceAndDeleteItsEarningOnTheRequestedDate() {
+        WorkEarningSourceRepository sourceRepository = mock(WorkEarningSourceRepository.class);
+        WorkEarningRepository earningRepository = mock(WorkEarningRepository.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        UUID userId = UUID.randomUUID();
+        UUID sourceId = UUID.randomUUID();
+        LocalDate date = LocalDate.of(2026, 10, 26);
+        WorkEarningSource source = new WorkEarningSource(mock(User.class), "Teste", null, 2);
+        when(sourceRepository.findByIdAndUserId(sourceId, userId)).thenReturn(Optional.of(source));
+        WorkEarningSourceService service = new WorkEarningSourceService(sourceRepository, earningRepository, userRepository);
+
+        service.deactivate(userId, sourceId, date);
+
+        verify(sourceRepository).save(source);
+        verify(earningRepository).deleteBySourceAndDate(userId, "teste", date);
+        assertEquals(false, source.isActive());
     }
 }
