@@ -269,7 +269,7 @@ export type ApiVehicle = Omit<VehiclePayload, "financialStatus" | "monthlyAmount
 };
 
 export type ApiCostPeriod = "MONTHLY" | "ANNUAL";
-export type ApiMaintenanceCalculationMethod = "MANUAL" | "HISTORY";
+export type ApiMaintenanceCalculationMethod = "MANUAL" | "LAST_12_MONTHS";
 export type ApiMileageSource = "MANUAL" | "ODOMETER" | "WORK";
 export type OperationalCustomFixedCostPayload = { title: string; amount: number; period: ApiCostPeriod; workCostCategory: ApiWorkCostCategory | null };
 export type OperationalCostPayload = {
@@ -277,10 +277,12 @@ export type OperationalCostPayload = {
   includeFinance: boolean; annualIpva: number; annualFees: number; insuranceAmount: number | null;
   insurancePeriod: ApiCostPeriod | null; maintenanceMethod: ApiMaintenanceCalculationMethod;
   annualMaintenanceEstimate: number | null; includeDepreciation: boolean; currentVehicleValue: number | null;
-  annualDepreciationRate: number | null; customFixedCosts: OperationalCustomFixedCostPayload[]; selectedMaintenanceIds: string[];
+  annualDepreciationRate: number | null; customFixedCosts: OperationalCustomFixedCostPayload[];
 };
 export type ApiOperationalCost = OperationalCostPayload & {
   id: string; vehicleId: string; vehicleName: string;
+  maintenanceHistory: { available: boolean; unavailableReason: string | null; periodStart: string | null; periodEnd: string | null;
+    kilometers: number | null; amount: number | null; maintenanceCount: number; costPerKm: number | null } | null;
   calculation: { fuelMonthly: number; financeMonthly: number; taxesMonthly: number; insuranceMonthly: number;
     otherFixedMonthly: number; maintenanceMonthly: number; totalMonthly: number; cashCostPerKm: number;
     depreciationAnnual: number; depreciationMonthly: number; depreciationPerKm: number };

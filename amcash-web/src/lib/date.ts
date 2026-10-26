@@ -13,6 +13,14 @@ export function formatLongDate(value: DateValue) {
   }).format(localDate(value));
 }
 
+export function formatShortDate(value: DateValue) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(localDate(value));
+}
+
 export function formatMonthYear(value: DateValue) {
   return new Intl.DateTimeFormat("pt-BR", {
     month: "long",

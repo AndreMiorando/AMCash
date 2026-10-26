@@ -70,7 +70,7 @@ class WorkServiceTests {
         when(configuration.getCustomFixedCosts()).thenReturn(List.of(
                 new OperationalCustomFixedCost("Lavagem mensal", new BigDecimal("120"), CostPeriod.MONTHLY, WorkCostCategory.WASH)));
         when(secondConfiguration.getVehicle()).thenReturn(secondVehicle);
-        when(secondConfiguration.getMaintenanceMethod()).thenReturn(MaintenanceCalculationMethod.HISTORY);
+        when(secondConfiguration.getMaintenanceMethod()).thenReturn(MaintenanceCalculationMethod.LAST_12_MONTHS);
         when(secondConfiguration.getCustomFixedCosts()).thenReturn(List.of());
         when(configurationRepository.findAllByUserIdOrderByUpdatedAtDesc(userId)).thenReturn(List.of(configuration, secondConfiguration));
         when(operationalCostService.calculation(configuration)).thenReturn(new OperationalCostResponse.CalculationResponse(

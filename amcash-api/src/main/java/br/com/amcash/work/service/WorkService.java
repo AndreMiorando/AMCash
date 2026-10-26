@@ -1,5 +1,6 @@
 package br.com.amcash.work.service;
 
+import br.com.amcash.operationalcost.dto.response.OperationalCostResponse;
 import br.com.amcash.operationalcost.entity.MaintenanceCalculationMethod;
 import br.com.amcash.operationalcost.entity.OperationalCostConfiguration;
 import br.com.amcash.operationalcost.repository.OperationalCostConfigurationRepository;
@@ -238,17 +239,20 @@ public class WorkService {
             return unavailableEstimate("Configure o custo operacional de todos os veículos usados no período.");
         }
 
-        Map<UUID, BigDecimal> costPerKilometer = configurations.entrySet().stream()
+        Map<UUID, OperationalCostResponse.CalculationResponse> calculations = configurations.entrySet().stream()
                 .filter(entry -> vehicleIds.contains(entry.getKey()))
                 .collect(Collectors.toMap(Map.Entry::getKey,
-                        entry -> operationalCostService.calculation(entry.getValue()).cashCostPerKm()));
+                        entry -> operationalCostService.calculation(entry.getValue())));
         BigDecimal operationalCost = BigDecimal.ZERO;
         for (WorkDay day : days) {
             operationalCost = operationalCost.add(day.getKilometers().multiply(
-                    costPerKilometer.get(day.getVehicle().getId())));
+                    calculations.get(day.getVehicle().getId()).cashCostPerKm()));
         }
         BigDecimal additionalCosts = costs.stream()
-                .filter(cost -> !covered(cost.category(), configurations.get(daysByDate.get(cost.date()).getVehicle().getId())))
+                .filter(cost -> {
+                    UUID vehicleId = daysByDate.get(cost.date()).getVehicle().getId();
+                    return !covered(cost.category(), configurations.get(vehicleId), calculations.get(vehicleId));
+                })
                 .map(WorkCostResponse::amount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal totalCosts = money(operationalCost.add(additionalCosts));
@@ -260,12 +264,16 @@ public class WorkService {
                 registered.earningsPerKilometer(), resultPerKilometer);
     }
 
-    private boolean covered(WorkCostCategory category, OperationalCostConfiguration configuration) {
+    private boolean covered(WorkCostCategory category, OperationalCostConfiguration configuration,
+                            OperationalCostResponse.CalculationResponse calculation) {
         if (category == WorkCostCategory.FUEL) return true;
         if (category == WorkCostCategory.MAINTENANCE
                 && configuration.getMaintenanceMethod() == MaintenanceCalculationMethod.MANUAL
                 && configuration.getAnnualMaintenanceEstimate() != null
                 && configuration.getAnnualMaintenanceEstimate().signum() > 0) return true;
+        if (category == WorkCostCategory.MAINTENANCE
+                && configuration.getMaintenanceMethod() == MaintenanceCalculationMethod.LAST_12_MONTHS
+                && calculation.maintenanceMonthly().signum() > 0) return true;
         if (category == WorkCostCategory.OTHER) return false;
         return configuration.getCustomFixedCosts().stream()
                 .anyMatch(item -> item.getAmount().signum() > 0 && item.getWorkCostCategory() == category);

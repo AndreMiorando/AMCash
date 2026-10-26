@@ -849,9 +849,9 @@ function CreateTransactionSheet({
           <PaymentMethodPickerInput label={type === "expense" ? "Forma de pagamento (opcional)" : "Forma de recebimento (opcional)"} value={paymentMethod} options={type === "expense" ? expensePaymentMethods : incomePaymentMethods} onChange={setPaymentMethod} />
 
           {type === "expense" && (
-            <button type="button" className={`detail-expense-selector${hasSubexpenses ? " active" : ""}`} onClick={() => toggleDetailedExpense(!hasSubexpenses)} aria-pressed={hasSubexpenses}>
-              <b>Detalhar esta despesa <small>(opcional)</small></b>
-              <span>Adicione os itens que compõem o valor total.</span>
+            <button type="button" role="switch" aria-checked={hasSubexpenses} className={`detail-expense-selector${hasSubexpenses ? " active" : ""}`} onClick={() => toggleDetailedExpense(!hasSubexpenses)}>
+              <span className="detail-expense-copy"><b>Detalhar despesa</b><span>Dividir o valor em itens</span></span>
+              <span className="switch-indicator" aria-hidden="true"><i /></span>
             </button>
           )}
 
@@ -910,7 +910,7 @@ function CreateTransactionSheet({
             </>
           )}
 
-          <label className="field full-field transaction-notes"><span>Observações (opcional)</span><textarea maxLength={120} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Adicione um comentário..." /><small className="field-character-count">{notes.length}/120</small></label>
+          <label className={`field full-field transaction-notes${hasSubexpenses ? " transaction-notes--detailed" : ""}`}><span>Observações (opcional)</span><textarea maxLength={120} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Adicione um comentário..." /><small className="field-character-count">{notes.length}/120</small></label>
 
           {error && <p className="auth-error" role="alert">{error}</p>}
           <Button type="submit" className={`create-transaction-submit${type === "income" ? " create-transaction-submit--income" : ""}`} fullWidth loading={isSubmitting} loadingLabel="Adicionando..." disabled={!canSave}><Icon name="plus" /> Adicionar {type === "expense" ? "despesa" : "receita"}</Button>
@@ -2066,6 +2066,15 @@ type HomeEarningDraft = {
   persistForFuture: boolean;
 };
 
+const HOME_AUTOSAVE_DELAY = 800;
+const HOME_UNDO_TIMEOUT = 6000;
+
+type HomeSaveStatus = "idle" | "saved" | "error" | "offline";
+
+type HomeRemovedItem =
+  | { kind: "cost"; item: HomeCostDraft; index: number }
+  | { kind: "earning"; item: HomeEarningDraft; index: number };
+
 function homeWorkSignature({
   uber,
   ninetyNine,
@@ -2206,6 +2215,9 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   const [openCostKey, setOpenCostKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<HomeSaveStatus>("idle");
+  const [failedWorkSignature, setFailedWorkSignature] = useState("");
+  const [removedItem, setRemovedItem] = useState<HomeRemovedItem | null>(null);
   const [error, setError] = useState("");
   const [workError, setWorkError] = useState("");
   const [sourceModalOpen, setSourceModalOpen] = useState(false);
@@ -2213,6 +2225,10 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   const [pendingFixedSourceDelete, setPendingFixedSourceDelete] = useState<HomeEarningDraft | null>(null);
   const [deletingFixedSource, setDeletingFixedSource] = useState(false);
   const nextCostKey = useRef(1);
+  const savingLockRef = useRef(false);
+  const saveWorkRef = useRef<() => Promise<void>>(async () => {});
+  const unsavedWorkRef = useRef(false);
+  const flushWorkRef = useRef(false);
   const today = dateToInputValue(new Date());
   const homeCostPrefix = "HOME: ";
   const legacyHomeCostDescription = "Custo do dia — Home";
@@ -2314,7 +2330,15 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   const duplicateEarningSources = new Set([...earningSourceCounts.entries()].filter(([, count]) => count > 1).map(([source]) => source));
   const duplicateEarningError = duplicateEarningSources.size > 0 ? "Cada ganho deve aparecer apenas uma vez." : "";
   const workFormError = duplicateEarningError || workError;
-  const hasWorkChanges = initialWorkSignature !== "" && initialWorkSignature !== homeWorkSignature({ uber, ninetyNine, kilometers, additionalEarnings, costs: homeCosts });
+  const currentWorkSignature = homeWorkSignature({ uber, ninetyNine, kilometers, additionalEarnings, costs: homeCosts });
+  const hasWorkChanges = initialWorkSignature !== "" && initialWorkSignature !== currentWorkSignature;
+  const workIsValid = additionalEarningsAreValid && !duplicateEarningError;
+  const workSaveFailed = hasWorkChanges && currentWorkSignature === failedWorkSignature;
+  const autoSaveReady = Boolean(summary) && hasWorkChanges && workIsValid && !workSaveFailed;
+  const displayedSaveStatus = saving || autoSaveReady ? "saving"
+    : hasWorkChanges && !workIsValid ? "invalid"
+      : workSaveFailed ? saveStatus === "offline" ? "offline" : "error"
+        : saveStatus === "saved" ? "saved" : "idle";
   const selectedHomeVehicle = homeVehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
   const parsedOdometer = parseDecimalInput(odometerValue);
 
@@ -2330,8 +2354,24 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   }
 
   function removeHomeCost(key: string) {
+    const index = homeCosts.findIndex((item) => item.key === key);
+    if (index < 0) return;
     setOpenCostKey((current) => current === key ? null : current);
     setHomeCosts((current) => current.filter((item) => item.key !== key));
+    setRemovedItem({ kind: "cost", item: homeCosts[index], index });
+  }
+
+  function undoRemoval() {
+    if (!removedItem) return;
+    if (removedItem.kind === "cost") {
+      // O registro original pode já ter sido excluído no servidor: recria como novo custo.
+      const restored: HomeCostDraft = { ...removedItem.item, id: undefined, key: `new-${nextCostKey.current++}` };
+      setHomeCosts((current) => [...current.slice(0, removedItem.index), restored, ...current.slice(removedItem.index)]);
+    } else {
+      const restored = removedItem.item;
+      setAdditionalEarnings((current) => [...current.slice(0, removedItem.index), restored, ...current.slice(removedItem.index)]);
+    }
+    setRemovedItem(null);
   }
 
   function updateAdditionalEarning(index: number, changes: Partial<HomeEarningDraft>) {
@@ -2349,7 +2389,9 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
       setPendingFixedSourceDelete(item);
       return;
     }
+    const index = additionalEarnings.findIndex((earning) => earning.key === item.key);
     setAdditionalEarnings((current) => current.filter((earning) => earning.key !== item.key));
+    if (index >= 0) setRemovedItem({ kind: "earning", item, index });
   }
 
   async function confirmFixedSourceDelete() {
@@ -2377,30 +2419,34 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   }
 
   async function saveDailyResult() {
-    if (!summary || saving || !hasWorkChanges || !additionalEarningsAreValid) return;
-    if (duplicateEarningError) {
-      setWorkError(duplicateEarningError);
+    if (!summary || savingLockRef.current || !hasWorkChanges || !workIsValid) return;
+    const savedSignature = currentWorkSignature;
+    if (!navigator.onLine) {
+      setFailedWorkSignature(savedSignature);
+      setSaveStatus("offline");
       return;
     }
-    let additional = additionalEarnings.filter((item) => item.sourceId || item.source.trim() || item.amount);
-    if (additional.some((item) => !item.source.trim())) {
-      setWorkError("Informe o nome de cada ganho adicional.");
-      return;
-    }
+    const snapshotEarnings = additionalEarnings;
+    const snapshotCosts = homeCosts;
+    let additional = snapshotEarnings.filter((item) => item.sourceId || item.source.trim() || item.amount);
+    const createdCostIds = new Map<string, string>();
+    savingLockRef.current = true;
     setSaving(true);
     setWorkError("");
     try {
       for (const earning of additional) {
+        let resolved: HomeEarningDraft | null = null;
         if (earning.sourceId && earning.source.trim() !== earning.originalSource) {
           const updated = await financeApi.renameWorkEarningSource(earning.sourceId, earning.source.trim());
-          additional = additional.map((item) => item.key === earning.key ? { ...item, source: updated.name, originalSource: updated.name } : item);
+          resolved = { ...earning, originalSource: updated.name };
         } else if (!earning.sourceId && earning.persistForFuture && earning.source.trim()) {
           const created = await financeApi.createWorkEarningSource(earning.source.trim());
-          additional = additional.map((item) => item.key === earning.key
-            ? { ...item, sourceId: created.id, source: created.name, originalSource: created.name }
-            : item);
+          resolved = { ...earning, sourceId: created.id, originalSource: created.name };
         }
-        setAdditionalEarnings((current) => current.map((item) => additional.find((resolved) => resolved.key === item.key) ?? item));
+        if (!resolved) continue;
+        const { sourceId, originalSource } = resolved;
+        additional = additional.map((item) => item.key === earning.key ? resolved : item);
+        setAdditionalEarnings((current) => current.map((item) => item.key === earning.key ? { ...item, sourceId, originalSource } : item));
       }
 
       const hasDayValues = kilometersValue > 0 || uberValue > 0 || ninetyNineValue > 0
@@ -2417,24 +2463,84 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
         });
       }
 
-      const validCosts = homeCosts
+      const validCosts = snapshotCosts
         .map((item) => ({ ...item, parsedAmount: parseCurrencyInput(item.amount) || 0 }))
         .filter((item) => item.parsedAmount > 0);
       const retainedCostIds = new Set(validCosts.flatMap((item) => item.id ? [item.id] : []));
       await Promise.all([
-        ...validCosts.map((item) => {
+        ...validCosts.map(async (item) => {
           const payload = { date: today, category: item.category, description: `${homeCostPrefix}${item.description.trim() || workCostCategoryLabels[item.category]}`, amount: item.parsedAmount };
-          return item.id ? financeApi.updateWorkCost(item.id, payload) : financeApi.createWorkCost(payload);
+          if (item.id) {
+            await financeApi.updateWorkCost(item.id, payload);
+            return;
+          }
+          const created = await financeApi.createWorkCost(payload);
+          createdCostIds.set(item.key, created.id);
+          setHomeCosts((current) => current.map((cost) => cost.key === item.key ? { ...cost, id: created.id } : cost));
         }),
         ...savedHomeCosts.filter((item) => !retainedCostIds.has(item.id)).map((item) => financeApi.deleteWorkCost(item.id)),
       ]);
-      await load();
-    } catch (requestError) {
-      setWorkError(messageFromError(requestError));
+
+      const [home, work] = await Promise.all([financeApi.home(today), financeApi.workOverview(today, "DAY")]);
+      setSummary(home);
+      setWorkOverview(work);
+      setInitialWorkSignature(homeWorkSignature({
+        uber,
+        ninetyNine,
+        kilometers,
+        additionalEarnings: snapshotEarnings.map((item) => additional.find((resolved) => resolved.key === item.key) ?? item),
+        costs: snapshotCosts.map((item) => createdCostIds.has(item.key) ? { ...item, id: createdCostIds.get(item.key) } : item),
+      }));
+      setFailedWorkSignature("");
+      setSaveStatus("saved");
+    } catch {
+      setFailedWorkSignature(savedSignature);
+      setSaveStatus(navigator.onLine ? "error" : "offline");
     } finally {
+      savingLockRef.current = false;
       setSaving(false);
     }
   }
+
+  useEffect(() => {
+    saveWorkRef.current = saveDailyResult;
+    unsavedWorkRef.current = hasWorkChanges || saving;
+    flushWorkRef.current = autoSaveReady;
+  });
+
+  useEffect(() => {
+    if (!autoSaveReady || saving) return;
+    const timer = window.setTimeout(() => void saveWorkRef.current(), HOME_AUTOSAVE_DELAY);
+    return () => window.clearTimeout(timer);
+  }, [autoSaveReady, saving, currentWorkSignature]);
+
+  useEffect(() => {
+    if (saveStatus !== "saved") return;
+    const timer = window.setTimeout(() => setSaveStatus("idle"), 3000);
+    return () => window.clearTimeout(timer);
+  }, [saveStatus]);
+
+  useEffect(() => {
+    if (!removedItem) return;
+    const timer = window.setTimeout(() => setRemovedItem(null), HOME_UNDO_TIMEOUT);
+    return () => window.clearTimeout(timer);
+  }, [removedItem]);
+
+  useEffect(() => {
+    const flush = () => { if (flushWorkRef.current) void saveWorkRef.current(); };
+    const handleVisibility = () => { if (document.visibilityState === "hidden") flush(); };
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => { if (unsavedWorkRef.current) event.preventDefault(); };
+    const handleOnline = () => { setFailedWorkSignature(""); setSaveStatus("idle"); };
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("online", handleOnline);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("online", handleOnline);
+      flush();
+    };
+  }, []);
 
   async function updateHomeOdometer() {
     if (!selectedHomeVehicle || !odometerValue.trim() || odometerSaving) return;
@@ -2512,7 +2618,14 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
             <SecondaryKpiItem><KpiLabel>FATURAMENTO POR KM</KpiLabel><KpiValue>{kilometersValue > 0 ? formatCurrency(earningsPerKilometer) : "—"}</KpiValue></SecondaryKpiItem>
           </SecondaryKpiGroup>
           <section className="home-quick-entry" aria-label="Trabalho de hoje">
-            <div className="home-work-card-heading"><div><span>TRABALHO DE HOJE</span></div><small>Edite os valores diretamente</small></div>
+            <div className="home-work-card-heading"><div><span>TRABALHO DE HOJE</span></div><small className={`home-work-save-status ${displayedSaveStatus}`} role="status" aria-live="polite">
+              {displayedSaveStatus === "saving" ? "Salvando..."
+                : displayedSaveStatus === "saved" ? <><Icon name="check" />Alterações salvas</>
+                  : displayedSaveStatus === "invalid" ? "Corrija os campos para salvar"
+                    : displayedSaveStatus === "offline" ? "Sem conexão. Salvaremos ao reconectar."
+                      : displayedSaveStatus === "error" ? <>Não foi possível salvar.<button type="button" onClick={() => { setFailedWorkSignature(""); setSaveStatus("idle"); }}>Tentar novamente</button></>
+                        : "Edite os valores diretamente"}
+            </small></div>
             <div className="home-work-fields">
               <label><span className="home-work-source logo metric-logo"><Image src="/road-icon.png" alt="" width={1254} height={1254} /></span><span>Quilômetros rodados</span><div><b>km</b><input aria-label="Quilômetros rodados" value={kilometers} onChange={(event) => setKilometers(maskDecimalInput(event.target.value))} placeholder="0" inputMode="decimal" /></div></label>
               <label><span className="home-work-source uber logo"><Image src="/uber-logo.jpeg" alt="" width={768} height={512} /></span><span>Uber</span><div><b>R$</b><input aria-label="Faturamento Uber" value={uber} onChange={(event) => { setUber(maskCurrencyInput(event.target.value)); setWorkError(""); }} placeholder="0,00" inputMode="numeric" /></div></label>
@@ -2541,7 +2654,6 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
               </div>
               <button type="button" className="home-add-cost" onClick={() => setCostDialogOpen(true)}><Icon name="plus" />Adicionar custo</button>
             </div>
-            <Button type="button" fullWidth loading={saving} loadingLabel="Atualizando..." disabled={!hasWorkChanges || !additionalEarningsAreValid || Boolean(duplicateEarningError)} onClick={() => void saveDailyResult()}>Atualizar trabalho de hoje</Button>
           </section>
           {homeVehicles.length > 0 ? <section className="home-odometer-update" aria-labelledby="home-odometer-title">
             <header className="home-odometer-heading">
@@ -2566,6 +2678,7 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
     {sourceModalOpen && <EarningSourceDialog existingSources={["Uber", "99", ...additionalEarnings.map((item) => item.source)]} onClose={() => setSourceModalOpen(false)} onAdd={(value) => { setAdditionalEarnings((current) => [...current, { key: crypto.randomUUID(), source: value.source, originalSource: "", amount: value.amount, persistForFuture: value.persistForFuture }]); setWorkError(""); setSourceModalOpen(false); }} />}
     {costDialogOpen && <CostDialog onClose={() => setCostDialogOpen(false)} onAdd={addHomeCost} />}
     {pendingFixedSourceDelete && <div className="sheet-backdrop confirm-backdrop" role="presentation" onMouseDown={() => !deletingFixedSource && setPendingFixedSourceDelete(null)}><section className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-fixed-source-title" onMouseDown={(event) => event.stopPropagation()}><span className="confirm-icon"><Icon name="trash" /></span><h2 id="delete-fixed-source-title">Excluir ganho fixo?</h2><p>O ganho “{pendingFixedSourceDelete.source}” e o valor registrado hoje serão excluídos. Os registros anteriores serão mantidos.</p><div><button type="button" disabled={deletingFixedSource} onClick={() => setPendingFixedSourceDelete(null)}>Cancelar</button><button type="button" disabled={deletingFixedSource} onClick={() => void confirmFixedSourceDelete()}>{deletingFixedSource ? "Excluindo..." : "Excluir ganho"}</button></div></section></div>}
+    <div className="home-undo-anchor" role="status" aria-live="polite">{removedItem && <div className="home-undo-bar" key={`${removedItem.kind}-${removedItem.item.key}`}><span>{removedItem.kind === "cost" ? "Custo removido" : "Ganho removido"}</span><button type="button" onClick={undoRemoval}>Desfazer</button></div>}</div>
     <BottomNavigation active="home" loading={loading} onHome={() => {}} onFinance={onFinance} onRadar={onRadar} onGoals={onGoals} onWork={onWork} showWorkFeatures={usageProfile !== "PERSONAL"} />
   </main>;
 }
