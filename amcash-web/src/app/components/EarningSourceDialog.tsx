@@ -46,7 +46,7 @@ export default function EarningSourceDialog({ existingSources, onClose, onAdd }:
     <section className="earning-source-dialog" role="dialog" aria-modal="true" aria-labelledby="earning-source-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
       <header><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M16 10h5v5h-5a2.5 2.5 0 0 1 0-5ZM7 6V4h10v2" /></svg></span><h2 id="earning-source-dialog-title">Adicionar ganho</h2><p>Informe a origem e escolha onde ele será exibido.</p></header>
       <div className="earning-source-dialog-fields">
-        <InputField label="Nome do ganho" maxLength={30} autoFocus placeholder="Ex.: Particular" value={source} onChange={(event) => { setSource(event.target.value); setError(""); }} />
+        <InputField label="Nome do ganho" maxLength={30} placeholder="Ex.: Particular" value={source} onChange={(event) => { setSource(event.target.value); setError(""); }} />
         <InputField label={availability === "TODAY" ? "Valor de hoje" : "Valor de hoje (opcional)"} prefix="R$" inputMode="numeric" placeholder="0,00" value={amount} onChange={(event) => { setAmount(maskCurrencyInput(event.target.value)); setError(""); }} />
         <div className="earning-source-availability"><span>Disponibilidade</span><SegmentedControl ariaLabel="Disponibilidade do ganho" value={availability} options={availabilityOptions} onChange={(value) => { setAvailability(value); setError(""); }} /></div>
         {error && <p role="alert">{error}</p>}
