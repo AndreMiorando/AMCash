@@ -178,10 +178,9 @@
 .operational-empty { margin-top: 0.85rem; }
 .operational-empty svg { width: 1.5rem; fill: none; stroke: currentColor; }
 .operational-warning { color: #d64d63 !important; font-weight: 650; }
-.operational-hero { padding: 1.2rem; border-radius: 1.2rem; background: linear-gradient(145deg, #086cf3, #075cf4); color: #fff; box-shadow: 0 0.9rem 2rem rgb(7 92 244 / 18%); }
-.operational-hero > span { display: block; font-size: 0.56rem; font-weight: 800; letter-spacing: 0.14em; opacity: 0.78; }
-.operational-hero > strong { display: block; margin-top: 0.3rem; font-size: 1.85rem; font-weight: 680; letter-spacing: -0.05em; }
-.operational-secondary-kpis { margin-top: 0.55rem; }
+.operational-hero { display: flex; flex-direction: column; justify-content: center; }
+.operational-hero > .ui-kpi-value { display: block; margin: 0.45rem 0 0; overflow-wrap: anywhere; }
+.operational-secondary-kpis { margin-top: var(--kpi-stack-gap); }
 .operational-breakdown, .operational-depreciation { padding: 1rem 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 .operational-breakdown { margin-top: 0; }
 .operational-depreciation { margin-top: 0; border-top: 1px solid var(--border-subtle); }
@@ -1742,7 +1741,7 @@ a {
 .usage-profile-screen { display: flex; width: min(100%, var(--app-shell-width)); height: 100vh; height: 100dvh; min-height: 36rem; margin-inline: auto; flex-direction: column; overflow: hidden; background: var(--app-page-background); color: #183253; }
 .usage-profile-screen > header { justify-content: space-between; border-bottom: 1px solid #edf2f8; background: #fff; }
 .usage-profile-close { display: grid; width: 2.1rem; height: 2.1rem; padding: 0; place-items: center; border: 0; border-radius: 50%; background: #f1f5fa; color: #74889e; font-size: 1.2rem; }
-.usage-profile-content { display: flex; width: min(100%, 38rem); margin: auto; padding: 2rem 1.2rem 3rem; flex-direction: column; text-align: center; }
+.usage-profile-content { display: flex; width: min(100%, 38rem); margin: 0 auto; padding: 2.5rem 1.2rem 3rem; flex-direction: column; text-align: center; }
 .usage-profile-content > span { color: #8094aa; font-size: 0.62rem; font-weight: 800; letter-spacing: 0.14em; }
 .usage-profile-content h1 { margin: 0.5rem 0 0; font-size: 1.8rem; letter-spacing: -0.045em; }
 .usage-profile-content > p { max-width: 31rem; margin: 0.65rem auto 0; color: #7d90a6; font-size: 0.78rem; line-height: 1.55; }
@@ -1914,7 +1913,7 @@ a {
 .home-today-summary { display: grid; min-height: 4.5rem; padding-bottom: var(--section-stack-gap); grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .home-today-summary > .ui-secondary-kpi { display: flex; min-width: 0; padding: var(--kpi-secondary-padding); flex-direction: column; justify-content: center; gap: 0.25rem; }
 .home-today-summary .ui-secondary-kpi:nth-child(n + 2) .ui-kpi-value { color: #086cf3; }
-.home-today-summary .ui-kpi-value.negative { color: #f24f68; }
+.home-today-summary .ui-secondary-kpi .ui-kpi-value.negative { color: #f24f68; }
 
 .home-quick-entry {
   padding: 0 0 1rem;
@@ -1951,7 +1950,8 @@ a {
 .home-work-fields b { color: #8092a7; font-size: 0.62rem; }
 .home-work-source { display: grid; width: 1.85rem; height: 1.85rem; place-items: center; border-radius: 0.48rem; font-size: 0.6rem; font-weight: 800; }
 .home-work-source.uber { background: #111; color: #fff; }
-.home-work-source.ninety-nine { background: #ffd720; color: #171717; }
+.home-work-source.ninety-nine, .home-work-source.ninety-nine-food { background: #ffd720; color: #171717; }
+.home-work-source.ifood { background: #ea1d2c; color: #fff; }
 .home-work-source.additional { background: #eaf2ff; color: #086cf3; }
 .home-work-source.additional svg { width: 1rem; }
 .home-work-source.logo { overflow: hidden; }
@@ -1967,6 +1967,7 @@ a {
 .home-additional-source-row.invalid .home-additional-source-copy { padding-left: 0.4rem; border-radius: 0.45rem; background: #fff5f6; box-shadow: inset 0 0 0 1px #ffd5dc; }
 .home-additional-source-row.invalid .home-additional-source-name { color: #d9435b; }
 .home-additional-source-row > div input { text-align: right; }
+.home-work-fields input.long-value, .home-additional-source-row > div input.long-value { font-size: 0.7rem; letter-spacing: -0.02em; }
 .home-additional-source-row b { color: #8092a7; font-size: 0.62rem; }
 .home-additional-source-copy > button { display: grid; width: 1.35rem; height: 2.35rem; flex: 0 0 auto; padding: 0; place-items: center; border: 0; background: transparent; color: #f05267; }
 .home-additional-source-copy > button svg { width: 0.9rem; }
@@ -2051,8 +2052,10 @@ a {
 .home-odometer-update h3, .home-odometer-empty h3 { margin: 0; overflow: hidden; color: var(--text-muted); font-size: 0.6rem; font-weight: 800; letter-spacing: 0.14em; text-overflow: ellipsis; white-space: nowrap; }
 .home-odometer-update > header small { overflow: hidden; color: var(--text-muted); font-size: 0.62rem; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .home-odometer-vehicle { margin-top: 0.75rem; }
-.home-odometer-entry { display: grid; margin-top: 0.85rem; grid-template-columns: minmax(0, 1fr) minmax(7rem, 0.65fr); align-items: end; gap: 0.85rem; }
-.home-odometer-last { display: flex; min-height: var(--control-height); flex-direction: column; justify-content: center; gap: 0.12rem; }
+.home-odometer-entry { display: grid; margin-top: 0.85rem; grid-template-columns: minmax(0, 1fr) minmax(7rem, 0.65fr); align-items: start; gap: 0.85rem; }
+.home-odometer-last { display: grid; min-width: 0; grid-template-rows: auto var(--control-height); row-gap: 0.3rem; }
+.home-odometer-last > strong { align-self: center; }
+.home-odometer-last > time { margin-top: -0.3rem; line-height: 1.2; }
 .home-odometer-last span { color: #71859b; font-size: 0.61rem; font-weight: 650; }
 .home-odometer-last time { color: var(--text-muted); font-size: 0.6rem; }
 .home-odometer-last strong { color: var(--text-primary); font-size: 1.05rem; letter-spacing: -0.03em; }
@@ -2078,13 +2081,12 @@ a {
   .home-costs-heading { align-items: flex-start; flex-direction: column; }
   .home-odometer-entry { gap: 0.55rem; }
   .cost-category-grid { gap: 0.35rem; }
-  .home-cost-remove { width: 2.4rem; }
   .home-empty-state { min-height: 21rem; padding: 1.5rem 1rem; }
   .home-empty-actions { flex-direction: column; }
   .home-empty-actions button { flex: none; }
   .header-create-actions { gap: 0.35rem; }
   .header-add-button { width: 2.4rem; padding: 0; }
-  .header-add-button span { display: none; }
+  .header-add-button span:not(.vehicle-shared-icon) { display: none; }
 }
 
 /* Work tracking */
@@ -2310,7 +2312,8 @@ a {
 .work-breakdown-cost-icon { width: 1.65rem; height: 1.65rem; flex: 0 0 auto; border-radius: 0.48rem; }
 .work-breakdown-source-logo { display: block; object-fit: contain; }
 .work-breakdown-source-logo.uber { background: #111; }
-.work-breakdown-source-logo.ninety-nine { background: #ffd720; }
+.work-breakdown-source-logo.ninety-nine, .work-breakdown-source-logo.ninety-nine-food { background: #ffd720; }
+.work-breakdown-source-logo.ifood { background: #ea1d2c; }
 .work-breakdown-source-mark { display: grid; place-items: center; background: #eaf2ff; color: var(--brand-blue); font-size: 0.64rem; font-style: normal; font-weight: 800; }
 .work-breakdown-cost-icon { display: grid; place-items: center; background: var(--expense-surface); color: #f24f68; }
 .work-breakdown-cost-icon svg { width: 0.95rem; height: 0.95rem; }
@@ -2408,7 +2411,8 @@ a {
 .work-day-earning > b { color: #183253; font-size: 0.72rem; white-space: nowrap; }
 .work-day-platform-logo { display: block; width: 1.65rem; height: 1.65rem; flex: 0 0 auto; object-fit: contain; }
 .work-day-platform-logo.uber { border-radius: 0.48rem; background: #111; }
-.work-day-platform-logo.ninety-nine { border-radius: 0.48rem; background: #ffd720; }
+.work-day-platform-logo.ninety-nine, .work-day-platform-logo.ninety-nine-food { border-radius: 0.48rem; background: #ffd720; }
+.work-day-platform-logo.ifood { border-radius: 0.48rem; background: #ea1d2c; }
 .work-day-source-mark { display: grid; width: 1.65rem; height: 1.65rem; flex: 0 0 auto; place-items: center; border-radius: 0.48rem; background: #eaf2ff; color: var(--brand-blue); font-size: 0.64rem; font-weight: 800; }
 .work-day-source-name { overflow: hidden; color: #526b86; font-size: 0.62rem; font-weight: 680; text-overflow: ellipsis; white-space: nowrap; }
 

@@ -39,8 +39,9 @@ import { Input, InputField } from "@/app/components/ui/Input";
 import SegmentedControl from "@/app/components/ui/SegmentedControl";
 import SelectPickerInput from "@/app/components/ui/SelectPickerInput";
 import { KpiLabel, KpiValue, PrimaryKpiCard, SecondaryKpiGroup, SecondaryKpiItem } from "@/app/components/ui/Kpi";
-import { completeCurrencyInput, maskCurrencyInput, parseCurrencyInput } from "@/lib/currency";
+import { completeCurrencyInput, maskCurrencyInput, parseCurrencyInput, formatCompactCurrency, maskLimitedCurrencyInput } from "@/lib/currency";
 import { formatDateRange, formatLongDate, formatMonthYear } from "@/lib/date";
+import { isWorkPlatformSource, profileWorkPlatforms } from "@/lib/workPlatforms";
 
 type GoogleCredentialResponse = {
   credential?: string;
@@ -343,6 +344,10 @@ function BottomNavigation({ active, loading = false, onHome, onFinance, onRadar,
     </div>}
     </>
   );
+}
+
+function formatKpiCurrency(value: number) {
+  return formatCompactCurrency(Math.abs(value));
 }
 
 function formatCurrency(value: number) {
@@ -1029,7 +1034,7 @@ function Dashboard({
   showWorkFeatures = true,
   onMonthChange,
   initialPeriod,
-  initialCreateOpen = false,
+  initialCreateType = null,
   onInitialCreateHandled,
   onReady,
   error = "",
@@ -1047,7 +1052,7 @@ function Dashboard({
   showWorkFeatures?: boolean;
   onMonthChange: (year: number, month: number) => void;
   initialPeriod: { year: number; month: number };
-  initialCreateOpen?: boolean;
+  initialCreateType?: "expense" | "income" | null;
   onInitialCreateHandled?: () => void;
   onReady?: () => void;
   error?: string;
@@ -1057,15 +1062,15 @@ function Dashboard({
     return new Date(initialPeriod.year, initialPeriod.month - 1, 1);
   });
   const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
-  const [createType, setCreateType] = useState<"expense" | "income" | null>(initialCreateOpen ? "expense" : null);
+  const [createType, setCreateType] = useState<"expense" | "income" | null>(initialCreateType);
   const [pendingDelete, setPendingDelete] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [actionError, setActionError] = useState("");
   const [transactionFilter, setTransactionFilter] = useState<TransactionFilter>("pending");
 
   useEffect(() => {
-    if (initialCreateOpen) onInitialCreateHandled?.();
-  }, [initialCreateOpen, onInitialCreateHandled]);
+    if (initialCreateType) onInitialCreateHandled?.();
+  }, [initialCreateType, onInitialCreateHandled]);
   useEffect(() => { if (!isLoading) onReady?.(); }, [isLoading, onReady]);
   const periodFormatter = new Intl.DateTimeFormat("pt-BR", {
     month: "long",
@@ -2109,9 +2114,9 @@ function UsageProfileScreen({ onSelect, onCancel }: { onSelect: (profile: ApiUsa
   const [savingProfile, setSavingProfile] = useState<ApiUsageProfile | null>(null);
   const [profileError, setProfileError] = useState("");
   const options: { profile: ApiUsageProfile; title: string; description: string; icon: IconName }[] = [
-    { profile: "PERSONAL", title: "Uso pessoal", description: "Acompanhar receitas, despesas, saldo e próximos pagamentos.", icon: "wallet" },
-    { profile: "RIDE_DRIVER", title: "Motorista de aplicativo", description: "Controlar faturamento, custos, quilômetros e objetivos diários.", icon: "work" },
-    { profile: "DELIVERY", title: "Entregador", description: "Usar o controle de trabalho e objetivos com a configuração atual de motoristas.", icon: "radar" },
+    { profile: "PERSONAL", title: "Uso pessoal", description: "Organize suas receitas, despesas e contas a pagar.", icon: "wallet" },
+    { profile: "RIDE_DRIVER", title: "Motorista de aplicativo", description: "Acompanhe seus ganhos, custos, quilometragem e metas.", icon: "work" },
+    { profile: "DELIVERY", title: "Entregador", description: "Controle seus ganhos por entrega, despesas e metas.", icon: "radar" },
   ];
 
   async function choose(profile: ApiUsageProfile) {
@@ -2131,7 +2136,7 @@ function UsageProfileScreen({ onSelect, onCancel }: { onSelect: (profile: ApiUsa
     <section className="usage-profile-content">
       <span>PERSONALIZE SUA EXPERIÊNCIA</span>
       <h1>Como você usa o AMCash?</h1>
-      <p>Isso ajusta sua Home e a navegação. Você poderá alterar essa escolha depois sem perder nenhum dado.</p>
+      <p>Escolha seu perfil para personalizar sua experiência. Você poderá alterá-lo quando quiser, sem perder seus dados.</p>
       <div className="usage-profile-options">
         {options.map((option) => <button type="button" key={option.profile} disabled={savingProfile !== null} onClick={() => void choose(option.profile)}>
           <span className="usage-profile-icon"><Icon name={option.icon} /></span>
@@ -2183,9 +2188,10 @@ function AccountMenu({ onLogout, usageProfile, onChangeProfile, notifications, o
   </div>;
 }
 
-function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, onVehicles, onLogout, onReady, usageProfile, onChangeProfile, notifications, onNotifications, onMileageUpdated }: {
+function HomeDashboard({ onFinance, onCreateExpense, onCreateIncome, onRadar, onGoals, onWork, onVehicles, onLogout, onReady, usageProfile, onChangeProfile, notifications, onNotifications, onMileageUpdated }: {
   onFinance: () => void;
   onCreateExpense: () => void;
+  onCreateIncome: () => void;
   onRadar: () => void;
   onGoals: () => void;
   onWork: () => void;
@@ -2250,8 +2256,9 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
       setSelectedVehicleId(vehicles.find((vehicle) => vehicle.inUse)?.id ?? vehicles[0]?.id ?? "");
       if (!work) return;
       const day = work.days.find((item) => item.date === today);
-      const uberEarning = day?.earnings.find((item) => item.source.toLowerCase() === "uber");
-      const ninetyNineEarning = day?.earnings.find((item) => item.source === "99");
+      const [primaryPlatform, secondaryPlatform] = profileWorkPlatforms(usageProfile);
+      const uberEarning = day?.earnings.find((item) => isWorkPlatformSource(primaryPlatform, item.source));
+      const ninetyNineEarning = day?.earnings.find((item) => isWorkPlatformSource(secondaryPlatform, item.source));
       const savedHomeCosts = work.costs.filter((item) => item.description === legacyHomeCostDescription || item.description?.startsWith(homeCostPrefix));
       const nextUber = maskCurrencyInput(String(Math.round(Number(uberEarning?.amount ?? 0) * 100)));
       const nextNinetyNine = maskCurrencyInput(String(Math.round(Number(ninetyNineEarning?.amount ?? 0) * 100)));
@@ -2325,7 +2332,8 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
   const showEmptyState = summary?.hasFinancialEntries === false && Number(summary?.goal.targetAmount ?? 0) === 0;
   const additionalEarningsAreValid = additionalEarnings.every((item) => item.source.trim().length > 0
     && ((parseCurrencyInput(item.amount) || 0) > 0 || item.persistForFuture || Boolean(item.sourceId)));
-  const earningSourceCounts = ["uber", "99", ...additionalEarnings.map((item) => item.source.trim().toLocaleLowerCase("pt-BR")).filter(Boolean)]
+  const [firstPlatform, secondPlatform] = profileWorkPlatforms(usageProfile);
+  const earningSourceCounts = [firstPlatform.name.toLocaleLowerCase("pt-BR"), secondPlatform.name.toLocaleLowerCase("pt-BR"), ...additionalEarnings.map((item) => item.source.trim().toLocaleLowerCase("pt-BR")).filter(Boolean)]
     .reduce<Map<string, number>>((counts, source) => counts.set(source, (counts.get(source) ?? 0) + 1), new Map());
   const duplicateEarningSources = new Set([...earningSourceCounts.entries()].filter(([, count]) => count > 1).map(([source]) => source));
   const duplicateEarningError = duplicateEarningSources.size > 0 ? "Cada ganho deve aparecer apenas uma vez." : "";
@@ -2456,8 +2464,8 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
           kilometers: kilometersValue,
           vehicleId: selectedHomeVehicle?.id ?? null,
           earnings: [
-            { source: "Uber", amount: uberValue },
-            { source: "99", amount: ninetyNineValue },
+            { source: firstPlatform.name, amount: uberValue },
+            { source: secondPlatform.name, amount: ninetyNineValue },
             ...additional.map((item) => ({ source: item.source.trim(), amount: parseCurrencyInput(item.amount) || 0 })),
           ],
         });
@@ -2575,12 +2583,13 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
       {loading ? null : error ?
         <div className="daily-home-error"><p>{error}</p><button type="button" onClick={() => void load()}>Tentar novamente</button></div> : summary && <>
           {showEmptyState ? <section className="home-empty-state" aria-label="Começar a usar o AMCash">
-            <div className="home-empty-icon"><Icon name="target" /></div>
+            <div className="home-empty-icon"><Icon name="wallet" /></div>
             <span>PRIMEIROS PASSOS</span>
-            <h2>Comece pelas contas do mês</h2>
-            <p>Cadastre suas receitas e despesas para acompanhar o saldo do mês e calcular seus objetivos.</p>
+            <h2>Organize seu mês</h2>
+            <p>Registre suas receitas e despesas para acompanhar seu saldo e saber quanto sobra no fim do mês.</p>
             <div className="home-empty-actions">
-              <Button type="button" className="primary" onClick={onCreateExpense}><Icon name="plus" /><span>Cadastrar primeira despesa</span></Button>
+              <Button type="button" variant="secondary" onClick={onCreateIncome}><Icon name="income" /><span>Adicionar receita</span></Button>
+              <Button type="button" className="primary" onClick={onCreateExpense}><Icon name="expense" /><span>Adicionar despesa</span></Button>
             </div>
           </section> : <>
           {usageProfile !== "PERSONAL" && <>
@@ -2597,15 +2606,15 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
               <i className="daily-goal-confetti confetti-four" aria-hidden="true" />
               <div className="daily-goal-title"><span><Icon name="target" />OBJETIVO DE HOJE</span></div>
               <div className="daily-goal-completed-values">
-                <span><strong>{formatCurrency(dailyTarget)}</strong><small><i><Icon name="check" /></i>Meta concluída!</small></span>
-                <div><i><Icon name="check" /></i><span><small>Concluído</small><b>{formatCurrency(todayGross)}</b></span></div>
+                <span><strong title={formatCurrency(dailyTarget)}>{formatKpiCurrency(dailyTarget)}</strong><small><i><Icon name="check" /></i>Meta concluída!</small></span>
+                <div><i><Icon name="check" /></i><span><small>Concluído</small><b title={formatCurrency(todayGross)}>{formatKpiCurrency(todayGross)}</b></span></div>
               </div>
             </div> : summary.goal.covered && dailyTarget === 0 ? <>
               <span>OBJETIVO DE HOJE</span>
               <strong>Meta concluída</strong>
             </> : <>
               <div className="daily-goal-title"><span><Icon name="target" />OBJETIVO DE HOJE</span></div>
-              <div className="daily-goal-values"><strong>{formatCurrency(dailyTarget)}</strong><div><Icon name="clock" /><span><small>Faltam</small><b>{formatCurrency(dailyRemaining)}</b></span></div></div>
+              <div className="daily-goal-values"><strong title={formatCurrency(dailyTarget)}>{formatKpiCurrency(dailyTarget)}</strong><div><Icon name="clock" /><span><small>Faltam</small><b title={formatCurrency(dailyRemaining)}>{formatKpiCurrency(dailyRemaining)}</b></span></div></div>
               <div className="daily-goal-progress-label"><span>Progresso</span><strong>{dailyProgress}%</strong></div>
               <div className="daily-progress-track" aria-label={`${dailyProgress}% do objetivo de hoje`}><i style={{ width: `${dailyProgress}%` }} /></div>
             </>}
@@ -2613,9 +2622,9 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
 
           {summary.goal.todaySelected && <>
           <SecondaryKpiGroup columns={3} className="home-today-summary" aria-label="Resumo do trabalho de hoje">
-            <SecondaryKpiItem><KpiLabel>FATURAMENTO HOJE</KpiLabel><KpiValue>{formatCurrency(projectedGrossEarnings)}</KpiValue></SecondaryKpiItem>
-            <SecondaryKpiItem><KpiLabel>RESULTADO LÍQUIDO</KpiLabel><KpiValue className={projectedTodayNet < 0 ? "negative" : ""}>{projectedTodayNet < 0 ? "- " : ""}{formatCurrency(projectedTodayNet)}</KpiValue></SecondaryKpiItem>
-            <SecondaryKpiItem><KpiLabel>FATURAMENTO POR KM</KpiLabel><KpiValue>{kilometersValue > 0 ? formatCurrency(earningsPerKilometer) : "—"}</KpiValue></SecondaryKpiItem>
+            <SecondaryKpiItem><KpiLabel>FATURAMENTO HOJE</KpiLabel><KpiValue title={formatCurrency(projectedGrossEarnings)}>{formatKpiCurrency(projectedGrossEarnings)}</KpiValue></SecondaryKpiItem>
+            <SecondaryKpiItem><KpiLabel>RESULTADO LÍQUIDO</KpiLabel><KpiValue className={projectedTodayNet < 0 ? "negative" : ""} title={`${projectedTodayNet < 0 ? "- " : ""}${formatCurrency(projectedTodayNet)}`}>{projectedTodayNet < 0 ? "- " : ""}{formatKpiCurrency(projectedTodayNet)}</KpiValue></SecondaryKpiItem>
+            <SecondaryKpiItem><KpiLabel>FATURAMENTO POR KM</KpiLabel><KpiValue title={kilometersValue > 0 ? formatCurrency(earningsPerKilometer) : undefined}>{kilometersValue > 0 ? formatKpiCurrency(earningsPerKilometer) : "—"}</KpiValue></SecondaryKpiItem>
           </SecondaryKpiGroup>
           <section className="home-quick-entry" aria-label="Trabalho de hoje">
             <div className="home-work-card-heading"><div><span>TRABALHO DE HOJE</span></div><small className={`home-work-save-status ${displayedSaveStatus}`} role="status" aria-live="polite">
@@ -2628,11 +2637,11 @@ function HomeDashboard({ onFinance, onCreateExpense, onRadar, onGoals, onWork, o
             </small></div>
             <div className="home-work-fields">
               <label><span className="home-work-source logo metric-logo"><Image src="/road-icon.png" alt="" width={1254} height={1254} /></span><span>Quilômetros rodados</span><div><b>km</b><input aria-label="Quilômetros rodados" value={kilometers} onChange={(event) => setKilometers(maskDecimalInput(event.target.value))} placeholder="0" inputMode="decimal" /></div></label>
-              <label><span className="home-work-source uber logo"><Image src="/uber-logo.jpeg" alt="" width={768} height={512} /></span><span>Uber</span><div><b>R$</b><input aria-label="Faturamento Uber" value={uber} onChange={(event) => { setUber(maskCurrencyInput(event.target.value)); setWorkError(""); }} placeholder="0,00" inputMode="numeric" /></div></label>
-              <label><span className="home-work-source ninety-nine logo"><Image src="/99-logo.png" alt="" width={1600} height={1600} /></span><span>99</span><div><b>R$</b><input aria-label="Faturamento 99" value={ninetyNine} onChange={(event) => { setNinetyNine(maskCurrencyInput(event.target.value)); setWorkError(""); }} placeholder="0,00" inputMode="numeric" /></div></label>
+              <label><span className={`home-work-source ${firstPlatform.className} logo`}><Image src={firstPlatform.logo} alt="" width={512} height={512} /></span><span>{firstPlatform.name}</span><div><b>R$</b><input aria-label={`Faturamento ${firstPlatform.name}`} className={uber.length > 8 ? "long-value" : undefined} value={uber} onChange={(event) => { setUber(maskLimitedCurrencyInput(event.target.value)); setWorkError(""); }} placeholder="0,00" inputMode="numeric" /></div></label>
+              <label><span className={`home-work-source ${secondPlatform.className} logo`}><Image src={secondPlatform.logo} alt="" width={512} height={512} /></span><span>{secondPlatform.name}</span><div><b>R$</b><input aria-label={`Faturamento ${secondPlatform.name}`} className={ninetyNine.length > 8 ? "long-value" : undefined} value={ninetyNine} onChange={(event) => { setNinetyNine(maskLimitedCurrencyInput(event.target.value)); setWorkError(""); }} placeholder="0,00" inputMode="numeric" /></div></label>
               {additionalEarnings.map((item, index) => {
                 const duplicateSource = duplicateEarningSources.has(item.source.trim().toLocaleLowerCase("pt-BR"));
-                return <div className="home-additional-source-entry" key={item.key}><div className={`home-additional-source-row${duplicateSource ? " invalid" : ""}`}><span className="home-work-source additional"><Icon name="wallet" /></span><span className="home-additional-source-copy"><input className="home-additional-source-name" maxLength={30} aria-label={`Nome do ganho adicional ${index + 1}`} aria-invalid={duplicateSource || undefined} value={item.source} onChange={(event) => updateAdditionalEarning(index, { source: event.target.value })} placeholder="Ganho adicional" /><button type="button" aria-label={item.sourceId ? `Excluir ganho fixo ${item.source}` : `Remover ganho adicional ${index + 1}`} onClick={() => removeAdditionalEarning(item)}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 10v6M14 10v6" /></svg></button></span><div><b>R$</b><input aria-label={`Valor do ganho adicional ${index + 1}`} value={item.amount} onChange={(event) => updateAdditionalEarning(index, { amount: maskCurrencyInput(event.target.value) })} placeholder="0,00" inputMode="numeric" /></div></div></div>;
+                return <div className="home-additional-source-entry" key={item.key}><div className={`home-additional-source-row${duplicateSource ? " invalid" : ""}`}><span className="home-work-source additional"><Icon name="wallet" /></span><span className="home-additional-source-copy"><input className="home-additional-source-name" maxLength={30} aria-label={`Nome do ganho adicional ${index + 1}`} aria-invalid={duplicateSource || undefined} value={item.source} onChange={(event) => updateAdditionalEarning(index, { source: event.target.value })} placeholder="Ganho adicional" /><button type="button" aria-label={item.sourceId ? `Excluir ganho fixo ${item.source}` : `Remover ganho adicional ${index + 1}`} onClick={() => removeAdditionalEarning(item)}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 10v6M14 10v6" /></svg></button></span><div><b>R$</b><input aria-label={`Valor do ganho adicional ${index + 1}`} className={item.amount.length > 8 ? "long-value" : undefined} value={item.amount} onChange={(event) => updateAdditionalEarning(index, { amount: maskLimitedCurrencyInput(event.target.value) })} placeholder="0,00" inputMode="numeric" /></div></div></div>;
               })}
               {workFormError && <p className="home-work-inline-error" role="alert"><Icon name="warning" /><span>{workFormError}</span></p>}
               <button type="button" className="home-add-source" onClick={openSourceModal}><Icon name="plus" />Adicionar outro ganho</button>
@@ -2737,7 +2746,7 @@ export default function Home() {
   const [pendingTab, setPendingTab] = useState<NavigationTab | null>(null);
   const [usageProfile, setUsageProfile] = useState<ApiUsageProfile | null | undefined>(undefined);
   const [profilePickerOpen, setProfilePickerOpen] = useState(false);
-  const [financeCreateRequested, setFinanceCreateRequested] = useState(false);
+  const [financeCreateRequested, setFinanceCreateRequested] = useState<"expense" | "income" | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<ApiFinancialNotification[]>([]);
   const [notificationsError, setNotificationsError] = useState("");
@@ -2776,7 +2785,7 @@ export default function Home() {
     setPendingTab(null);
     setUsageProfile(undefined);
     setProfilePickerOpen(false);
-    setFinanceCreateRequested(false);
+    setFinanceCreateRequested(null);
     setNotificationsOpen(false);
     setNotifications([]);
     lastLoadedPeriod.current = "";
@@ -3037,8 +3046,8 @@ export default function Home() {
     if (tab === "work") return <WorkScreen onReady={onReady} onOperationalCost={() => navigateTo("operational-cost")} navigation={(loading) => <BottomNavigation active="work" loading={loading} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={() => {}} />} />;
     if (tab === "vehicles") return <VehicleScreen onReady={onReady} navigation={(loading) => <BottomNavigation active="vehicles" loading={loading} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} />} />;
     if (tab === "operational-cost") return <OperationalCostScreen onReady={onReady} initialEditVehicleId={operationalEditVehicleId} onInitialEditHandled={()=>setOperationalEditVehicleId(null)} onVehicles={() => navigateTo("vehicles")} navigation={(loading) => <BottomNavigation active="operational-cost" loading={loading} onHome={() => navigateTo("home")} onFinance={() => openFinance()} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} />} />;
-    if (tab === "finance") return <Dashboard onReady={onReady} items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onHome={() => navigateTo("home")} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} showWorkFeatures={showWorkFeatures} onMonthChange={changeMonth} initialPeriod={period} initialCreateOpen={financeCreateRequested} onInitialCreateHandled={() => setFinanceCreateRequested(false)} error={error} isLoading={isLoading} />;
-    return <HomeDashboard onReady={onReady} onFinance={() => openFinance()} onCreateExpense={() => { setFinanceCreateRequested(true); openFinance(); }} onRadar={() => navigateTo("radar")} onGoals={openGoals} onWork={openWork} onVehicles={() => navigateTo("vehicles")} onLogout={logout} usageProfile={usageProfile} onChangeProfile={() => setProfilePickerOpen(true)} notifications={notifications} onNotifications={() => void openNotifications()} onMileageUpdated={refreshNotifications} />;
+    if (tab === "finance") return <Dashboard onReady={onReady} items={items} onOpen={setSelected} onCreate={addTransaction} onDelete={deleteDashboardTransaction} onPaid={markTransactionPaid} onHome={() => navigateTo("home")} onRadar={() => navigateTo("radar")} onGoals={() => openGoals()} onWork={openWork} showWorkFeatures={showWorkFeatures} onMonthChange={changeMonth} initialPeriod={period} initialCreateType={financeCreateRequested} onInitialCreateHandled={() => setFinanceCreateRequested(null)} error={error} isLoading={isLoading} />;
+    return <HomeDashboard onReady={onReady} onFinance={() => openFinance()} onCreateExpense={() => { setFinanceCreateRequested("expense"); openFinance(); }} onCreateIncome={() => { setFinanceCreateRequested("income"); openFinance(); }} onRadar={() => navigateTo("radar")} onGoals={openGoals} onWork={openWork} onVehicles={() => navigateTo("vehicles")} onLogout={logout} usageProfile={usageProfile} onChangeProfile={() => setProfilePickerOpen(true)} notifications={notifications} onNotifications={() => void openNotifications()} onMileageUpdated={refreshNotifications} />;
   };
   const renderedTabs = pendingTab && pendingTab !== activeTab ? [activeTab, pendingTab] : [activeTab];
   return <VehicleNavigationContext.Provider value={() => navigateTo("vehicles")}><OperationalCostNavigationContext.Provider value={() => navigateTo("operational-cost")}><NavigationLoadingContext.Provider value={pendingTab}>
