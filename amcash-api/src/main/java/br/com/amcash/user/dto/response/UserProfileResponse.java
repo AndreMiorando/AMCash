@@ -2,6 +2,7 @@ package br.com.amcash.user.dto.response;
 
 import br.com.amcash.user.entity.UsageProfile;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 public record UserProfileResponse(
@@ -9,6 +10,7 @@ public record UserProfileResponse(
         String name,
         String email,
         String pictureUrl,
-        UsageProfile usageProfile
+        UsageProfile usageProfile,
+        OffsetDateTime deletionScheduledAt
 ) {
 }

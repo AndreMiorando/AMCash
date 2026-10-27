@@ -40,7 +40,7 @@ import SegmentedControl from "@/app/components/ui/SegmentedControl";
 import SelectPickerInput from "@/app/components/ui/SelectPickerInput";
 import { KpiLabel, KpiValue, PrimaryKpiCard, SecondaryKpiGroup, SecondaryKpiItem } from "@/app/components/ui/Kpi";
 import { completeCurrencyInput, maskCurrencyInput, parseCurrencyInput, formatCompactCurrency, maskLimitedCurrencyInput } from "@/lib/currency";
-import { formatDateRange, formatLongDate, formatMonthYear } from "@/lib/date";
+import { formatDateRange, formatLongDate, formatMonthYear, formatShortDate } from "@/lib/date";
 import { isWorkPlatformSource, profileWorkPlatforms } from "@/lib/workPlatforms";
 
 type GoogleCredentialResponse = {
@@ -53,6 +53,7 @@ type AuthenticatedUser = {
   email: string;
   pictureUrl: string | null;
   usageProfile: ApiUsageProfile | null;
+  deletionScheduledAt?: string | null;
 };
 
 type GoogleLoginResponse = {
@@ -2110,6 +2111,40 @@ const usageProfileLabels: Record<ApiUsageProfile, string> = {
   DELIVERY: "Entregador",
 };
 
+function AccountReactivationScreen({ scheduledAt, onReactivate, onLogout }: { scheduledAt: string; onReactivate: () => Promise<void>; onLogout: () => void }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [now] = useState(() => Date.now());
+  const remainingDays = Math.max(0, Math.ceil((new Date(scheduledAt).getTime() - now) / 86400000));
+  const deletionDate = formatShortDate(new Date(scheduledAt));
+
+  async function reactivate() {
+    setSaving(true);
+    setError("");
+    try {
+      await onReactivate();
+    } catch (requestError) {
+      setError(messageFromError(requestError));
+      setSaving(false);
+    }
+  }
+
+  return <main className="usage-profile-screen">
+    <AppHeader />
+    <section className="home-empty-state account-reactivation" aria-label="Reativar conta">
+      <div className="home-empty-icon"><Icon name="clock" /></div>
+      <span>CONTA DESATIVADA</span>
+      <h2>{remainingDays === 1 ? "Sua conta será excluída em 1 dia" : `Sua conta será excluída em ${remainingDays} dias`}</h2>
+      <p>A exclusão definitiva está agendada para {deletionDate}. Reative agora para continuar usando o AMCash com todos os seus dados.</p>
+      {error && <p className="home-odometer-feedback error" role="alert">{error}</p>}
+      <div className="home-empty-actions">
+        <Button type="button" variant="secondary" disabled={saving} onClick={onLogout}>Sair</Button>
+        <Button type="button" className="primary" loading={saving} loadingLabel="Reativando..." onClick={() => void reactivate()}>Reativar conta</Button>
+      </div>
+    </section>
+  </main>;
+}
+
 function UsageProfileScreen({ onSelect, onCancel }: { onSelect: (profile: ApiUsageProfile) => Promise<void>; onCancel?: () => void }) {
   const [savingProfile, setSavingProfile] = useState<ApiUsageProfile | null>(null);
   const [profileError, setProfileError] = useState("");
@@ -2159,6 +2194,31 @@ function notificationIndicator(notifications: ApiFinancialNotification[]) {
 function AccountMenu({ onLogout, usageProfile, onChangeProfile, notifications, onNotifications }: { onLogout: () => void; usageProfile: ApiUsageProfile; onChangeProfile: () => void; notifications: ApiFinancialNotification[]; onNotifications: () => void }) {
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const canDelete = deleteAcknowledged;
+
+  function closeDeleteDialog() {
+    if (deleting) return;
+    setConfirmDelete(false);
+    setDeleteAcknowledged(false);
+    setDeleteError("");
+  }
+
+  async function deleteAccount() {
+    if (!canDelete || deleting) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await financeApi.deleteAccount();
+      onLogout();
+    } catch (error) {
+      setDeleteError(messageFromError(error));
+      setDeleting(false);
+    }
+  }
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -2183,8 +2243,28 @@ function AccountMenu({ onLogout, usageProfile, onChangeProfile, notifications, o
         <button type="button" className="account-menu-profile account-menu-notifications" role="menuitem" onClick={() => { setOpen(false); onNotifications(); }}><Icon name="bell" /><span><strong>Notificações</strong><small>Consulte seus alertas.</small></span>{indicator && <i className={`notification-dot ${indicator}`} aria-hidden="true" />}</button>
         <button type="button" className="account-menu-profile" role="menuitem" onClick={() => { setOpen(false); onChangeProfile(); }}><Icon name="target" /><span><strong>Modo de uso</strong><small>{usageProfileLabels[usageProfile]}</small></span></button>
         <button type="button" className="account-menu-logout" role="menuitem" onClick={onLogout}><Icon name="logout" /><span><strong>Sair da conta</strong><small>Encerrar sessão</small></span></button>
+        <button type="button" className="account-menu-logout account-menu-delete" role="menuitem" onClick={() => { setOpen(false); setConfirmDelete(true); }}><Icon name="trash" /><span><strong>Excluir conta</strong><small>Desativar e excluir em 30 dias</small></span></button>
       </section>
     </>}
+    {confirmDelete && <div className="sheet-backdrop confirm-backdrop" role="presentation" onMouseDown={closeDeleteDialog}>
+      <section className="confirm-dialog account-delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="account-delete-title" aria-describedby="account-delete-description" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="confirm-icon"><Icon name="trash" /></div>
+        <h2 id="account-delete-title">Deseja excluir sua conta?</h2>
+        <p id="account-delete-description">Sua conta será desativada agora e excluída definitivamente em 30 dias. Até lá, você pode reativá-la fazendo login.</p>
+        <div className="account-delete-list">
+          <strong>Após 30 dias, serão excluídos:</strong>
+          <ul>
+            <li>Receitas, despesas e lançamentos</li>
+            <li>Metas e histórico de trabalho</li>
+            <li>Veículos, quilometragem e manutenções</li>
+            <li>Preferências e informações da conta</li>
+          </ul>
+        </div>
+        <label className="account-delete-check"><input type="checkbox" checked={deleteAcknowledged} disabled={deleting} onChange={(event) => { setDeleteAcknowledged(event.target.checked); setDeleteError(""); }} /><span>Entendo que, após 30 dias, meus dados não poderão ser recuperados.</span></label>
+        {deleteError && <p className="home-odometer-feedback error" role="alert">{deleteError}</p>}
+        <div><button type="button" disabled={deleting} onClick={closeDeleteDialog}>Cancelar</button><button type="button" disabled={!canDelete || deleting} onClick={() => void deleteAccount()}>{deleting ? "Excluindo..." : "Excluir minha conta"}</button></div>
+      </section>
+    </div>}
   </div>;
 }
 
@@ -2592,6 +2672,34 @@ function HomeDashboard({ onFinance, onCreateExpense, onCreateIncome, onRadar, on
               <Button type="button" className="primary" onClick={onCreateExpense}><Icon name="expense" /><span>Adicionar despesa</span></Button>
             </div>
           </section> : <>
+          {usageProfile === "PERSONAL" && <>
+          <PrimaryKpiCard className="radar-balance-card personal-balance-card">
+            <KpiLabel>SALDO DO MÊS</KpiLabel>
+            <KpiValue className={summary.financial.balance < 0 ? "negative" : ""} title={`${summary.financial.balance < 0 ? "- " : ""}${formatCurrency(summary.financial.balance)}`}>{summary.financial.balance < 0 ? "- " : ""}{formatKpiCurrency(summary.financial.balance)}</KpiValue>
+            <small>{summary.financial.pendingExpenseCount > 0
+              ? `Faltam ${formatCurrency(summary.financial.pendingExpenses)} em ${summary.financial.pendingExpenseCount} ${summary.financial.pendingExpenseCount === 1 ? "conta" : "contas"} a pagar`
+              : "Nenhuma conta pendente neste mês"}</small>
+          </PrimaryKpiCard>
+          <SecondaryKpiGroup className="personal-month-summary" aria-label="Resumo financeiro do mês">
+            <SecondaryKpiItem><KpiLabel>RECEITAS DO MÊS</KpiLabel><KpiValue title={formatCurrency(summary.financial.income)}>{formatKpiCurrency(summary.financial.income)}</KpiValue></SecondaryKpiItem>
+            <SecondaryKpiItem><KpiLabel>A PAGAR</KpiLabel><KpiValue className={summary.financial.pendingExpenses > 0 ? "cost" : ""} title={formatCurrency(summary.financial.pendingExpenses)}>{formatKpiCurrency(summary.financial.pendingExpenses)}</KpiValue></SecondaryKpiItem>
+          </SecondaryKpiGroup>
+          {summary.nextExpense ? <button type="button" className="home-next-expense" onClick={onFinance} aria-label={`Próxima conta: ${summary.nextExpense.name}, vence em ${formatShortDate(summary.nextExpense.dueDate)}, ${formatCurrency(summary.nextExpense.amount)}`}>
+            <span className="home-next-expense-icon"><Icon name="calendar" /></span>
+            <span className="home-next-expense-main"><small>Próxima conta</small><strong>{summary.nextExpense.name}</strong><span>Vence em {formatShortDate(summary.nextExpense.dueDate)}</span></span>
+            <b className="home-next-expense-value expense">{formatCurrency(summary.nextExpense.amount)}</b>
+            <span className="work-day-chevron" aria-hidden="true">›</span>
+          </button> : <button type="button" className="home-next-expense" onClick={onFinance}>
+            <span className="home-next-expense-icon"><Icon name="check" /></span>
+            <span className="home-next-expense-main"><small>Próxima conta</small><strong>Nenhuma conta pendente</strong><span>Suas contas do mês estão em dia</span></span>
+            <b className="home-next-expense-value" />
+            <span className="work-day-chevron" aria-hidden="true">›</span>
+          </button>}
+          <div className="home-empty-actions personal-quick-actions">
+            <Button type="button" variant="secondary" onClick={onCreateIncome}><Icon name="income" /><span>Receita</span></Button>
+            <Button type="button" variant="secondary" onClick={onCreateExpense}><Icon name="expense" /><span>Despesa</span></Button>
+          </div>
+          </>}
           {usageProfile !== "PERSONAL" && <>
           <PrimaryKpiCard className={`daily-goal-card${!summary.goal.todaySelected ? " day-off" : dailyGoalCompleted ? " daily-completed" : summary.goal.covered && dailyTarget === 0 ? " covered" : ""}`}>
             {!summary.goal.todaySelected ? <div className="daily-goal-day-off">
@@ -2746,6 +2854,7 @@ export default function Home() {
   const [pendingTab, setPendingTab] = useState<NavigationTab | null>(null);
   const [usageProfile, setUsageProfile] = useState<ApiUsageProfile | null | undefined>(undefined);
   const [profilePickerOpen, setProfilePickerOpen] = useState(false);
+  const [deletionScheduledAt, setDeletionScheduledAt] = useState<string | null>(null);
   const [financeCreateRequested, setFinanceCreateRequested] = useState<"expense" | "income" | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<ApiFinancialNotification[]>([]);
@@ -2778,6 +2887,7 @@ export default function Home() {
   const logout = useCallback(() => {
     window.localStorage.removeItem("amcash.accessToken");
     window.localStorage.removeItem("amcash.user");
+    setDeletionScheduledAt(null);
     setItems([]);
     setSelected(null);
     setError("");
@@ -2839,11 +2949,13 @@ export default function Home() {
         savedUser = null;
       }
       setUsageProfile(savedUser?.usageProfile ?? null);
+      setDeletionScheduledAt(savedUser?.deletionScheduledAt ?? null);
       financeApi.userProfile().then((profile) => {
         if (!active) return;
         const refreshedUser: AuthenticatedUser = profile;
         window.localStorage.setItem("amcash.user", JSON.stringify(refreshedUser));
         setUsageProfile(profile.usageProfile);
+        setDeletionScheduledAt(profile.deletionScheduledAt);
         setScreen("refreshing");
       }).catch((requestError) => {
         if (!active || requestError instanceof ApiError && requestError.status === 401) return;
@@ -2887,10 +2999,10 @@ export default function Home() {
   }, [screen]);
 
   useEffect(() => {
-    if (screen !== "app" || !usageProfile) return;
+    if (screen !== "app" || !usageProfile || deletionScheduledAt) return;
     const timer = window.setTimeout(() => void refreshNotifications(), 0);
     return () => window.clearTimeout(timer);
-  }, [screen, usageProfile, refreshNotifications]);
+  }, [screen, usageProfile, deletionScheduledAt, refreshNotifications]);
 
   const changeMonth = useCallback((year: number, month: number) => {
     const periodKey = `${year}-${month}`;
@@ -2947,6 +3059,13 @@ export default function Home() {
     await refreshNotifications();
   }
 
+  async function reactivateAccount() {
+    const profile = await financeApi.reactivateAccount();
+    window.localStorage.setItem("amcash.user", JSON.stringify(profile));
+    setUsageProfile(profile.usageProfile);
+    setDeletionScheduledAt(null);
+  }
+
   async function chooseUsageProfile(profile: ApiUsageProfile) {
     const updatedUser = await financeApi.updateUsageProfile(profile);
     window.localStorage.setItem("amcash.user", JSON.stringify(updatedUser));
@@ -2956,7 +3075,8 @@ export default function Home() {
   }
 
   if (isLaunchSplashVisible || screen === "checking" || screen === "refreshing" || screen === "loading") return <LoadingScreen />;
-  if (screen === "auth") return <AuthScreen onAuthenticated={(user) => { setUsageProfile(user.usageProfile); setScreen("loading"); }} />;
+  if (screen === "auth") return <AuthScreen onAuthenticated={(user) => { setUsageProfile(user.usageProfile); setDeletionScheduledAt(user.deletionScheduledAt ?? null); setScreen("loading"); }} />;
+  if (deletionScheduledAt) return <AccountReactivationScreen scheduledAt={deletionScheduledAt} onLogout={logout} onReactivate={reactivateAccount} />;
   if (usageProfile === undefined) return <LoadingScreen />;
   if (usageProfile === null || profilePickerOpen) return <UsageProfileScreen onSelect={chooseUsageProfile} onCancel={usageProfile ? () => setProfilePickerOpen(false) : undefined} />;
   const showWorkFeatures = usageProfile !== "PERSONAL";

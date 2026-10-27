@@ -9,6 +9,7 @@ export type ApiUserProfile = {
   email: string;
   pictureUrl: string | null;
   usageProfile: ApiUsageProfile | null;
+  deletionScheduledAt: string | null;
 };
 export type ApiEntryCategory =
   | "FOOD"
@@ -445,6 +446,14 @@ export const financeApi = {
       method: "PUT",
       body: JSON.stringify({ usageProfile }),
     });
+  },
+
+  deleteAccount() {
+    return apiRequest<void>("/api/v1/users/me", { method: "DELETE" });
+  },
+
+  reactivateAccount() {
+    return apiRequest<ApiUserProfile>("/api/v1/users/me/reactivate", { method: "POST" });
   },
 
   home(date: string) {

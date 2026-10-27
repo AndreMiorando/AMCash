@@ -10,6 +10,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -26,6 +28,22 @@ class UserServiceTests {
         userService = new UserService(userRepository);
         user = new User("google-subject", "usuario@amcash.com", "Usuário", null);
         user.setId(UUID.randomUUID());
+    }
+
+    @Test
+    void shouldScheduleDeletionAndAllowReactivation() {
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+        when(userRepository.save(user)).thenReturn(user);
+
+        userService.requestAccountDeletion(user.getId());
+
+        assertNotNull(user.getDeletionRequestedAt());
+        assertEquals(user.getDeletionRequestedAt().plusDays(30), user.getDeletionScheduledAt());
+
+        var response = userService.reactivateAccount(user.getId());
+
+        assertNull(user.getDeletionRequestedAt());
+        assertNull(response.deletionScheduledAt());
     }
 
     @Test

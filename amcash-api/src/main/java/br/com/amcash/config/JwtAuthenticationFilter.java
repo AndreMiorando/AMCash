@@ -4,6 +4,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import br.com.amcash.user.repository.UserRepository;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -15,10 +16,15 @@ import java.util.List;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private final JwtService jwtService;
+    private static final String PROFILE_PATH = "/api/v1/users/me";
+    private static final String REACTIVATE_PATH = "/api/v1/users/me/reactivate";
 
-    public JwtAuthenticationFilter(JwtService jwtService) {
+    private final JwtService jwtService;
+    private final UserRepository userRepository;
+
+    public JwtAuthenticationFilter(JwtService jwtService, UserRepository userRepository) {
         this.jwtService = jwtService;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -54,7 +60,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         List.of()
                 );
 
+        if (!allowedDuringDeletion(request) && userRepository.existsByIdAndDeletionRequestedAtIsNotNull(authenticatedUser.userId())) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write("{\"message\":\"Esta conta está desativada para exclusão. Entre novamente para reativá-la.\"}");
+            return;
+        }
+
         SecurityContextHolder.getContext().setAuthentication(authentication);
         filterChain.doFilter(request, response);
+    }
+
+    private boolean allowedDuringDeletion(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return ("GET".equals(request.getMethod()) && PROFILE_PATH.equals(path))
+                || ("POST".equals(request.getMethod()) && REACTIVATE_PATH.equals(path));
     }
 }

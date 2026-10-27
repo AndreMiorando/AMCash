@@ -61,7 +61,8 @@ public class AuthService {
                         user.getName(),
                         user.getEmail(),
                         user.getPictureUrl(),
-                        user.getUsageProfile()
+                        user.getUsageProfile(),
+                        user.getDeletionScheduledAt()
                 )
         );
     }
