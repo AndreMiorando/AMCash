@@ -17,6 +17,8 @@ import java.util.UUID;
 @Table(name = "users")
 public class User {
 
+    public static final int DELETION_GRACE_DAYS = 30;
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
@@ -48,6 +50,9 @@ public class User {
     @Enumerated(EnumType.STRING)
     @Column(name = "usage_profile", length = 32)
     private UsageProfile usageProfile;
+
+    @Column(name = "deletion_requested_at")
+    private OffsetDateTime deletionRequestedAt;
 
     protected User() {
     }
@@ -113,6 +118,25 @@ public class User {
 
     public void updateGoalWeekdaysMask(int goalWeekdaysMask) {
         this.goalWeekdaysMask = goalWeekdaysMask;
+        this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
+    }
+
+    public OffsetDateTime getDeletionRequestedAt() {
+        return deletionRequestedAt;
+    }
+
+    public OffsetDateTime getDeletionScheduledAt() {
+        return deletionRequestedAt == null ? null : deletionRequestedAt.plusDays(DELETION_GRACE_DAYS);
+    }
+
+    public void requestDeletion() {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        this.deletionRequestedAt = now;
+        this.updatedAt = now;
+    }
+
+    public void cancelDeletion() {
+        this.deletionRequestedAt = null;
         this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 

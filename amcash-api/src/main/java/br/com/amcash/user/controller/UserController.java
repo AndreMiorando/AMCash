@@ -7,7 +7,9 @@ import br.com.amcash.user.dto.response.UserProfileResponse;
 import br.com.amcash.user.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -33,5 +35,16 @@ public class UserController {
             @CurrentUser AuthenticatedUser user,
             @Valid @RequestBody UsageProfileRequest request) {
         return ResponseEntity.ok(userService.updateUsageProfile(user.userId(), request.usageProfile()));
+    }
+
+    @DeleteMapping
+    public ResponseEntity<Void> deleteAccount(@CurrentUser AuthenticatedUser user) {
+        userService.requestAccountDeletion(user.userId());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/reactivate")
+    public UserProfileResponse reactivateAccount(@CurrentUser AuthenticatedUser user) {
+        return userService.reactivateAccount(user.userId());
     }
 }

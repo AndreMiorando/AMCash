@@ -1662,6 +1662,16 @@ a {
 .account-menu-logout > span { display: grid; gap: 0.05rem; }
 .account-menu-logout strong { font-size: 0.64rem; }
 .account-menu-logout small { color: #9a7a83; font-size: 0.52rem; }
+.account-menu-delete { margin-top: 0; }
+.account-delete-dialog { width: min(100%, 22rem); }
+.account-delete-list { margin: 0 0 0.9rem; padding: 0.8rem 0.9rem; border-radius: 0.8rem; background: #f7f9fc; color: #304962; font-size: 0.66rem; text-align: left; }
+.account-delete-list strong { font-size: 0.66rem; }
+.account-delete-list ul { margin: 0.45rem 0 0; padding-left: 1.05rem; display: grid; gap: 0.3rem; color: #5b7088; }
+.account-delete-check { display: flex; margin-bottom: 1rem; align-items: flex-start; gap: 0.55rem; color: #304962; font-size: 0.64rem; line-height: 1.45; text-align: left; cursor: pointer; }
+.account-delete-check input { width: 1rem; height: 1rem; margin: 0.1rem 0 0; flex: 0 0 auto; accent-color: #ed5064; }
+.account-delete-dialog button:disabled { opacity: 0.5; cursor: not-allowed; }
+.account-reactivation { margin: var(--content-top-spacing) 1rem 0; }
+.account-delete-dialog .home-odometer-feedback { text-align: left; }
 
 .notifications-screen { display: flex; width: min(100%, var(--app-shell-width)); height: 100vh; height: 100dvh; min-height: 36rem; margin-inline: auto; flex-direction: column; overflow: hidden; background: var(--app-page-background); color: var(--text-primary); font-family: var(--font-geist-sans), Arial, sans-serif; }
 .notifications-header { position: relative; justify-content: flex-start; border-bottom: 1px solid var(--border-subtle); background: #fff; }
@@ -1909,6 +1919,10 @@ a {
 .home-next-expense-value { color: #183253; font-size: 0.82rem; white-space: nowrap; }
 .home-next-expense-value.expense { color: #f24f68; }
 .home-next-expense:hover { background: #f7faff; }
+.personal-balance-card > small { margin-top: 0.45rem; color: rgb(255 255 255 / 80%); font-size: 0.66rem; font-weight: 600; }
+.personal-month-summary { padding-bottom: 0; }
+.home-next-expense > .work-day-chevron { justify-self: center; line-height: 1; }
+.personal-quick-actions { width: 100%; margin-top: 0; }
 
 .home-today-summary { display: grid; min-height: 4.5rem; padding-bottom: var(--section-stack-gap); grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .home-today-summary > .ui-secondary-kpi { display: flex; min-width: 0; padding: var(--kpi-secondary-padding); flex-direction: column; justify-content: center; gap: 0.25rem; }
@@ -2084,6 +2098,8 @@ a {
   .home-empty-state { min-height: 21rem; padding: 1.5rem 1rem; }
   .home-empty-actions { flex-direction: column; }
   .home-empty-actions button { flex: none; }
+  .personal-quick-actions { flex-direction: row; }
+  .personal-quick-actions button { flex: 1; }
   .header-create-actions { gap: 0.35rem; }
   .header-add-button { width: 2.4rem; padding: 0; }
   .header-add-button span:not(.vehicle-shared-icon) { display: none; }
